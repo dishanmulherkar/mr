@@ -1,0 +1,32 @@
+[09-Jul-2026 10:16:51 UTC] PHP Warning:  Undefined array key "state_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/modals/StateModel.php on line 36
+[09-Jul-2026 10:16:51 UTC] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/modals/StateModel.php on line 36
+[09-Jul-2026 10:23:21 UTC] PHP Fatal error:  Uncaught mysqli_sql_exception: Access denied for user 'u683730030_mr_soft'@'localhost' (using password: YES) in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/config/Addons/config.php:8
+Stack trace:
+#0 /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/config/Addons/config.php(8): mysqli->__construct()
+#1 /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/prod_code.php(2): include('/home/hktrq00v5...')
+#2 {main}
+  thrown in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/config/Addons/config.php on line 8
+[09-Jul-2026 10:23:37 UTC] PHP Warning:  Object of class mysqli could not be converted to int in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/modals/DistrictModel.php on line 97
+[09-Jul-2026 10:24:31 UTC] PHP Fatal error:  Uncaught mysqli_sql_exception: Access denied for user 'u683730030_mr_soft'@'localhost' (using password: YES) in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/config/Addons/config.php:8
+Stack trace:
+#0 /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/config/Addons/config.php(8): mysqli->__construct()
+#1 /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/prod_code.php(5): include('/home/hktrq00v5...')
+#2 {main}
+  thrown in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/config/Addons/config.php on line 8
+[09-Jul-2026 10:28:15 UTC] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[09-Jul-2026 10:37:43 UTC] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[09-Jul-2026 10:37:50 UTC] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 16:48:19 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 16:48:39 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 16:59:31 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:02:30 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:04:06 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:04:06 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:04:14 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:04:14 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:04:44 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:04:44 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:25:55 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:25:55 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:26:04 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130
+[10-Jul-2026 17:26:04 Asia/Kolkata] PHP Warning:  Undefined array key "batch_id" in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/Admin/view/inventory/batch_status.php on line 130

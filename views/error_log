@@ -1,0 +1,6 @@
+[09-Jul-2026 09:39:22 UTC] PHP Fatal error:  Uncaught mysqli_sql_exception: Access denied for user 'u683730030_mr_soft'@'localhost' (using password: YES) in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/users/config/config/config.php:9
+Stack trace:
+#0 /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/users/config/config/config.php(9): mysqli->__construct()
+#1 /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/users/index.php(4): include('/home/hktrq00v5...')
+#2 {main}
+  thrown in /home/hktrq00v5f6t/public_html/app.rudradeopharma.in/users/config/config/config.php on line 9
