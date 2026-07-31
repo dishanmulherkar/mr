@@ -80,7 +80,7 @@ CREATE TABLE purchase_entry_details (
         REFERENCES products(p_id)
 );
 
-add  field in product batches table for purchase rate and amt 
+-- add  field in product batches table for purchase rate and amt 
 
 ALTER TABLE product_batches
 DROP COLUMN pts,
@@ -100,4 +100,23 @@ CREATE TABLE product_state_price
     mrp DECIMAL(10,2) DEFAULT 0,
     effective_date DATE NOT NULL,
     status ENUM('Active','Inactive') DEFAULT 'Active'
+);
+
+-- update stock ledger table 
+ALTER TABLE stock_ledger
+MODIFY qty DECIMAL(10,3) NOT NULL DEFAULT 0.000,
+ADD qty_in DECIMAL(10,3) NOT NULL DEFAULT 0.000 AFTER trans_type,
+ADD qty_out DECIMAL(10,3) NOT NULL DEFAULT 0.000 AFTER qty_in,
+ADD approved_by INT NULL AFTER admin_id,
+ADD reference_table VARCHAR(50) NULL AFTER amount,
+ADD rate DECIMAL(10,3) NOT NULL DEFAULT 0.000 AFTER `qty`,
+ADD `stockist_type` VARCHAR(50) NULL AFTER `trans_datetime`,
+MODIFY trans_type ENUM(
+'OPENING',
+'PURCHASE',
+'INWARD',
+'SALE',
+'PURCHASE_RETURN',
+'SALES_RETURN',
+'ADJUSTMENT'
 );
