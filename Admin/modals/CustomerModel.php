@@ -18,14 +18,14 @@ class CustomerModel
                     c.*, 
                     s.state_name, 
                     d.district_name,
-                    m.hq_name
+                    h.hq_name
                 FROM customers c
                 LEFT JOIN state s
                     ON c.state = s.state_id
                 LEFT JOIN district d
                     ON c.district = d.district_id
-                LEFT JOIN mr_users m
-                    ON c.hq_id = m.m_id
+                LEFT JOIN headquarter h
+                    ON c.hq_id = h.headquarter_id
                 ORDER BY c.c_id DESC
             ";
 
@@ -39,7 +39,7 @@ class CustomerModel
                 c.*, 
                 s.state_name, 
                 d.district_name,
-                m.hq_name
+                h.hq_name
             FROM customers c
             INNER JOIN admin_state ast
                 ON c.state = ast.state_id
@@ -47,8 +47,8 @@ class CustomerModel
                 ON c.state = s.state_id
             LEFT JOIN district d
                 ON c.district = d.district_id
-            LEFT JOIN mr_users m
-                ON c.hq_id = m.m_id
+            LEFT JOIN headquarter h
+                ON c.hq_id = h.headquarter_id
             WHERE ast.admin_id = $admin_id
             ORDER BY c.c_id DESC
         ";
@@ -118,13 +118,7 @@ class CustomerModel
     public function getHqByState($state_id)
     {
         $state_id = intval($state_id);
-        return mysqli_query($this->con, "
-            SELECT m_id, hq_name 
-            FROM mr_users 
-            WHERE state = '$state_id' 
-            AND status = '1' 
-            ORDER BY hq_name ASC
-        ");
+        return mysqli_query($this->con, "SELECT headquarter_id, hq_name FROM headquarter WHERE state_id = '$state_id' ORDER BY hq_name ASC");
     }
 
     public function isDuplicate($name, $mobile, $exclude_id = null)

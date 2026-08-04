@@ -75,12 +75,12 @@ switch($page)
 
         break;
 
-    case 'headquarter':
+    case 'mr':
 
-        include 'controller/HeadquarterController.php';
+        include 'controller/MrController.php';
 
         $controller =
-            new HeadquarterController($con);
+            new MrController($con);
 
          if (method_exists($controller, $action)) {
         $controller->$action($id);
@@ -156,7 +156,6 @@ switch($page)
 
         $controller = new DistrictController($con);
 
-        // $controller->getDistricts();
          if (method_exists($controller, $action)) {
             $controller->$action($id);
         } else {
@@ -179,16 +178,6 @@ switch($page)
         }
 
         exit;
-
-    // case 'report':
-    //     include 'controller/ReportController.php';
-    //     $controller = new ReportController($con);
-    //     if (method_exists($controller, $action)) {
-    //         $controller->$action($id);
-    //     } else {
-    //         $controller->index();
-    //     }
-    //     break;
 
     case 'stock_and_sales_report':
         include 'controller/StockandSalesRepController.php';
@@ -303,6 +292,20 @@ switch($page)
         include 'controller/PurchaseController.php';
 
         $controller = new PurchaseController($con);
+
+         if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        exit;  
+
+    case 'headquarter':
+
+        include 'controller/HQMaster_ctl.php';
+
+        $controller = new HeadquarterController($con);
 
          if (method_exists($controller, $action)) {
             $controller->$action($id);

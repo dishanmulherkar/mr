@@ -110,6 +110,36 @@
                 </div>
             </li>
 
+             <!-- ================= Head Quarter /  ================= -->
+            <li class="nav-item searchable-folder">
+                <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#networkMenu" aria-expanded="false" href="#">
+                    <span>
+                        <i class="fa-solid fa-network-wired" style="width: 20px;"></i>
+                        <span class="ms-2">Head Quarter</span>
+                    </span>
+                    <i class="fa-solid fa-angle-down toggle-icon"></i>
+                </a>
+                <div class="collapse" id="networkMenu">
+                    <ul class="nav flex-column ms-4 mt-1">
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>headquarter" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-building-flag" style="width: 20px;"></i> Manage HeadQuarter 
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>mr" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-building-flag" style="width: 20px;"></i> MR
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>customer" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users" style="width: 20px;"></i> Customers
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </li>
+             
             <!-- ================= STOCKIST ================= -->
             <li class="nav-item searchable-folder">
                 <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#stockistMenu" aria-expanded="false" href="#">
@@ -172,30 +202,7 @@
                 </div>
             </li>
 
-            <!-- ================= NETWORK / CONTACTS ================= -->
-            <li class="nav-item searchable-folder">
-                <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#networkMenu" aria-expanded="false" href="#">
-                    <span>
-                        <i class="fa-solid fa-network-wired" style="width: 20px;"></i>
-                        <span class="ms-2">Network</span>
-                    </span>
-                    <i class="fa-solid fa-angle-down toggle-icon"></i>
-                </a>
-                <div class="collapse" id="networkMenu">
-                    <ul class="nav flex-column ms-4 mt-1">
-                        <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>headquarter" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-building-flag" style="width: 20px;"></i> HeadQuarter
-                            </a>
-                        </li>
-                        <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>customer" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users" style="width: 20px;"></i> Customers
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </li>
+           
 
             <!-- ================= REPORTS ================= -->
             <li class="nav-item searchable-folder">

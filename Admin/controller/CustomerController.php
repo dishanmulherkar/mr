@@ -123,8 +123,8 @@ class CustomerController
         echo '<option value="">Select Head Quarter</option>';
         while($row = mysqli_fetch_assoc($hqs))
         {
-            $selected = ($row['m_id'] == $selected_id) ? 'selected' : '';
-            echo '<option value="'.$row['m_id'].'" '.$selected.'>';
+            $selected = ($row['headquarter_id'] == $selected_id) ? 'selected' : '';
+            echo '<option value="'.$row['headquarter_id'].'" '.$selected.'>';
             echo htmlspecialchars($row['hq_name']);
             echo '</option>';
         }

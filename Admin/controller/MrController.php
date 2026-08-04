@@ -1,14 +1,14 @@
 <?php
 
-include 'modals/HeadquarterModel.php';
+include 'modals/MrModel.php';
 
-class HeadquarterController
+class MrController
 {
     private $model;
 
     public function __construct($con)
     {
-        $this->model = new HeadquarterModel($con);
+        $this->model = new MrModel($con);
     }
 
     public function index()
@@ -16,8 +16,9 @@ class HeadquarterController
         $ROW = null;
         $states = $this->model->getStates();
         $list   = $this->model->getAll();
+        $hq  = $this->model->getHQ();
 
-        include 'view/headquarter/index.php';
+        include 'view/Mr/index.php';
     }
 
     public function edit($id)
@@ -26,19 +27,20 @@ class HeadquarterController
 
         $states = $this->model->getStates();
         $list   = $this->model->getAll();
+        $hq  = $this->model->getHQ();
         $districts = null;
         if (isset($ROW['state']) && !empty($ROW['state'])) {
             $districts = $this->model->getDistrictsByState($ROW['state']);
         }
 
-        include 'view/headquarter/index.php';
+        include 'view/Mr/index.php';
     }
 
     public function delete($id)
     {
         $this->model->delete($id);
 
-        header("Location:".BASE_URL."headquarter");
+        header("Location:".BASE_URL."mr");
         exit;
     }
 
@@ -46,7 +48,7 @@ class HeadquarterController
 {
     $this->model->insert($_POST);
 
-    header("Location: ".BASE_URL."headquarter");
+    header("Location: ".BASE_URL."mr");
     exit;
 }
 
@@ -54,7 +56,7 @@ public function update($id)
 {
     $this->model->update($id, $_POST);
 
-    header("Location: ".BASE_URL."headquarter?success=1");
+    header("Location: ".BASE_URL."mr?success=1");
     exit;
 }
 }

@@ -120,3 +120,24 @@ MODIFY trans_type ENUM(
 'SALES_RETURN',
 'ADJUSTMENT'
 );
+
+
+-- alter table of mr_users
+ ALTER TABLE mr_users
+ ADD hq_id INT NOT NULL AFTER m_id ;
+
+--  drag and drop headquarter 
+
+
+-- similer with order table and order item table  
+CREATE TABLE `orders` (
+  `order_id` INT AUTO_INCREMENT PRIMARY KEY,
+  `stockist_id` INT NOT NULL,
+  `mr_id` INT NOT NULL,
+  `total_amt` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+  `status` ENUM('Pending', 'Approved', 'Rejected', 'Processed') DEFAULT 'Pending',
+  `order_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX (`stockist_id`),
+  INDEX (`mr_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -122,4 +122,24 @@ class PurchaseController
             die("Error deleting purchase: " . $result['message']);
         }
     }
+
+    public function update()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (empty($_POST['product_id']) || empty($_POST['purchase_id'])) {
+                header("Location: " . BASE_URL . "purchase/list?error=1");
+                exit;
+            }
+
+            $result = $this->model->update($_POST);
+
+            if ($result['success'] === true) {
+                header("Location: " . BASE_URL . "purchase/list?success=1");
+                exit;
+            } else {
+                echo "<h3>Debug Error:</h3>";
+                die("<pre>" . $result['message'] . "</pre>"); 
+            }
+        }
+    }
 }

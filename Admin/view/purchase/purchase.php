@@ -55,7 +55,7 @@ include 'view/layout/header.php';
         <div class="alert alert-danger">Something went wrong. Please try again.</div>
     <?php endif; ?>
 
-    <form action="<?= BASE_URL ?>purchase/store" method="POST" id="purchaseForm">
+    <form action="<?= BASE_URL ?>purchase/<?= isset($ROW['purchase_id']) ? 'update' : 'store' ?>" method="POST" id="purchaseForm">
         <?php if (isset($ROW['purchase_id'])): ?>
             <input type="hidden" name="purchase_id" value="<?= $ROW['purchase_id']; ?>">
         <?php endif; ?>
@@ -120,12 +120,12 @@ include 'view/layout/header.php';
                             <th style="width:8%">Batch No</th>
                             <th style="width:8%">Expiry</th>
                             <th style="width:10%">MRP</th>
-                            <th style="width:10%">P. Rate</th>
+                            <th style="width:8%">P. Rate</th>
                             <th style="width:8%">P.Tax %</th>
                             <th style="width:10%">S. Rate</th>
-                            <th style="width:8%">S.Tax %</th>
+                            <th style="width:7%">S.Tax %</th>
                             <th style="width:8%">Qty</th>
-                            <th style="width:8%">Free</th>
+                            <th style="width:4%">Free</th>
                             <th style="width:8%">Disc %</th>
                             <th style="width:12%">Amount</th>
                             <?php if (!isset($is_view) || !$is_view): ?>
@@ -278,11 +278,17 @@ include 'view/layout/header.php';
                                 <div class="col-md-3">
                                     <label>Other Charges</label>
                                     <div class="input-group">
+                                        <?php 
+                                            // Determine saved sign and absolute amount from database value
+                                            $raw_charges = $ROW['other_charges'] ?? 0;
+                                            $saved_sign = ($raw_charges < 0) ? '-' : '+';
+                                            $saved_amt = ($raw_charges != 0) ? abs($raw_charges) : '';
+                                        ?>
                                         <select id="other_charges_sign" name="other_charges_sign" class="form-select" style="max-width: 60px;" <?= isset($is_view) && $is_view ? 'disabled' : '' ?>>
-                                            <option value="+" selected>+</option>
-                                            <option value="-">-</option>
+                                            <option value="+" <?= $saved_sign === '+' ? 'selected' : '' ?>>+</option>
+                                            <option value="-" <?= $saved_sign === '-' ? 'selected' : '' ?>>-</option>
                                         </select>
-                                        <input type="number" step="0.01" id="other_charges" name="other_charges" class="form-control" value="" <?= isset($is_view) && $is_view ? 'disabled' : '' ?>>
+                                        <input type="number" step="0.01" id="other_charges" name="other_charges" class="form-control" value="<?= $saved_amt; ?>" <?= isset($is_view) && $is_view ? 'disabled' : '' ?>>
                                     </div>
                                 </div>
                                 <div class="col-12">
@@ -344,6 +350,121 @@ include 'view/layout/header.php';
 
 <script>
 $(document).ready(function(){
+
+// Auto-format MM/YYYY or MM/YY for expiry input field
+$(document).on('input', '.expiry', function (e) {
+    let value = $(this).val();
+    
+    // Remove all non-digit characters
+    value = value.replace(/\D/g, '');
+    
+    // Limit total digits to max 6 (MMYYYY) or 4 (MMYY)
+    if (value.length > 6) {
+        value = value.substring(0, 6);
+    }
+    
+    // Automatically insert slash after 2 digits (Month)
+    if (value.length > 2) {
+        value = value.substring(0, 2) + '/' + value.substring(2);
+    }
+    
+    $(this).val(value);
+});
+
+// Handle Backspace correctly so it removes the slash smoothly
+$(document).on('keydown', '.expiry', function (e) {
+    let value = $(this).val();
+    
+    if (e.key === 'Backspace' && value.length === 3 && value.endsWith('/')) {
+        e.preventDefault();
+        $(this).val(value.substring(0, 2));
+    }
+});
+// 1. When a product is selected from Select2 dropdown -> focus on Batch input
+$('.product').on('select2:select', function () {
+    $(this).closest('.entry-row').find('.batch').focus();
+});
+
+// 2. Press Enter on Batch -> go to Expiry
+$(document).on('keydown', '.batch', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.expiry').focus().select();
+    }
+});
+
+// 3. Press Enter on Expiry -> go to MRP
+$(document).on('keydown', '.expiry', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.mrp').focus().select();
+    }
+});
+
+// 4. Press Enter on MRP -> go to Rate
+$(document).on('keydown', '.mrp', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.rate').focus().select();
+    }
+});
+
+// 5. Press Enter on Rate -> go to Tax
+$(document).on('keydown', '.rate', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.tax').focus().select();
+    }
+});
+
+// 6. Press Enter on Tax -> go to Sale Rate (srate)
+$(document).on('keydown', '.tax', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.srate').focus().select();
+    }
+});
+
+// 7. Press Enter on Sale Rate -> go to Sale Tax (stax)
+$(document).on('keydown', '.srate', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.stax').focus().select();
+    }
+});
+
+// 8. Press Enter on Sale Tax -> go to Qty
+$(document).on('keydown', '.stax', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.qty').focus().select();
+    }
+});
+
+// 9. Press Enter on Qty -> go to Free Qty
+$(document).on('keydown', '.qty', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.free_qty').focus().select();
+    }
+});
+
+// 10. Press Enter on Free Qty -> go to Discount (disc)
+$(document).on('keydown', '.free_qty', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.disc').focus().select();
+    }
+});
+
+// 11. Press Enter on Discount -> Click the Add Row button
+$(document).on('keydown', '.disc', function(e){
+    if(e.key === 'Enter'){
+        e.preventDefault();
+        $(this).closest('.entry-row').find('.add-row').click();
+    }
+});
+
     let selectedStockist = "<?= $ROW['super_stockist_id'] ?? '' ?>";
     loadSuperStockist(selectedStockist);
 
@@ -474,6 +595,8 @@ $(document).ready(function(){
         row.find('.tax').val('');
         row.find('.amount').val('0.00');
         row.find('.stax').val('');
+
+        row.find('.product').select2('open');
 
         calculateTotal();
     });

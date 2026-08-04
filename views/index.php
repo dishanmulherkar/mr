@@ -119,6 +119,20 @@ switch($page)
 
         exit;
 
+    case 'OrderEntry':
+
+        include 'controller/OrderEntry_ctl.php';
+
+        $controller = new orderentry_ctl($con);
+
+            if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        exit;
+
 
     case 'dashboard':
     default:
