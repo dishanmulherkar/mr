@@ -329,6 +329,20 @@ switch($page)
 
         exit;  
 
+    case 'invoice':
+
+        include '../Invoice/controller/invoice_ctl.php';
+
+        $controller = new InvoiceController($con);
+
+        if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        break;
+
     case 'dashboard':
     default:
         // Fixed folder name from 'controllers' to 'controller'

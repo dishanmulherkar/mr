@@ -48,61 +48,47 @@ class OrderController
         $order_id          = $_POST['order_id'] ?? null;
         $stockist_id       = $_POST['stockist_id'] ?? null;
         $super_stockist_id = $_POST['super_stockist_id'] ?? null;
-        
-        // Form arrays
-        $detail_ids    = $_POST['detail_id'] ?? [];
-        $product_ids   = $_POST['product_id'] ?? [];
-        $approved_qtys = $_POST['approved_qty'] ?? [];
-        $batches       = $_POST['batch_id'] ?? [];
-        $rates         = $_POST['rate'] ?? [];
-        $amounts       = $_POST['amount'] ?? [];
-
-        // Capture Transport Data
-        $lr_no          = $_POST['lr_no'] ?? '';
-        $eway_bill_no   = $_POST['eway_bill'] ?? '';
-        $vehicle_no     = $_POST['vehicle_no'] ?? '';
-        $transport_name = $_POST['transport_name'] ?? '';
-        $credit_days    = (int)($_POST['credit_days'] ?? 0);
-        $remarks        = $_POST['remarks'] ?? '';
-
-        // Capture Financial Data
-        $total_qty      = (float)($_POST['total_qty'] ?? 0);
-        $discount       = (float)($_POST['header_discount'] ?? 0);
-        $gst_amount     = (float)($_POST['gst_amt'] ?? 0);
-        $cgst_amount    = (float)($_POST['cgst'] ?? 0);
-        $sgst_amount    = (float)($_POST['sgst'] ?? 0);
-        $igst_amount    = (float)($_POST['igst'] ?? 0);
-        $grand_total    = (float)($_POST['grand_total'] ?? 0);
 
         // Handle other charges safely
         $other_sign     = $_POST['other_charges_sign'] ?? '+';
         $other_val      = (float)($_POST['other_charges'] ?? 0);
         $other_charges  = ($other_sign === '-') ? -$other_val : $other_val;
 
+        // ---> FIX: Fully mapped $data array <---
         $data = [
             'order_id'          => $order_id,
             'stockist_id'       => $stockist_id,
             'super_stockist_id' => $super_stockist_id,
-            'detail_ids'        => $detail_ids,
-            'product_ids'       => $product_ids,
-            'approved_qtys'     => $approved_qtys,
-            'batches'           => $batches,
-            'rates'             => $rates,
-            'amounts'           => $amounts,
-            'lr_no'             => $lr_no,
-            'eway_bill_no'      => $eway_bill_no,
-            'vehicle_no'        => $vehicle_no,
-            'transport_name'    => $transport_name,
-            'credit_days'       => $credit_days,
-            'total_qty'         => $total_qty,
-            'discount'          => $discount,
-            'gst_amount'        => $gst_amount,
+            
+            // 1. Array Data for Items (Now perfectly mapped to $_POST)
+            'detail_id'         => $_POST['detail_id'] ?? [],
+            'product_id'        => $_POST['product_id'] ?? [],
+            'approved_qty'      => $_POST['approved_qty'] ?? [],
+            'batch_id'          => $_POST['batch_id'] ?? [],
+            'batch'             => $_POST['batch'] ?? [],
+            'rate'              => $_POST['rate'] ?? [],
+            'amount'            => $_POST['amount'] ?? [],
+            'mrp'               => $_POST['mrp'] ?? [],    // Added missing MRP
+            'tax'               => $_POST['tax'] ?? [],    // Added missing Tax
+            'disc'              => $_POST['disc'] ?? [],   // Added missing Discount
+
+            // 2. Transport Data
+            'lr_no'             => $_POST['lr_no'] ?? '',
+            'eway_bill_no'      => $_POST['eway_bill'] ?? '',
+            'vehicle_no'        => $_POST['vehicle_no'] ?? '',
+            'transport_name'    => $_POST['transport_name'] ?? '',
+            'credit_days'       => (int)($_POST['credit_days'] ?? 0),
+            'remarks'           => $_POST['remarks'] ?? '',
+
+            // 3. Financial Data
+            'total_qty'         => (float)($_POST['total_qty'] ?? 0),
+            'header_discount'   => (float)($_POST['header_discount'] ?? 0),
+            'gst_amt'           => (float)($_POST['gst_amt'] ?? 0),
+            'cgst'              => (float)($_POST['cgst'] ?? 0),
+            'sgst'              => (float)($_POST['sgst'] ?? 0),
+            'igst'              => (float)($_POST['igst'] ?? 0),
             'other_charges'     => $other_charges,
-            'grand_total'       => $grand_total,
-            'cgst_amount'       => $cgst_amount,
-            'sgst_amount'       => $sgst_amount,
-            'igst_amount'       => $igst_amount,
-            'remarks'           => $remarks
+            'grand_total'       => (float)($_POST['grand_total'] ?? 0)
         ];
 
         // ===============================================
@@ -130,7 +116,6 @@ class OrderController
         header("Location: " . BASE_URL . "Order/approve/$order_id?error=" . urlencode($result['msg']));
         exit;
     }
-
   
 
     // 3. DISPATCH ORDER

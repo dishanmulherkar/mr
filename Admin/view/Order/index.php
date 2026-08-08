@@ -138,6 +138,10 @@ include 'view/layout/header.php';
                                            onclick="return confirm('Are you sure you want to delete this order?');">
                                             <i class="fa fa-trash"></i>
                                         </a>
+
+                                        <a href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
+                                                🧾 Invoice
+                                            </a>
                                     </td>
                                 </tr>
                         <?php 

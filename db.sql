@@ -165,7 +165,10 @@ ALTER TABLE stock_inward
         ADD COLUMN cgst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER grand_total,
     ADD COLUMN sgst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER cgst_amount,
     ADD COLUMN igst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER sgst_amount,
-    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    ADD COLUMN stockist_name VARCHAR(255) NULL,
+    ADD COLUMN gst_no VARCHAR(50) NULL,
+      ADD COLUMN super_stockist_id INT NOT NULL DEFAULT 0 ;
 
 
     ALTER TABLE `stock_inward_details` 
@@ -186,4 +189,15 @@ ALTER TABLE mr_users
 ADD COLUMN credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER hq_id;
 
   ALTER TABLE super_stockist
-  ADD COLUMN gst_no VARCHAR(20) NULL AFTER phone,
+  ADD COLUMN gst_no VARCHAR(20) NULL AFTER 	pincode,
+  ADD COLUMN address TEXT NULL AFTER gst_no;
+
+ALTER TABLE products
+ADD COLUMN hsn_code VARCHAR(20) NULL AFTER product_name;
+
+ALTER TABLE `stock_inward_details`
+ADD COLUMN `mrp` DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER `batch_id`,
+ADD COLUMN `discount_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00' AFTER `rate`,
+ADD COLUMN `gst_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00' AFTER `amt`,
+ADD COLUMN `gst_amount` DECIMAL(12,2) NOT NULL DEFAULT '0.00' AFTER `gst_percent`;
+

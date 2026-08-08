@@ -258,10 +258,35 @@ include 'view/layout/header.php';
                                     <label class="form-label fw-bold small">Vehicle No.</label>
                                     <input type="text" name="vehicle_no" class="form-control" value="<?= $ROW['vehicle_no'] ?? ''; ?>" placeholder="Vehicle Number">
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="form-label fw-bold small">Transport Name</label>
-                                    <input type="text" name="transport_name" class="form-control" value="<?= $ROW['transport_name'] ?? ''; ?>" placeholder="Transport Company">
-                                </div>
+                              <div class="col-md-3">
+                                        <label class="form-label fw-bold small">Transport Name</label>
+
+                                        <input
+                                            type="text"
+                                            name="transport_name"
+                                            id="transport_name"
+                                            class="form-control"
+                                            value="<?= htmlspecialchars(
+                                                $ROW['transport_name']
+                                                ?? $ROW['stockist_transport']
+                                                ?? 'Hand Delivery'
+                                            ); ?>"
+                                            placeholder="Transport Company"
+                                            list="transportSuggestions"
+                                        >
+
+                                        <datalist id="transportSuggestions">
+
+                                            <?php if (!empty($ROW['stockist_transport'])): ?>
+
+                                                <option value="<?= htmlspecialchars($ROW['stockist_transport']); ?>">
+
+                                            <?php endif; ?>
+
+                                            <option value="Hand Delivery">
+
+                                        </datalist>
+                                    </div>
                                 <div class="col-md-3">
                                     <label class="form-label fw-bold small">Credit Days</label>
                                     <input type="number" name="credit_days" class="form-control" value="<?= $ROW['credit_days'] ?? ''; ?>" placeholder="0" min="0">
