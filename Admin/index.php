@@ -315,6 +315,20 @@ switch($page)
 
         exit;  
 
+    case 'Order':
+
+        include 'controller/Order_ctl.php';
+
+        $controller = new OrderController($con);
+
+         if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        exit;  
+
     case 'dashboard':
     default:
         // Fixed folder name from 'controllers' to 'controller'

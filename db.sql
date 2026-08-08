@@ -87,20 +87,9 @@ DROP COLUMN pts,
 ADD purchase_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
 ADD available_qty INT NOT NULL DEFAULT 0,
 ADD expiry_date DATE NULL;
+ADD mrp DECIMAL(10,2) DEFAULT 0,
 
 
--- add table for state wise price of product 
-
-CREATE TABLE product_state_price
-(
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    product_id INT NOT NULL,
-    state_id INT NOT NULL,
-    pts DECIMAL(10,2) NOT NULL,
-    mrp DECIMAL(10,2) DEFAULT 0,
-    effective_date DATE NOT NULL,
-    status ENUM('Active','Inactive') DEFAULT 'Active'
-);
 
 -- update stock ledger table 
 ALTER TABLE stock_ledger
@@ -141,3 +130,60 @@ CREATE TABLE `orders` (
   INDEX (`stockist_id`),
   INDEX (`mr_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+CREATE TABLE `order_details` (
+  `detail_id` INT AUTO_INCREMENT PRIMARY KEY,
+  `order_id` INT NOT NULL,
+  `product_id` INT NOT NULL,
+  `qty` INT NOT NULL COMMENT 'Quantity originally ordered by MR',
+  `approved_qty` INT DEFAULT NULL COMMENT 'Quantity approved (can be changed later)',
+  `rate` DECIMAL(10, 2) NOT NULL COMMENT 'PTS rate',
+  `discount` DECIMAL(5, 2) NOT NULL DEFAULT 16.66 COMMENT 'Discount percentage',
+  `gst` DECIMAL(5, 2) NOT NULL DEFAULT 0.00 COMMENT 'GST percentage',
+  `amt` DECIMAL(12, 2) NOT NULL COMMENT 'Taxable amount (Qty x Net Rate)',
+  `net_total` DECIMAL(12, 2) NOT NULL COMMENT 'Final amount including GST',
+  FOREIGN KEY (`order_id`) REFERENCES `orders`(`order_id`) ON DELETE CASCADE,
+  INDEX (`product_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+ALTER TABLE `order_details` ADD COLUMN `batch_id` INT NOT NULL AFTER `product_id`;
+
+-- stock inward alter 
+
+ALTER TABLE stock_inward
+    ADD COLUMN mr_id INT NOT NULL DEFAULT 0 AFTER stockist_id,
+    ADD COLUMN order_id INT DEFAULT NULL AFTER mr_id,
+    ADD COLUMN inward_no VARCHAR(30) NULL UNIQUE AFTER inward_id,
+    ADD COLUMN total_qty DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER inward_date,
+    ADD COLUMN sub_total DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER total_qty,
+    ADD COLUMN discount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER sub_total,
+    ADD COLUMN gst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER discount,
+    ADD COLUMN other_charges DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER gst_amount,
+    ADD COLUMN grand_total DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER other_charges,
+        ADD COLUMN cgst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER grand_total,
+    ADD COLUMN sgst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER cgst_amount,
+    ADD COLUMN igst_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER sgst_amount,
+    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+
+    ALTER TABLE `stock_inward_details` 
+  ADD COLUMN `amt` DECIMAL(12,2) NOT NULL DEFAULT '0.00',
+  ADD COLUMN `net_total` DECIMAL(12,2) NOT NULL DEFAULT '0.00';
+
+  ALTER TABLE stockists
+ADD COLUMN gst_no VARCHAR(20) NULL AFTER address,
+ADD COLUMN gst_type ENUM('CGST_SGST','IGST','VAT') NOT NULL DEFAULT 'CGST_SGST' AFTER gst_no,
+ADD COLUMN dispatch_to VARCHAR(255) NULL AFTER gst_type,
+ADD COLUMN transport VARCHAR(100) NULL AFTER dispatch_to;
+
+ALTER TABLE stockists
+ADD COLUMN pan_no VARCHAR(10) NULL AFTER `gst_type`,
+ADD COLUMN dl_no VARCHAR(50) NULL AFTER pan_no;
+
+ALTER TABLE mr_users
+ADD COLUMN credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER hq_id;
+
+  ALTER TABLE super_stockist
+  ADD COLUMN gst_no VARCHAR(20) NULL AFTER phone,

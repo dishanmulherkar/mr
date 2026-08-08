@@ -48,7 +48,7 @@ include 'view/layout/header.php';
                            <div class="row">
 
                                 <!-- Super Stockist Name -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Super Stockist Name</label>
                                         <input type="text" name="ss_name" class="form-control"
@@ -58,7 +58,7 @@ include 'view/layout/header.php';
                                 </div>
 
                                 <!-- Person Name -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Person Name</label>
                                         <input type="text" name="person_name" class="form-control"
@@ -67,8 +67,19 @@ include 'view/layout/header.php';
                                     </div>
                                 </div>
 
+                                
+                                    <!-- GST No -->
+                                <div class="col-lg-4">
+                                    <div class="form-group">
+                                        <label>GST No</label>
+                                        <input type="text" name="gst_no" class="form-control"
+                                            placeholder="Enter GST Number" maxlength="15"
+                                            value="<?php echo isset($ROW['gst_no']) ? htmlspecialchars($ROW['gst_no']) : ''; ?>">
+                                    </div>
+                                </div>
+
                                 <!-- Country -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Country</label>
                                         <input type="text" name="country" class="form-control"
@@ -78,7 +89,7 @@ include 'view/layout/header.php';
                                 </div>
 
                                 <!-- State -->
-                                <div class="col-lg-3">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Select State</label>
                                          <select name="state" id ="state_id" class="form-control" required>
@@ -94,7 +105,7 @@ include 'view/layout/header.php';
                                 </div>
 
                                  <!-- District -->
-                                        <div class="col-lg-3">
+                                        <div class="col-lg-4">
                                             <div class="form-group">
                                                 <label>District</label>
                                                 <select name="district" id="district" class="form-control" required>
@@ -116,7 +127,7 @@ include 'view/layout/header.php';
                                         </div>
 
                                 <!-- Pincode -->
-                                <div class="col-lg-3">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Pincode</label>
                                         <input type="text" name="pincode" class="form-control"
@@ -125,8 +136,8 @@ include 'view/layout/header.php';
                                     </div>
                                 </div>
 
-                                <!-- Status -->
-                                <div class="col-lg-3">
+                                   <!-- Status -->
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Status</label>
                                         <select name="status" class="form-control" required>
@@ -135,6 +146,17 @@ include 'view/layout/header.php';
                                     </select>
                                     </div>
                                 </div>
+
+                                  <!-- Address -->
+                                <div class="col-lg-12">
+                                    <div class="form-group">
+                                        <label>Address</label>
+                                        <textarea name="address" rows="3" class="form-control"
+                                            placeholder="Enter Address"><?php echo isset($ROW['address']) ? htmlspecialchars($ROW['address']) : ''; ?></textarea>
+                                    </div>
+                                </div>
+
+                             
 
                             </div>
                            

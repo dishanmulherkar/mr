@@ -149,6 +149,7 @@ class PurchaseEntryModel
                                 sale_rate = '$srate',
                                 sale_tax = '$stax',
                                 expiry_date = $expiry_date,
+                                mrp  = $mrp,
                                 status = 'Active'
                             WHERE batch_id = '$actual_batch_id'
                         ";
@@ -437,6 +438,7 @@ class PurchaseEntryModel
                                 sale_rate = '$srate',
                                 sale_tax = '$stax',
                                 expiry_date = $expiry_date,
+                                mrp  = $mrp,
                                 status = 'Active'
                             WHERE batch_id = '$actual_batch_id'
                         ";
@@ -447,10 +449,10 @@ class PurchaseEntryModel
                         $insert_batch = "
                             INSERT INTO product_batches (
                                 product_id, batch_no, status, purchase_rate, purchase_tax, 
-                                sale_rate, sale_tax, expiry_date
+                                sale_rate, sale_tax, expiry_date,mrp
                             ) VALUES (
                                 '$product_id', '$batch', 'Active', '$rate', '$tax', 
-                                '$srate', '$stax', $expiry_date
+                                '$srate', '$stax', $expiry_date , $mrp
                             )
                         ";
                         if (!mysqli_query($this->con, $insert_batch)) {

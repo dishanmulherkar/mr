@@ -170,6 +170,26 @@
                 </div>
             </li>
 
+             <!-- ================= Order ================= -->
+            <li class="nav-item searchable-folder">
+                <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#orderMenu" aria-expanded="false" href="#">
+                    <span>
+                        <i class="fa-solid fa-boxes-stacked" style="width: 20px;"></i>
+                        <span class="ms-2">Order</span>
+                    </span>
+                    <i class="fa-solid fa-angle-down toggle-icon"></i>
+                </a>
+                <div class="collapse" id="orderMenu">
+                    <ul class="nav flex-column ms-4 mt-1">
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>Order" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage Orders
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </li>
+
             <!-- ================= INVENTORY ================= -->
             <li class="nav-item searchable-folder">
                 <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#inventoryMenu" aria-expanded="false" href="#">

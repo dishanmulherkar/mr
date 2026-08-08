@@ -56,7 +56,7 @@ include 'view/layout/header.php';
                             </div>
                                 
                               <!-- HQ Name -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Head Quarter</label>
                                         <select name="hq" id="hq" class="form-control" required>
@@ -72,7 +72,19 @@ include 'view/layout/header.php';
                                         </select>
                                     </div>
                                 </div>
-
+                                
+                                <div class="col-lg-4">
+                                    <div class="form-group">
+                                        <label>Credit Limit</label>
+                                        <input type="number"
+                                            name="credit_limit"
+                                            class="form-control"
+                                            placeholder="Enter Credit Limit"
+                                            step="0.01"
+                                            min="0"
+                                            value="<?php echo isset($ROW['credit_limit']) ? $ROW['credit_limit'] : ''; ?>">
+                                    </div>
+                                </div>
                              
                                
 
@@ -87,7 +99,7 @@ include 'view/layout/header.php';
                                     <div class="row">
 
                                         <!-- MR Name -->
-                                        <div class="col-lg-6">
+                                        <div class="col-lg-4">
                                             <div class="form-group">
                                                 <label>MR Name</label>
                                                 <input type="text" name="mr_name" class="form-control"
@@ -97,7 +109,7 @@ include 'view/layout/header.php';
                                         </div>
 
                                         <!-- Password -->
-                                        <div class="col-lg-6">
+                                        <div class="col-lg-4">
                                             <div class="form-group">
                                                 <label>Password</label>
                                                 <input type="password" name="password" id="password"
@@ -113,7 +125,7 @@ include 'view/layout/header.php';
                                         </div>
 
                                         <!-- Mobile -->
-                                        <div class="col-lg-6">
+                                        <div class="col-lg-4">
                                             <div class="form-group">
                                                 <label>Mobile Number</label>
                                                 <input type="text" name="mobile" class="form-control"
@@ -124,7 +136,7 @@ include 'view/layout/header.php';
                                         </div>
 
                                         <!-- Email -->
-                                        <div class="col-lg-6">
+                                        <div class="col-lg-4">
                                             <div class="form-group">
                                                 <label>Email</label>
                                                 <input type="email" name="email" class="form-control"

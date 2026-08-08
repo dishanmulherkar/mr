@@ -12,9 +12,9 @@ include 'view/layout/header.php';
         .preview-box img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #ccc; }
 
         .btn-downoload{
-    float: right;
-    margin-top: -30px;
-}
+                float: right;
+                margin-top: -30px;
+            }
   .image-modal{
     display:none;
     position:fixed;
@@ -108,7 +108,7 @@ include 'view/layout/header.php';
                             <div class="row">
 
                                 <!-- Stockist Name -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-3">
                                     <div class="form-group">
                                         <label>Stockist Name</label>
                                         <input type="text" name="stockist_name" class="form-control"
@@ -139,6 +139,26 @@ include 'view/layout/header.php';
                                             <option value="1" <?php if(isset($ROW['status']) && $ROW['status'] == 1) echo 'selected'; ?>>Active</option>
                                             <option value="0" <?php if(isset($ROW['status']) && $ROW['status'] == 0) echo 'selected'; ?>>Inactive</option>
                                         </select>
+                                    </div>
+                                </div>
+
+                                 <!-- Image Upload -->
+                                <div class="col-lg-3">
+                                    <div class="form-group">
+                                        <label>Stockist Image</label>
+                                        <input type="file" name="stockist_image" class="form-control"
+                                               accept="image/*" onchange="previewImage(this)">
+                                        <div class="preview-box">
+                                            <?php if(isset($ROW['stockist_image']) && !empty($ROW['stockist_image'])): ?>
+                                                <img id="imgPreview"
+                                                     src="<?= BASE_URL ?>uploads/stockist/<?php echo htmlspecialchars($ROW['stockist_image']); ?>"
+                                                     onclick="openImage(this.src)"
+                                                     alt="Current Image">
+                                                <br><small class="text-muted">Upload new image to replace</small>
+                                            <?php else: ?>
+                                                <img id="imgPreview" src="#" alt="" style="display:none;">
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -181,18 +201,77 @@ include 'view/layout/header.php';
                                             </div>
                                         </div>
 
-                                <!-- Pincode -->
-                                <div class="col-lg-4">
-                                    <div class="form-group">
-                                        <label>Pincode</label>
-                                        <input type="text" name="pincode" class="form-control"
-                                            placeholder="Enter Pincode" maxlength="6"
-                                            value="<?php echo isset($ROW['pincode']) ? htmlspecialchars($ROW['pincode']) : ''; ?>">
+                                         <!-- Pincode -->
+                                        <div class="col-lg-4">
+                                            <div class="form-group">
+                                                <label>Pincode</label>
+                                                <input type="text" name="pincode" class="form-control"
+                                                    placeholder="Enter Pincode" maxlength="6"
+                                                    value="<?php echo isset($ROW['pincode']) ? htmlspecialchars($ROW['pincode']) : ''; ?>">
+                                            </div>
+                                        </div>
+
+                                        <!-- GST No -->
+                                    <div class="col-lg-4">
+                                        <div class="form-group">
+                                            <label>GST No</label>
+                                            <input type="text" name="gst_no" class="form-control"
+                                                placeholder="Enter GST Number" maxlength="15"
+                                                value="<?php echo isset($ROW['gst_no']) ? htmlspecialchars($ROW['gst_no']) : ''; ?>">
+                                        </div>
                                     </div>
-                                </div>
+
+                                    <!-- PAN No -->
+                                        <div class="col-lg-4">
+                                            <div class="form-group">
+                                                <label>PAN No</label>
+                                                <input type="text"
+                                                    name="pan_no"
+                                                    class="form-control"
+                                                    placeholder="Enter PAN Number"
+                                                    maxlength="10"
+                                                    style="text-transform:uppercase"
+                                                    value="<?php echo isset($ROW['pan_no']) ? htmlspecialchars($ROW['pan_no']) : ''; ?>">
+                                            </div>
+                                        </div>
+
+                                        <!-- Drug Licence No -->
+                                        <div class="col-lg-4">
+                                            <div class="form-group">
+                                                <label>Drug Licence No</label>
+                                                <input type="text"
+                                                    name="dl_no"
+                                                    class="form-control"
+                                                    placeholder="Enter Drug Licence Number"
+                                                    maxlength="50"
+                                                    value="<?php echo isset($ROW['dl_no']) ? htmlspecialchars($ROW['dl_no']) : ''; ?>">
+                                            </div>
+                                        </div>
+
+                                    <!-- Dispatch To -->
+                                    <div class="col-lg-4">
+                                        <div class="form-group">
+                                            <label>Dispatch To</label>
+                                            <input type="text" name="dispatch_to" class="form-control"
+                                                placeholder="Enter Dispatch Location"
+                                                value="<?php echo isset($ROW['dispatch_to']) ? htmlspecialchars($ROW['dispatch_to']) : ''; ?>">
+                                        </div>
+                                    </div>
+
+                                    <!-- Transport -->
+                                    <div class="col-lg-4">
+                                        <div class="form-group">
+                                            <label>Transport</label>
+                                            <input type="text" name="transport" class="form-control"
+                                                placeholder="Enter Transport Name"
+                                                value="<?php echo isset($ROW['transport']) ? htmlspecialchars($ROW['transport']) : ''; ?>">
+                                        </div>
+                                    </div>
+
+                               
 
                                 <!-- HQ Dropdown -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-3">
                                     <div class="form-group">
                                         <label>Head Quarter</label>
                                         <select name="hq_id" id="hq_id" class="form-control select2" required>
@@ -201,25 +280,7 @@ include 'view/layout/header.php';
                                     </div>
                                 </div>
 
-                                <!-- Image Upload -->
-                                <div class="col-lg-6">
-                                    <div class="form-group">
-                                        <label>Stockist Image</label>
-                                        <input type="file" name="stockist_image" class="form-control"
-                                               accept="image/*" onchange="previewImage(this)">
-                                        <div class="preview-box">
-                                            <?php if(isset($ROW['stockist_image']) && !empty($ROW['stockist_image'])): ?>
-                                                <img id="imgPreview"
-                                                     src="<?= BASE_URL ?>uploads/stockist/<?php echo htmlspecialchars($ROW['stockist_image']); ?>"
-                                                     onclick="openImage(this.src)"
-                                                     alt="Current Image">
-                                                <br><small class="text-muted">Upload new image to replace</small>
-                                            <?php else: ?>
-                                                <img id="imgPreview" src="#" alt="" style="display:none;">
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                </div>
+                               
 
                                 <!-- Address -->
                                 <div class="col-lg-12">
@@ -362,7 +423,7 @@ document.getElementById('imageModal').onclick = function(e)
     }
 };
 
-                     $(document).ready(function(){
+$(document).ready(function(){
 
        // 1. Function to Load Districts
     function loadDistrict(state_id, district_id = '') {

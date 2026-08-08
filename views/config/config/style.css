@@ -374,8 +374,8 @@ img{display:block;max-width:100%}
 
 .inv-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
 .inv-table{width:100%;border-collapse:collapse}
-.inv-table th{background:var(--bg);font-size:11px;font-weight:700;color:var(--txt-muted);text-transform:uppercase;letter-spacing:.4px;padding:13px 16px;text-align:left;border-bottom:1px solid var(--border)}
-.inv-table td{font-size:13px;color:var(--txt-mid);padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+.inv-table th{background:var(--bg);font-size:10px;font-weight:700;color:var(--txt-muted);text-transform:uppercase;letter-spacing:.4px;padding:11px 13px;text-align:left;border-bottom:1px solid var(--border)}
+.inv-table td{font-size:13px;color:var(--txt-mid);padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 .inv-table tr:last-child td{border-bottom:none}
 .inv-table tr:hover td{background:var(--bg)}
 .med-name{font-weight:600;color:var(--txt)}

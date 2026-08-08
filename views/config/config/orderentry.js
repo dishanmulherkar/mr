@@ -1,13 +1,22 @@
 /* ════════════════════════════════════════════════════
-   STATE
+    STATE & URL HELPER
 ════════════════════════════════════════════════════ */
-let cart                = [];   // [{ product_id, name, qty, pts, tax, discount, maxStock }]
-let selectedProduct     = null; // { id, name, pts, tax, discount, stock }
-let activeStockistId    = null;
+let cart               = [];   
+let selectedProduct    = null; 
+let activeStockistId   = null;
+
+// Fixes the 404 URL issue when editing (e.g. /OrderEntry/index/1)
+function getApiUrl(endpoint) {
+    const currentUrl = window.location.href;
+    const baseUrl = currentUrl.split('OrderEntry')[0];
+    return baseUrl + 'OrderEntry/' + endpoint;
+}
 
 // --- CART SESSION FUNCTIONS ---
 function saveCartSession() {
-    sessionStorage.setItem('saved_sales_cart', JSON.stringify(cart));
+    if (typeof existingOrderData === 'undefined' || existingOrderData === null) {
+        sessionStorage.setItem('saved_sales_cart', JSON.stringify(cart));
+    }
 }
 
 function loadCartSession() {
@@ -21,14 +30,16 @@ function loadCartSession() {
 
 // --- FORM STATE ---
 function saveFormState() {
-    const state = {
-        stockist_id: document.getElementById('stockist-select').value,
-    };
-    sessionStorage.setItem('saved_sales_form', JSON.stringify(state));
+    if (typeof existingOrderData === 'undefined' || existingOrderData === null) {
+        const state = {
+            stockist_id: document.getElementById('stockist-select').value,
+        };
+        sessionStorage.setItem('saved_sales_form', JSON.stringify(state));
+    }
 }
 
 /* ════════════════════════════════════════════════════
-   TOAST
+    TOAST
 ════════════════════════════════════════════════════ */
 function showToast(msg, type = '') {
     const el = document.getElementById('toast');
@@ -39,7 +50,7 @@ function showToast(msg, type = '') {
 }
 
 /* ════════════════════════════════════════════════════
-   AUTOCOMPLETE
+    AUTOCOMPLETE
 ════════════════════════════════════════════════════ */
 const searchInput = document.getElementById('medicine-search');
 const dropdown    = document.getElementById('medicine-dropdown');
@@ -57,9 +68,9 @@ stockistSel.addEventListener('change', function () {
     
     activeStockistId = this.value;
 
-    selectedProduct             = null;
-    searchInput.value           = '';
-    searchInput.disabled        = !this.value;
+    selectedProduct           = null;
+    searchInput.value         = '';
+    searchInput.disabled      = !this.value;
     searchInput.placeholder   = this.value ? 'Search medicine…' : 'Select a stockist first…';
     dropdown.style.display    = 'none';
     setAcError('');
@@ -76,7 +87,7 @@ searchInput.addEventListener('input', function () {
 
 // Focus → show list
 searchInput.addEventListener('focus', function () {
-    if (stockistSel.value) fetchMedicines(this.value.trim());
+    if (stockistSel.value || activeStockistId) fetchMedicines(this.value.trim());
 });
 
 function fetchMedicines(q) {
@@ -84,10 +95,17 @@ function fetchMedicines(q) {
         q: q || ''
     });
 
-    fetch(`OrderEntry/search_medicines?${params.toString()}`)
-        .then(r => r.json())
+    // UPDATED: Use absolute API URL helper
+    fetch(getApiUrl('search_medicines') + '?' + params.toString())
+        .then(r => {
+            if (!r.ok) throw new Error("Network error");
+            return r.json();
+        })
         .then(data => renderDropdown(data))
-        .catch(() => renderDropdown([]));
+        .catch(err => {
+            console.error("Fetch Error:", err);
+            renderDropdown([]);
+        });
 }
 
 function renderDropdown(items) {
@@ -133,7 +151,7 @@ function renderDropdown(items) {
 
 function pickProduct(item) {
     selectedProduct          = item;
-    searchInput.value      = item.name;
+    searchInput.value        = item.name;
     dropdown.style.display = 'none';
     setAcError('');
     document.getElementById('qty-input').select();
@@ -145,7 +163,7 @@ document.addEventListener('click', e => {
 });
 
 /* ════════════════════════════════════════════════════
-   ADD TO CART
+    ADD TO CART (UPDATED FOR BACKEND ALLOCATION)
 ════════════════════════════════════════════════════ */
 document.getElementById('btn-ok').addEventListener('click', addToCart);
 
@@ -153,9 +171,9 @@ document.getElementById('qty-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') addToCart();
 });
 
-let editingIndex = -1;  // -1 = adding new, ≥0 = editing that cart row
+let editingIndex = -1;  
 
-function addToCart() {
+async function addToCart() {
     setAcError('');
     const qty = parseInt(document.getElementById('qty-input').value) || 0;
 
@@ -168,63 +186,112 @@ function addToCart() {
         setAcError('Enter a valid quantity (minimum 1).');
         return;
     }
-    if (qty > selectedProduct.stock) {
+
+    // Calculate total desired quantity if updating existing item
+    let checkQty = qty;
+    const existing = cart.find(i => i.product_id === selectedProduct.id);
+    
+    if (existing && editingIndex < 0) {
+        checkQty += existing.qty; // Add to existing quantity if not in edit mode
+    }
+
+    if (checkQty > selectedProduct.stock) {
         setAcError(`Insufficient stock — available: ${selectedProduct.stock}`);
         return;
     }
 
-    const itemData = {
-        product_id : selectedProduct.id,
-        name       : selectedProduct.name,
-        qty,
-        pts        : parseFloat(selectedProduct.pts || 0),
-        tax        : parseFloat(selectedProduct.tax ?? selectedProduct.sale_tax ?? 0),
-        discount   : parseFloat(selectedProduct.discount ?? 16.66),
-        maxStock   : selectedProduct.stock,
-    };
+    const btnOk = document.getElementById('btn-ok');
+    btnOk.disabled = true;
+    btnOk.textContent = 'Calculating...';
 
-    if (editingIndex >= 0) {
-        cart[editingIndex] = itemData;
-        editingIndex = -1;
-        document.getElementById('btn-ok').textContent = 'OK';
-    } else {
-        const existing = cart.find(i => i.product_id === selectedProduct.id);
-        if (existing) {
-            const newQty = existing.qty + qty;
-            if (newQty > existing.maxStock) {
-                setAcError(`Total qty (${newQty}) exceeds available stock (${existing.maxStock}).`);
-                return;
-            }
-            existing.qty = newQty;
-        } else {
-            cart.push(itemData);
+    try {
+        // Fetch exact batch allocation and rates from the backend
+        const formData = new URLSearchParams();
+        formData.append('product_id', selectedProduct.id);
+        formData.append('qty', checkQty);
+
+        const response = await fetch(getApiUrl('previewAllocation'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+        
+        const data = await response.json();
+
+        if (!data.success) {
+            setAcError(data.msg || 'Stock allocation failed');
+            return;
         }
-    }
 
-    renderCart();
-    saveCartSession();
-    searchInput.value = '';
-    selectedProduct   = null;
-    document.getElementById('qty-input').value = 1;
-    searchInput.focus();
+        // Sum up exact amounts from the allocated batches returned by backend
+        let exact_amt = 0;
+        let exact_tax = 0;
+        
+        data.data.allocated_batches.forEach(batch => {
+            exact_amt += batch.amt;
+            exact_tax += (batch.net_total - batch.amt);
+        });
+
+        // Create the cart item
+        const itemData = {
+            product_id: selectedProduct.id,
+            name: selectedProduct.name,
+            qty: checkQty, // Use the full calculated quantity
+            exact_amt: exact_amt,
+            exact_tax: exact_tax,
+            exact_net: exact_amt + exact_tax,
+            maxStock: selectedProduct.stock
+        };
+
+        if (editingIndex >= 0) {
+            cart[editingIndex] = itemData; // Update existing
+            editingIndex = -1;
+        } else {
+            if (existing) {
+                // Update the already existing item in cart
+                existing.qty = itemData.qty;
+                existing.exact_amt = itemData.exact_amt;
+                existing.exact_tax = itemData.exact_tax;
+                existing.exact_net = itemData.exact_net;
+            } else {
+                cart.push(itemData); // Add new
+            }
+        }
+
+        renderCart();
+        saveCartSession();
+        searchInput.value = '';
+        selectedProduct = null;
+        document.getElementById('qty-input').value = 1;
+        searchInput.focus();
+
+    } catch (e) {
+        setAcError('Server error while calculating rates.');
+    } finally {
+        btnOk.disabled = false;
+        btnOk.textContent = 'OK';
+    }
 }
 
 /* ════════════════════════════════════════════════════
-   RENDER CART
+    RENDER CART (UPDATED TO USE PRE-CALCULATED AMOUNTS)
 ════════════════════════════════════════════════════ */
 function renderCart() {
     const tbody = document.getElementById('cart-tbody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
+
+    if (!Array.isArray(cart)) {
+        cart = [];
+    }
+    cart = cart.filter(item => item !== null && typeof item === 'object' && (item.product_id || item.id));
 
     if (!cart.length) {
         tbody.innerHTML = '<tr id="empty-row"><td colspan="7" style="text-align:center;color:var(--txt-muted);padding:22px 0;">No items added yet</td></tr>';
         document.getElementById('total-amount').textContent = '₹ 0.00';
-        if (document.getElementById('gst-amount')) {
-            document.getElementById('gst-amount').textContent = '₹ 0.00';
-        }
-        if (document.getElementById('sub-total')) {
-            document.getElementById('sub-total').textContent = '₹ 0.00';
-        }
+        if (document.getElementById('gst-amount')) document.getElementById('gst-amount').textContent = '₹ 0.00';
+        if (document.getElementById('sub-total')) document.getElementById('sub-total').textContent = '₹ 0.00';
         document.getElementById('btn-submit').disabled = true;
         return;
     }
@@ -233,28 +300,18 @@ function renderCart() {
     let totalTax = 0;
 
     cart.forEach((item, idx) => {
-        const qty      = parseFloat(item.qty) || 0;
-        const pts      = parseFloat(item.pts) || 0;
-        const taxRate  = parseFloat(item.tax) || 0;         
-        const discRate = parseFloat(item.discount ?? 16.66); 
-
-        // Net PTS after discount, Taxable Amount, and Tax calculation
-        const netPts     = pts * (1 - discRate / 100);
-        const taxableAmt = qty * netPts;
-        const taxAmt     = taxableAmt * (taxRate / 100);
-        const itemTotal  = taxableAmt + taxAmt;
+        // We now rely on exact_amt and exact_tax calculated by the backend!
+        const taxableAmt = parseFloat(item.exact_amt) || 0;
+        const taxAmt     = parseFloat(item.exact_tax) || 0;
 
         subTotal += taxableAmt;
         totalTax += taxAmt;
-//  <br><small style="color:var(--txt-muted);">PID: ${item.product_id} | Rate: ₹ ${pts.toFixed(2)} | Disc: ${discRate}% | GST: ${taxRate}%</small>
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
         <td>${idx + 1}</td>
-        <td>
-            ${esc(item.name)}
-           
-        </td>
-        <td>${qty}</td>
+        <td>${typeof esc === 'function' ? esc(item.name || 'Product') : (item.name || 'Product')}</td>
+        <td>${item.qty}</td>
         <td>₹ ${taxableAmt.toFixed(2)}</td>
         <td>
             <button class="btn-remove" onclick="startEdit(${idx})" title="Edit" style="color:var(--violet)">✎</button>
@@ -265,16 +322,12 @@ function renderCart() {
 
     const grandTotal = subTotal + totalTax;
 
-    if (document.getElementById('sub-total')) {
-        document.getElementById('sub-total').textContent = '₹ ' + subTotal.toFixed(2);
-    }
-    if (document.getElementById('gst-amount')) {
-        document.getElementById('gst-amount').textContent = '₹ ' + totalTax.toFixed(2);
-    }
+    if (document.getElementById('sub-total')) document.getElementById('sub-total').textContent = '₹ ' + subTotal.toFixed(2);
+    if (document.getElementById('gst-amount')) document.getElementById('gst-amount').textContent = '₹ ' + totalTax.toFixed(2);
+    
     document.getElementById('total-amount').textContent = '₹ ' + grandTotal.toFixed(2);
     document.getElementById('btn-submit').disabled = false;
 }
-
 function removeItem(idx) {
     cart.splice(idx, 1);
     renderCart();
@@ -282,26 +335,28 @@ function removeItem(idx) {
 }
 
 /* ════════════════════════════════════════════════════
-   SUBMIT
+    SUBMIT
 ════════════════════════════════════════════════════ */
 document.getElementById('btn-submit').addEventListener('click', function () {
-    const stockist_id = document.getElementById('stockist-select').value;
+    
+    const hiddenStockist = document.getElementById('hidden-stockist');
+    const stockist_id = hiddenStockist ? hiddenStockist.value : document.getElementById('stockist-select').value;
+    
+    const order_idEl = document.getElementById('order_id');
+    const order_dateEl = document.getElementById('order_date');
+    const order_id = order_idEl ? order_idEl.value : 0;
+    const sale_date = order_dateEl ? order_dateEl.value : new Date().toISOString().split('T')[0];
 
     if (!cart.length) {
         showToast('Cart is empty.', 'error');
         return;
     }
 
-    // Calculate full net total including tax for backend summary
-    const net_total = cart.reduce((sum, item) => {
-        const qty      = parseFloat(item.qty) || 0;
-        const pts      = parseFloat(item.pts) || 0;
-        const taxRate  = parseFloat(item.tax) || 0;
-        const discRate = parseFloat(item.discount ?? 16.66);
+  const net_total = cart.reduce((sum, item) => {
+        // Use the exact same pre-calculated values as renderCart()
+        const taxableAmt = parseFloat(item.exact_amt) || 0;
+        const taxAmt     = parseFloat(item.exact_tax) || 0;
         
-        const netPts     = pts * (1 - discRate / 100);
-        const taxableAmt = qty * netPts;
-        const taxAmt     = taxableAmt * (taxRate / 100);
         return sum + taxableAmt + taxAmt;
     }, 0);
 
@@ -309,39 +364,27 @@ document.getElementById('btn-submit').addEventListener('click', function () {
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
-    fetch('OrderEntry/saveorder', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-            stockist_id,
-            total_amt: net_total.toFixed(2),
-            items: JSON.stringify(
-                cart.map(i => {
-                    const qty      = parseFloat(i.qty) || 0;
-                    const pts      = parseFloat(i.pts) || 0;
-                    const taxRate  = parseFloat(i.tax) || 0;
-                    const discRate = parseFloat(i.discount ?? 16.66);
+const isEdit = order_id && parseInt(order_id) > 0;
 
-                    const netPts     = pts * (1 - discRate / 100);
-                    const taxableAmt = qty * netPts;
-                    const taxAmt     = taxableAmt * (taxRate / 100);
-                    const itemTotal  = taxableAmt + taxAmt;
-
-                    return {
-                        product_id : i.product_id,
-                        qty        : i.qty,
-                        rate       : i.pts,
-                        discount   : discRate,
-                        gst        : taxRate,
-                        amt        : taxableAmt.toFixed(2),
-                        net_total  : itemTotal.toFixed(2)
-                    };
-                })
-            )
-        })
+fetch(getApiUrl(isEdit ? 'updateOrder' : 'saveOrder'), {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+        order_id: order_id,
+        sale_date: sale_date,
+        stockist_id: stockist_id,
+        total_amt: net_total.toFixed(2),
+        items: JSON.stringify(
+            cart.map(i => ({
+                product_id: i.product_id,
+                batch_id: i.batch_id || 0,
+                qty: i.qty
+            }))
+        )
     })
+})
     .then(async response => {
         const data = await response.json();
         if (!response.ok) {
@@ -351,16 +394,20 @@ document.getElementById('btn-submit').addEventListener('click', function () {
     })
     .then(data => {
         if (data.success) {
-            showToast('Sale saved! Entry #' + data.entry_id, 'success');
-
-            cart = [];
-            renderCart();
-
-            sessionStorage.removeItem('saved_sales_cart');
-            sessionStorage.removeItem('saved_sales_form');
-
-            document.getElementById('stockist-select').value = '';
-            stockistSel.dispatchEvent(new Event('change'));
+            showToast(order_id > 0 ? 'Order updated successfully!' : 'Order saved! Entry #' + data.entry_id, 'success');
+            
+            if (order_id > 0) {
+                setTimeout(() => {
+                    window.location.href = getApiUrl('view');
+                }, 1500);
+            } else {
+                cart = [];
+                renderCart();
+                sessionStorage.removeItem('saved_sales_cart');
+                sessionStorage.removeItem('saved_sales_form');
+                document.getElementById('stockist-select').value = '';
+                stockistSel.dispatchEvent(new Event('change'));
+            }
         } else {
             showToast(data.msg, 'error');
         }
@@ -370,12 +417,12 @@ document.getElementById('btn-submit').addEventListener('click', function () {
     })
     .finally(() => {
         btn.disabled = false;
-        btn.textContent = 'Submit';
+        btn.textContent = order_id > 0 ? 'Update Order' : 'Submit';
     });
 });
 
 /* ════════════════════════════════════════════════════
-   HELPERS
+    HELPERS
 ════════════════════════════════════════════════════ */
 function setAcError(msg) {
     const el       = document.getElementById('ac-error');
@@ -391,19 +438,17 @@ function esc(str) {
 }
 
 /* ════════════════════════════════════════════════════
-   EDIT MEDICINE
+    EDIT MEDICINE (SIMPLIFIED)
 ════════════════════════════════════════════════════ */
 function startEdit(idx) {
     const item = cart[idx];
     editingIndex = idx;
 
     selectedProduct = {
-        id       : item.product_id,
-        name     : item.name,
-        pts      : item.pts,
-        tax      : item.tax,
-        discount : item.discount,
-        stock    : item.maxStock,
+        id: item.product_id,
+        name: item.name,
+        stock: item.maxStock,
+        // No need for pts/tax/discount locally anymore, backend handles it
     };
 
     searchInput.value = item.name;
@@ -416,19 +461,42 @@ function startEdit(idx) {
 }
 
 /* ════════════════════════════════════════════════════
-   INITIALIZATION
+    INITIALIZATION (UPDATED DATA PARSING)
 ════════════════════════════════════════════════════ */
 $(document).ready(function(){
-    const storedForm = sessionStorage.getItem('saved_sales_form');
-    
-    if (storedForm) {
-        const formState = JSON.parse(storedForm);
-        if (formState.stockist_id) {
-            const stockistEl = document.getElementById('stockist-select');
-            stockistEl.value = formState.stockist_id;
-            stockistEl.dispatchEvent(new Event('change')); 
+    if (typeof existingOrderData !== 'undefined' && existingOrderData !== null) {
+        
+        cart = existingOrderData.items.map(item => ({
+            product_id: parseInt(item.product_id),
+            name: item.name,
+            qty: parseInt(item.qty),
+            // Map existing DB values properly to our exact amounts
+            exact_amt: parseFloat(item.amt),
+            exact_tax: parseFloat(item.net_total) - parseFloat(item.amt),
+            exact_net: parseFloat(item.net_total),
+            maxStock: 99999 
+        }));
+        
+        activeStockistId = existingOrderData.stockist_id;
+        
+        const searchInputEl = document.getElementById('medicine-search');
+        if (searchInputEl) {
+            searchInputEl.disabled = false;
+            searchInputEl.placeholder = 'Search medicine…';
         }
-    }
+        
+        renderCart();
 
-    loadCartSession();
+    } else {
+        const storedForm = sessionStorage.getItem('saved_sales_form');
+        if (storedForm) {
+            const formState = JSON.parse(storedForm);
+            if (formState.stockist_id) {
+                const stockistEl = document.getElementById('stockist-select');
+                stockistEl.value = formState.stockist_id;
+                stockistEl.dispatchEvent(new Event('change')); 
+            }
+        }
+        loadCartSession();
+    }
 });

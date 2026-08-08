@@ -138,13 +138,15 @@ class MrModel
         $address  = mysqli_real_escape_string($this->con, $data['address']);
         $password = mysqli_real_escape_string($this->con, $data['password']);
         $status = mysqli_real_escape_string($this->con, $data['status']);
+        $credit_limit = mysqli_real_escape_string($this->con, $data['credit_limit']);
+                                     
 
         return mysqli_query(
             $this->con,
             "INSERT INTO mr_users
-            (admin_id,hq_id,mr_name,mobile,email,state,district,pincode,address,password,status)
+            (admin_id,hq_id,mr_name,mobile,email,state,district,pincode,address,password,status,credit_limit)
             VALUES
-            ('$admin_id','$hq_name','$mr_name','$mobile','$email','$state','$district','$pincode','$address','$password','$status')"
+            ('$admin_id','$hq_name','$mr_name','$mobile','$email','$state','$district','$pincode','$address','$password','$status','$credit_limit')"
         );
     }
 
@@ -161,6 +163,7 @@ class MrModel
         $address  = mysqli_real_escape_string($this->con, $data['address']);
         $password = mysqli_real_escape_string($this->con, $data['password']);
         $status = mysqli_real_escape_string($this->con, $data['status']);
+         $credit_limit = mysqli_real_escape_string($this->con, $data['credit_limit']);
 
         return mysqli_query(
             $this->con,
@@ -175,7 +178,8 @@ class MrModel
                 address='$address',
                 password='$password',
                 status='$status',
-                admin_id = '$admin_id'
+                admin_id = '$admin_id',
+                credit_limit = '$credit_limit'
             WHERE m_id='$id'"
         );
     }

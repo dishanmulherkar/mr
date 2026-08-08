@@ -9,18 +9,18 @@ class StockistModel
         $this->con = $con;
     }
 
-    public function getAll()
+   public function getAll()
     {
         if ($_SESSION['admin_role'] == 'Super Admin') {
 
             return mysqli_query($this->con, "
                 SELECT
                     stockists.*,
-                    mr_users.hq_name,
+                    hq.hq_name,
                     state.state_name
                 FROM stockists
-                LEFT JOIN mr_users
-                    ON mr_users.m_id = stockists.hq_id
+                LEFT JOIN headquarter hq
+                    ON hq.headquarter_id = stockists.hq_id
                 LEFT JOIN state
                     ON state.state_id = stockists.state
                 ORDER BY stockists.stockist_id DESC
@@ -32,13 +32,13 @@ class StockistModel
         return mysqli_query($this->con, "
             SELECT
                 stockists.*,
-                mr_users.hq_name,
+                hq.hq_name,
                 state.state_name
             FROM stockists
             INNER JOIN admin_state ast
                 ON stockists.state = ast.state_id
-            LEFT JOIN mr_users
-                ON mr_users.m_id = stockists.hq_id
+            LEFT JOIN headquarter hq
+                ON hq.headquarter_id = stockists.hq_id
             LEFT JOIN state
                 ON state.state_id = stockists.state
             WHERE ast.admin_id = $admin_id
@@ -123,14 +123,41 @@ class StockistModel
         ");
     }
 
-    public function insert($data,$image)
+    public function insert($data, $image)
     {
-         $admin_id = isset($_SESSION['admin_id']) ? intval($_SESSION['admin_id']) : "NULL";
-        return mysqli_query($this->con,"
+        $hq_id = intval($data['hq_id']);
+
+            $result = mysqli_query($this->con, "
+                SELECT ss.state
+                FROM head_quarters h
+                INNER JOIN super_stockists ss
+                    ON h.super_stockist_id = ss.super_stockist_id
+                WHERE h.hq_id = '$hq_id'
+                LIMIT 1
+            ");
+
+            $row = mysqli_fetch_assoc($result);
+
+            $super_state = strtolower(trim($row['state'] ?? ''));
+            $stockist_state = strtolower(trim($data['state']));
+
+            if ($stockist_state == 'nepal') {
+                $gst_type = 'VAT';
+            } elseif ($super_state == $stockist_state) {
+                $gst_type = 'CGST_SGST';
+            } else {
+                $gst_type = 'IGST';
+            }
+
+        return mysqli_query($this->con, "
             INSERT INTO stockists
             (
                 stockist_name,
                 number,
+                gst_no,
+                gst_type,
+                dispatch_to,
+                transport,
                 status,
                 state,
                 district,
@@ -138,12 +165,18 @@ class StockistModel
                 hq_id,
                 address,
                 stockist_image,
-                admin_id
+                admin_id,
+                pan_no,
+                dl_no
             )
             VALUES
             (
                 '".$data['stockist_name']."',
                 '".$data['number']."',
+                '".$data['gst_no']."',
+                '".$gst_type."',
+                '".$data['dispatch_to']."',
+                '".$data['transport']."',
                 '".$data['status']."',
                 '".$data['state']."',
                 '".$data['district']."',
@@ -151,24 +184,57 @@ class StockistModel
                 '".$data['hq_id']."',
                 '".$data['address']."',
                 '$image',
-                '$admin_id'
+                '$admin_id',
+                '".$data['pan_no']."',
+                '".$data['dl_no']."'
+
             )
         ");
     }
 
-    public function update($id,$data,$image)
+    public function update($id, $data, $image)
     {
-        return mysqli_query($this->con,"
+
+     $hq_id = intval($data['hq_id']);
+
+            $result = mysqli_query($this->con, "
+                SELECT ss.state
+                FROM headquarter h
+                INNER JOIN super_stockist ss
+                    ON h.super_stockist_id = ss.super_stockist_id
+                WHERE h.headquarter_id = '$hq_id'
+                LIMIT 1
+            ");
+
+            $row = mysqli_fetch_assoc($result);
+
+            $super_state = strtolower(trim($row['state'] ?? ''));
+            $stockist_state = strtolower(trim($data['state']));
+
+            if ($stockist_state == 'nepal') {
+                $gst_type = 'VAT';
+            } elseif ($super_state == $stockist_state) {
+                $gst_type = 'CGST_SGST';
+            } else {
+                $gst_type = 'IGST';
+            }
+        return mysqli_query($this->con, "
             UPDATE stockists SET
                 stockist_name='".$data['stockist_name']."',
                 number='".$data['number']."',
+                gst_no='".$data['gst_no']."',
+                gst_type='".$gst_type."',
+                dispatch_to='".$data['dispatch_to']."',
+                transport='".$data['transport']."',
                 status='".$data['status']."',
                 state='".$data['state']."',
                 district='".$data['district']."',
                 pincode='".$data['pincode']."',
                 hq_id='".$data['hq_id']."',
                 address='".$data['address']."',
-                stockist_image='$image'
+                stockist_image='$image',
+                 pan_no ='".$data['pan_no']."',
+                dl_no = '".$data['dl_no']."'
             WHERE stockist_id='$id'
         ");
     }
