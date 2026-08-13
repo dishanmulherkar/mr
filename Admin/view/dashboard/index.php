@@ -12,7 +12,6 @@ include 'view/layout/header.php';
                             <button type="button" class="btn btn-secondary btn-sm">Logout</button>
                         </a>
 </div>
-
 <div class="row mt-4">
     <div class="col-lg-4 col-md-6 mb-4">
         <div class="card border-left-primary shadow h-100 py-2">

@@ -248,7 +248,7 @@ include 'view/layout/header.php';
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label fw-bold small">CD %</label>
-                                    <input type="number" step="0.01" id="cd_percent" name="cd_per" class="form-control" value="<?= $ROW['cd_per'] ?? ''; ?>" placeholder="0.00" min="0" max="100">
+                                    <input type="number" step="0.01" id="cd_percent" name="cd_percent" class="form-control" value="<?= $ROW['cd_percent'] ?? ''; ?>" placeholder="0.00" min="0" max="100">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label fw-bold small">E-Way Bill</label>
@@ -333,6 +333,11 @@ include 'view/layout/header.php';
                             <span class="summary-label">Taxable Amount</span>
                             <span class="summary-value" id="show_taxable">₹0.00</span>
                         </div>
+                        <div class="summary-row">
+                            <span class="summary-label">CD Deduction</span>
+                            <span class="summary-value" id="show_cd">₹0.00</span>
+                        </div>
+                        <?php if ($ROW['gst_type'] === 'CGST_SGST') { ?>
                         <div class="summary-row" id="row_cgst">
                             <span class="summary-label">CGST (Half Tax)</span>
                             <span class="summary-value" id="show_cgst">₹0.00</span>
@@ -341,14 +346,18 @@ include 'view/layout/header.php';
                             <span class="summary-label">SGST (Half Tax)</span>
                             <span class="summary-value" id="show_sgst">₹0.00</span>
                         </div>
+                        <?php } elseif ($ROW['gst_type'] == 'IGST') { ?>
+                        
                         <div class="summary-row" id="row_igst" style="display:none;">
                             <span class="summary-label">IGST</span>
                             <span class="summary-value" id="show_igst">₹0.00</span>
                         </div>
+                        <?php } elseif ($ROW['gst_type'] === 'VAT') { ?>
                         <div class="summary-row" id="row_vat" style="display:none;">
                             <span class="summary-label">VAT</span>
                             <span class="summary-value" id="show_vat">₹0.00</span>
                         </div>
+                        <?php } ?>
                         <div class="summary-row">
                             <span class="summary-label">Total Tax</span>
                             <span class="summary-value" id="show_gst">₹0.00</span>
@@ -357,10 +366,7 @@ include 'view/layout/header.php';
                             <span class="summary-label">Header Discount</span>
                             <span class="summary-value" id="show_discount">₹0.00</span>
                         </div>
-                        <div class="summary-row">
-                            <span class="summary-label">CD Deduction</span>
-                            <span class="summary-value" id="show_cd">₹0.00</span>
-                        </div>
+                        
                         <div class="summary-row">
                             <span class="summary-label">Other Charges</span>
                             <span class="summary-value" id="show_other">₹0.00</span>
@@ -376,7 +382,7 @@ include 'view/layout/header.php';
             <!-- Hidden Fields for Database Sync -->
             <input type="hidden" name="total_qty" id="total_qty" value="0">
             <input type="hidden" name="grand_total" id="grand_total" value="0">
-            <input type="hidden" name="gsttype" id="gst_type_input" value="cgst">
+            <input type="hidden" name="gsttype" id="gst_type_input" value="<?= $ROW['gst_type'] ?? ''; ?>">
             <input type="hidden" name="gst_amt" id="input_gst_amt" value="0">
             <input type="hidden" name="cgst" id="input_cgst" value="0">
             <input type="hidden" name="sgst" id="input_sgst" value="0">
@@ -610,8 +616,8 @@ $(document).ready(function(){
         calculateTotals();
     });
 
-    let superStockistId = $('#super_stockist_id').val();
-    let gst_type = "cgst";
+        let superStockistId = $('#super_stockist_id').val();
+        let gst_type = $('#gst_type_input').val();
 
     // Load available batches for each existing item row
     $('.order-table tbody tr:not(.entry-row)').each(function(rowIndex){
@@ -825,17 +831,17 @@ $(document).ready(function(){
         $('#row_vat').hide();
 
         switch (gst_type) {
-            case "cgst":
+            case "CGST_SGST":
                 cgst = netTax / 2;
                 sgst = netTax / 2;
                 $('#row_cgst').show();
                 $('#row_sgst').show();
                 break;
-            case "igst":
+            case "IGST":
                 igst = netTax;
                 $('#row_igst').show();
                 break;
-            case "vat":
+            case "VAT":
                 vat = netTax;
                 $('#row_vat').show();
                 break;

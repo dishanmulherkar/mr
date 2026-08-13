@@ -83,12 +83,13 @@ CREATE TABLE purchase_entry_details (
 -- add  field in product batches table for purchase rate and amt 
 
 ALTER TABLE product_batches
-DROP COLUMN pts,
-ADD purchase_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
-ADD available_qty INT NOT NULL DEFAULT 0,
-ADD expiry_date DATE NULL;
-ADD mrp DECIMAL(10,2) DEFAULT 0,
-
+ADD COLUMN purchase_rate DECIMAL(10, 2) DEFAULT 0.00 AFTER updated_at,
+ADD COLUMN purchase_tax DECIMAL(10, 2) DEFAULT 0.00 AFTER purchase_rate,
+ADD COLUMN sale_rate DECIMAL(10, 2) DEFAULT 0.00 AFTER purchase_tax,
+ADD COLUMN sale_tax DECIMAL(10, 2) DEFAULT 0.00 AFTER sale_rate,
+ADD COLUMN expiry_date DATE NULL AFTER sale_tax,
+ADD COLUMN mrp DECIMAL(10, 2) DEFAULT 0.00 AFTER expiry_date,
+ADD COLUMN disc DECIMAL(5,2) NOT NULL DEFAULT '0.00';
 
 
 -- update stock ledger table 
@@ -112,8 +113,7 @@ MODIFY trans_type ENUM(
 
 
 -- alter table of mr_users
- ALTER TABLE mr_users
- ADD hq_id INT NOT NULL AFTER m_id ;
+
 
 --  drag and drop headquarter 
 
@@ -186,7 +186,9 @@ ADD COLUMN pan_no VARCHAR(10) NULL AFTER `gst_type`,
 ADD COLUMN dl_no VARCHAR(50) NULL AFTER pan_no;
 
 ALTER TABLE mr_users
-ADD COLUMN credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER hq_id;
+ADD COLUMN credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER hq_id,
+ ADD hq_id INT NOT NULL AFTER m_id ;
+
 
   ALTER TABLE super_stockist
   ADD COLUMN gst_no VARCHAR(20) NULL AFTER 	pincode,
@@ -201,3 +203,68 @@ ADD COLUMN `discount_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00' AFTER `rate`,
 ADD COLUMN `gst_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00' AFTER `amt`,
 ADD COLUMN `gst_amount` DECIMAL(12,2) NOT NULL DEFAULT '0.00' AFTER `gst_percent`;
 
+
+CREATE TABLE payment_details (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stockist_id BIGINT NOT NULL,
+    amount_paid DECIMAL(15, 2) NOT NULL,
+    payment_method VARCHAR(50) NOT NULL, -- e.g., 'GPay', 'Bank Transfer', 'Cash'
+    bank_details TEXT NULL,              -- Transaction IDs, UTR, or Account info
+    screenshot_path VARCHAR(255) NULL,   -- Path to the uploaded GPay/Bank screenshot
+    approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    approved_by BIGINT NULL,             -- Stores the ID of the sub-admin who approved/rejected
+    approved_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Indexes for faster lookups
+    INDEX idx_stockist (stockist_id),
+    INDEX idx_status (approval_status)
+);
+
+CREATE TABLE payment_ledgers (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stockist_id BIGINT NOT NULL,
+    transaction_type ENUM('bill_added', 'payment_made') NOT NULL,
+    reference_id BIGINT NOT NULL, -- Ties back to stock_inwards.id OR payment_details.id
+    amount DECIMAL(15, 2) NOT NULL,
+    balance_action ENUM('increase_debt', 'decrease_debt') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Indexes for faster lookups
+    INDEX idx_ledger_stockist (stockist_id),
+    INDEX idx_reference (transaction_type, reference_id)
+);
+
+
+ALTER TABLE `admins` 
+  ADD COLUMN stockist_id BIGINT NOT NULL :
+
+ALTER TABLE `stock_inward` 
+ADD COLUMN `cd_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00',
+ADD COLUMN `cd_amt` DECIMAL(10,2) NOT NULL DEFAULT '0.00' ;
+
+ALTER TABLE `stock_inward` 
+  ADD COLUMN drc BIGINT NOT NULL ,
+  ADD COLUMN mrc BIGINT NOT NULL ;
+  
+
+  ALTER TABLE stock_inward
+ADD lr_no VARCHAR(100) NULL AFTER 	order_id,
+ADD eway_bill_no VARCHAR(100) NULL AFTER lr_no,
+ADD vehicle_no VARCHAR(50) NULL AFTER eway_bill_no,
+ADD transport_name VARCHAR(255) NULL AFTER vehicle_no,
+ADD credit_days INT DEFAULT 0 AFTER transport_name;
+
+
+ALTER TABLE super_stockist 
+ADD term_and_condition TEXT NULL;
+
+-- Modify your existing column to allow the new mobile roles
+ALTER TABLE admins 
+MODIFY COLUMN role ENUM('Super Admin', 'Admin', 'ASM', 'Dispatch') NOT NULL;
+
+
+-- date 13-8-26
+ALTER TABLE headquarter ADD asm_id INT NULL;

@@ -86,19 +86,20 @@ class AdminModel
         {
             $stmt = $this->con->prepare("
                 INSERT INTO admins
-                (admin_name, username, email, mobile, password, role, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (admin_name, username, email, mobile, password, role, status, stockist_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             $stmt->bind_param(
-                "sssssss",
+                "sssssssi",
                 $data['admin_name'],
                 $data['user_name'],
                 $data['email'],
                 $data['mobile'],
                 $data['password'],
                 $data['role'],
-                $data['status']
+                $data['status'],
+                $data['super_stockist_id']
             );
 
             if ($stmt->execute()) {
@@ -135,12 +136,13 @@ class AdminModel
                     mobile=?,
                     password=?,
                     role=?,
-                    status=?
+                    status=?,
+                    stockist_id=?
                 WHERE admin_id=?
             ");
 
             $stmt->bind_param(
-                "ssssssii",
+                "sssssssii",
                 $data['admin_name'],
                 $data['user_name'],
                 $data['email'],
@@ -148,6 +150,7 @@ class AdminModel
                 $data['password'],
                 $data['role'],
                 $data['status'],
+                $data['super_stockist_id'],
                 $id
             );
 
@@ -161,7 +164,36 @@ class AdminModel
                 WHERE admin_id='$admin_id'
             ");
         }
-            
+        
+            public function getSuperStockist()
+        {
+            return mysqli_query($this->con, "
+                SELECT *
+                FROM super_stockist
+                ORDER BY ss_name ASC
+            ");
+        }
+
+         public function getAdminStockists($admin_id)
+        {
+            $admin_id = (int)$admin_id;
+
+            $query = mysqli_query($this->con,"
+                SELECT stockist_id
+                FROM admin
+                WHERE admin_id='$admin_id'
+            ");
+
+            $states = [];
+
+            while($row = mysqli_fetch_assoc($query))
+            {
+                $states[] = $row['state_id'];
+            }
+
+            return $states;
+        }
+
     
 
 }

@@ -34,6 +34,9 @@ include 'view/layout/header.php';
     background:#dc3545;
     color:#fff !important;
 }
+ .inv-table-wrap {
+    min-height: 250px; /* Adjust this value if your dropdown is taller */
+}
 </style>
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/salesentry.css">
 <div class="page-content">

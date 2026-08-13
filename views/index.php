@@ -133,6 +133,34 @@ switch($page)
 
         exit;
 
+    case 'payment':
+
+        include 'controller/Payment_manage_ctl.php';
+
+        $controller = new payment_manage_ctl($con);
+
+            if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        exit;
+
+    case 'invoice':
+
+        include '../Invoice/controller/invoice_ctl.php';
+
+        $controller = new InvoiceController($con);
+
+        if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        break;
+
 
     case 'dashboard':
     default:

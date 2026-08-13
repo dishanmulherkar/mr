@@ -26,7 +26,7 @@ class StockistModel
                 ORDER BY stockists.stockist_id DESC
             ");
         }
-
+// 
         $admin_id = (int)$_SESSION['admin_id'];
 
         return mysqli_query($this->con, "
@@ -35,13 +35,11 @@ class StockistModel
                 hq.hq_name,
                 state.state_name
             FROM stockists
-            INNER JOIN admin_state ast
-                ON stockists.state = ast.state_id
             LEFT JOIN headquarter hq
                 ON hq.headquarter_id = stockists.hq_id
             LEFT JOIN state
                 ON state.state_id = stockists.state
-            WHERE ast.admin_id = $admin_id
+            WHERE stockists.admin_id = $admin_id
             ORDER BY stockists.stockist_id DESC
         ");
     }
@@ -64,10 +62,29 @@ class StockistModel
         ");
     }
 
+    public function getStateById($id)
+    {
+        $id = (int)$id;
+        
+        $result = mysqli_query($this->con, "
+            SELECT state_name
+            FROM state 
+            WHERE state_id = '$id'
+            LIMIT 1
+        ");
+
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            return $row['state_name']; // Returns just the string (e.g., "Nepal")
+        }
+
+        return ''; // Returns empty string if not found
+    }
+
     public function getStates()
     {
         // Super Admin can see all states
-        if ($_SESSION['admin_role'] == 'Super Admin') {
+        // if ($_SESSION['admin_role'] == 'Super Admin') {
 
             return mysqli_query(
                 $this->con,
@@ -76,22 +93,10 @@ class StockistModel
                 WHERE state_status = 1
                 ORDER BY state_name"
             );
-        }
+        // }
 
         // Admin can see only assigned states
         $admin_id = (int)$_SESSION['admin_id'];
-
-        return mysqli_query(
-            $this->con,
-            "SELECT
-                s.*
-            FROM state s
-            INNER JOIN admin_state ast
-                ON s.state_id = ast.state_id
-            WHERE ast.admin_id = '$admin_id'
-            AND s.state_status = 1
-            ORDER BY s.state_name"
-        );
     }
 
          public function getDistrictsByState($state_id)
@@ -126,22 +131,28 @@ class StockistModel
     public function insert($data, $image)
     {
         $hq_id = intval($data['hq_id']);
+         $admin_id = (int)$_SESSION['admin_id'];
 
-            $result = mysqli_query($this->con, "
-                SELECT ss.state
-                FROM head_quarters h
-                INNER JOIN super_stockists ss
-                    ON h.super_stockist_id = ss.super_stockist_id
-                WHERE h.hq_id = '$hq_id'
-                LIMIT 1
-            ");
+           $result = mysqli_query($this->con, "
+        SELECT ss.state
+        FROM headquarter h
+        INNER JOIN super_stockist ss
+            ON h.super_stockist_id = ss.super_stockist_id
+        WHERE h.headquarter_id = '$hq_id'
+        LIMIT 1
+    ");
 
-            $row = mysqli_fetch_assoc($result);
+    $super_state = '';
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
+        $super_state = $this->getStateById($row['state'] ?? '');
+    }
 
-            $super_state = strtolower(trim($row['state'] ?? ''));
-            $stockist_state = strtolower(trim($data['state']));
 
-            if ($stockist_state == 'nepal') {
+           $stockist_state = $this->getStateById($data['state']);
+
+
+            if ($stockist_state == 'Nepal') {
                 $gst_type = 'VAT';
             } elseif ($super_state == $stockist_state) {
                 $gst_type = 'CGST_SGST';
@@ -195,23 +206,34 @@ class StockistModel
     public function update($id, $data, $image)
     {
 
-     $hq_id = intval($data['hq_id']);
+    $admin_id = (int)$_SESSION['admin_id'];
+    $hq_id = (int)$data['hq_id'];
 
-            $result = mysqli_query($this->con, "
-                SELECT ss.state
-                FROM headquarter h
-                INNER JOIN super_stockist ss
-                    ON h.super_stockist_id = ss.super_stockist_id
-                WHERE h.headquarter_id = '$hq_id'
-                LIMIT 1
-            ");
+    $result = mysqli_query($this->con, "
+        SELECT ss.state
+        FROM headquarter h
+        INNER JOIN super_stockist ss
+            ON h.super_stockist_id = ss.super_stockist_id
+        WHERE h.headquarter_id = '$hq_id'
+        LIMIT 1
+    ");
 
-            $row = mysqli_fetch_assoc($result);
+    $super_state = '';
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
+        $super_state = $this->getStateById($row['state'] ?? '');
+    }
 
-            $super_state = strtolower(trim($row['state'] ?? ''));
-            $stockist_state = strtolower(trim($data['state']));
 
-            if ($stockist_state == 'nepal') {
+    $stockist_state = $this->getStateById($data['state']);
+
+    // echo "<pre>";
+    // print_r("Super State: " . $super_state);
+    // print_r("\nStockist State: " . $stockist_state);
+    // echo "</pre>";
+    // exit;
+
+            if ($stockist_state == 'Nepal' AND $super_state == 'Nepal') {
                 $gst_type = 'VAT';
             } elseif ($super_state == $stockist_state) {
                 $gst_type = 'CGST_SGST';
@@ -231,6 +253,7 @@ class StockistModel
                 district='".$data['district']."',
                 pincode='".$data['pincode']."',
                 hq_id='".$data['hq_id']."',
+                admin_id='$admin_id',
                 address='".$data['address']."',
                 stockist_image='$image',
                  pan_no ='".$data['pan_no']."',

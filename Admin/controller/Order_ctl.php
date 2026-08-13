@@ -32,6 +32,8 @@ class OrderController
         include 'view/Order/index.php';
     }
 
+       
+
     public function approve($order_id)
     {
         // Fetch master order data & associated stockist/MR info
@@ -88,7 +90,9 @@ class OrderController
             'sgst'              => (float)($_POST['sgst'] ?? 0),
             'igst'              => (float)($_POST['igst'] ?? 0),
             'other_charges'     => $other_charges,
-            'grand_total'       => (float)($_POST['grand_total'] ?? 0)
+            'grand_total'       => (float)($_POST['grand_total'] ?? 0),
+            'cd_percent'        => (float)($_POST['cd_percent'] ?? 0)
+
         ];
 
         // ===============================================
@@ -174,5 +178,7 @@ class OrderController
             exit;
         }
     }
+
+   
 
 }

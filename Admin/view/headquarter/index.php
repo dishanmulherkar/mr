@@ -102,6 +102,22 @@ include 'view/layout/header.php';
                         </div>
                     </div>
 
+                     <!-- Super Stockist -->
+                    <div class="col-lg-3">
+                        <div class="form-group">
+                            <label>Select ASM </label>
+                            <select name="asm" id="asm" class="form-control" required>
+                                <option value="">Select ASM </option>
+                                <?php while($srow = mysqli_fetch_assoc($asm)): ?>
+                                    <option value="<?php echo htmlspecialchars($srow['admin_id']); ?>"
+                                        <?php if(isset($ROW['asm_id']) && $ROW['asm_id'] == $srow['admin_id']) echo 'selected'; ?>>
+                                        <?php echo htmlspecialchars($srow['admin_name']); ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                    </div>
+
 
             </div><!-- /row -->
         </div><!-- /border -->

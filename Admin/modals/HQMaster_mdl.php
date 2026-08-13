@@ -55,6 +55,7 @@ class HeadquarterModel
         $state_id = (int)($post['state_id'] ?? 0);
         $district = mysqli_real_escape_string($this->con, trim($post['district'] ?? '')); // Using district name string
         $super_stockist_id  =  (int)($post['sup_stockist'] ?? 0);
+        $asm  =  (int)($post['asm'] ?? 0);
 
         if (empty($hq_name) || $state_id <= 0 || empty($district)) {
             return ['success' => false, 'message' => 'All fields are required.'];
@@ -67,8 +68,8 @@ class HeadquarterModel
         }
 
         $query = "
-            INSERT INTO headquarter (hq_name, state_id, district,super_stockist_id) 
-            VALUES ('$hq_name', '$state_id', '$district','$super_stockist_id')
+            INSERT INTO headquarter (hq_name, state_id, district,super_stockist_id,asm_id) 
+            VALUES ('$hq_name', '$state_id', '$district','$super_stockist_id','$asm')
         ";
 
         if (mysqli_query($this->con, $query)) {
@@ -86,6 +87,7 @@ class HeadquarterModel
         $state_id = (int)($post['state_id'] ?? 0);
         $district = mysqli_real_escape_string($this->con, trim($post['district'] ?? ''));
         $super_stockist_id  =  (int)($post['sup_stockist'] ?? 0);
+        $asm  =  (int)($post['asm'] ?? 0);
 
         if ($id <= 0 || empty($hq_name) || $state_id <= 0 || empty($district)) {
             return ['success' => false, 'message' => 'Invalid data provided.'];
@@ -96,7 +98,8 @@ class HeadquarterModel
                 hq_name = '$hq_name',
                 state_id = '$state_id',
                 district = '$district',
-                super_stockist_id = '$super_stockist_id'
+                super_stockist_id = '$super_stockist_id',
+                asm_id = '$asm'
             WHERE headquarter_id = '$id'
         ";
 
@@ -138,6 +141,14 @@ class HeadquarterModel
             SELECT *
             FROM super_stockist
             ORDER BY ss_name ASC
+        ");
+    }
+     public function getASM()
+    {
+        return mysqli_query($this->con, "
+            SELECT admin_id, admin_name
+            FROM admins where role = 'ASM'
+            ORDER BY admin_name ASC
         ");
     }
 }

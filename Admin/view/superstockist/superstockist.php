@@ -3,7 +3,30 @@ $pageTitle = "Product Management";
 include 'view/layout/header.php'; 
 ?>
 
+<style>
+    /* Replace .terms-box with the class or ID of the container holding your text */
+/* Container settings */
+.ck-content ul {
+    padding-left: 30px !important;
+    margin-bottom: 1em !important;
+}
 
+.ck-content ol {
+    padding-left: 30px !important;
+    margin-bottom: 1em !important;
+}
+
+/* Direct List Item settings to override style.css */
+.ck-content ul li {
+    display: list-item !important;
+    list-style-type: disc !important; /* Forces bullet on the li itself */
+}
+
+.ck-content ol li {
+    display: list-item !important;
+    list-style-type: decimal !important; /* Forces numbers on the li itself */
+}
+</style>
 
 <div id="container">
 
@@ -155,8 +178,12 @@ include 'view/layout/header.php';
                                             placeholder="Enter Address"><?php echo isset($ROW['address']) ? htmlspecialchars($ROW['address']) : ''; ?></textarea>
                                     </div>
                                 </div>
-
-                             
+                                
+                                <div class="form-group mb-3">
+                                    <label for="terms_editor">Terms and Conditions</label>
+                                    <textarea name="terms_and_conditions" id="terms_editor" class="form-control"><?php echo htmlspecialchars($ROW['term_and_condition'] ?? ''); ?></textarea>
+                                </div>
+                            
 
                             </div>
                            
@@ -225,7 +252,7 @@ include 'view/layout/header.php';
 // 3. Include the bottom layout and scripts
 include 'view/layout/footer.php'; 
 ?>
-
+<script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
 <script>
     // DataTable init
     new DataTable('#productTable', {
@@ -290,6 +317,20 @@ include 'view/layout/footer.php';
     if(initial_state != '') {
         loadDistrict(initial_state, initial_district);
     }
+
+   
 });
+
+ document.addEventListener('DOMContentLoaded', function () {
+        // Find the textarea and replace it with the text editor
+        ClassicEditor
+            .create(document.querySelector('#terms_editor'), {
+                // Keep the toolbar simple and clean
+                toolbar: [ 'heading', '|', 'bold', 'italic', 'bulletedList', 'numberedList' ]
+            })
+            .catch(error => {
+                console.error('There was a problem initializing the editor.', error);
+            });
+    });
 </script>
 

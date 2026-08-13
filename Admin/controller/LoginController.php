@@ -55,6 +55,7 @@ class LoginController {
         $_SESSION['admin_name'] = $user['admin_name'];
         $_SESSION['admin_role'] = $user['role'];
         $_SESSION['admin_username'] = $user['username'];
+        $_SESSION['stockist_id']  =  $user['stockist_id'];
 
         echo json_encode([
             "status" => true,

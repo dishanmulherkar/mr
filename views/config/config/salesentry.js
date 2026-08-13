@@ -135,9 +135,7 @@ function renderDropdown(items) {
             </div>
 
             <div class="ac-meta">
-                <span class="ac-badge">
-                    Batch: ${esc(item.batch_label)}
-                </span>
+                
 
                 <span class="ac-badge ${cls}">
                     Stock: ${item.stock}
@@ -267,7 +265,7 @@ function renderCart() {
         <td>
     ${esc(item.name)}
     <br>
-    <small>${esc(item.batch)}</small>
+    
 </td>
         <td>${item.qty}</td>
         <td>

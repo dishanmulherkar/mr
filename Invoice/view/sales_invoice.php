@@ -45,7 +45,7 @@ $gstType = strtoupper($invoice['gst_type'] ?? 'CGST_SGST'); // Expected: CGST_SG
 // Totals
 $dbTotalQty = (float)($invoice['total_qty'] ?? 0);
 $dbSubTotal = (float)($invoice['sub_total'] ?? 0);
-// $dbHeaderDiscount = (float)($invoice['discount'] ?? 0);
+$dbHeaderDiscount = (float)($invoice['discount'] ?? 0);
 $dbSgst = (float)($invoice['sgst_amount'] ?? 0);
 $dbCgst = (float)($invoice['cgst_amount'] ?? 0);
 $dbIgst = (float)($invoice['igst_amount'] ?? 0);
@@ -54,7 +54,7 @@ $dbOther = (float)($invoice['other_charges'] ?? 0);
 $dbGrandTotal = (float)($invoice['grand_total'] ?? 0);
 
 // Additional Discount & CD variables
-$additionalDiscount = (float)($invoice['discount'] ?? 0);
+$additionalDiscount = (float)($invoice['additional_discount'] ?? 0);
 $cdPercent = (float)($invoice['cd_percent'] ?? 0);
 $cdAmount = (float)($invoice['cd_amount'] ?? 0);
 if ($cdAmount == 0 && $cdPercent > 0) {
@@ -74,7 +74,7 @@ foreach ($items as $item) {
     $trueItemDiscount += $rowDiscount;
 }
 
-$totalDiscount = $trueItemDiscount - $cdAmount ;
+$totalDiscount = $trueItemDiscount + $dbHeaderDiscount;
 $netAmountRounded = round($dbGrandTotal);
 $roundOff = $netAmountRounded - $dbGrandTotal;
 
@@ -155,7 +155,7 @@ table { border-collapse: collapse; width: 100%; }
     font-size: 8pt;
 ">
     <tr>
-        <td style="width: 33.33%; padding: 2px; text-align: left;">CREDIT </td>
+        <td style="width: 33.33%; padding: 2px; text-align: left;"></td>
         <td style="width: 33.33%; padding: 2px; text-align: center;">TAX INVOICE</td>
         <td style="width: 33.33%; padding: 2px; text-align: right;">Original / Duplicate / Triplicate</td>
     </tr>
@@ -340,7 +340,7 @@ table { border-collapse: collapse; width: 100%; }
                 <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt;"><?= number_format($mrp, 2) ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= number_format($rate, 2) ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= $qty ?></td>
-                <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= number_format($discPerc, 2) . (!empty($cdPercent) ? "+" . number_format($cdPercent, 2) : "") ?></td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= number_format($discPerc, 2)."+".number_format($cdPercent, 2) ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt;"><?= number_format($amt, 2) ?></td>
 
                 <?php if ($gstType === 'IGST'): ?>

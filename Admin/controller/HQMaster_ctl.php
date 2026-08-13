@@ -19,6 +19,7 @@ class HeadquarterController
         $states = $this->model->getStates();
         $list = $this->model->getAllHeadquarters();
         $stockist = $this->model->getSuperStockist();
+             $asm = $this->model->getASM();
         $ROW = null; 
 
         include 'view/headquarter/index.php';
@@ -53,7 +54,7 @@ class HeadquarterController
         $list = $this->model->getAllHeadquarters();
         $ROW = $this->model->getHeadquarterById($id);
         $stockist = $this->model->getSuperStockist();
-
+ $asm = $this->model->getASM();
 
         if (!$ROW) {
             header("Location: " . BASE_URL . "headquarter?error=1");

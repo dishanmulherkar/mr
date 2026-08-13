@@ -24,6 +24,19 @@ class orderentry_ctl
         include 'view/Order/index.php';
     }
 
+      public function details($order_id = 0)
+    {
+        if (!isset($_SESSION['mr_id'])) {
+            header('Location: index');
+            exit;
+        }
+
+        $mr_id = $_SESSION['mr_id'];
+        $order_data = $this->model->getOrderById($order_id, $mr_id);
+
+        include 'view/Order/view_order.php';
+    }
+
     public function edit($order_id = 0)
     {
         if (!isset($_SESSION['mr_id'])) {
@@ -204,4 +217,8 @@ public function previewAllocation()
     // Stop further execution so HTML doesn't accidentally get appended
     exit; 
 }
+
+// Add this inside your Payment Controller routing logic
+   // Inside PaymentController.php
+  
 }

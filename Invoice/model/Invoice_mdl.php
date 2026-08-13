@@ -31,6 +31,7 @@ class InvoiceModel
                 s.dispatch_to,
                 s.transport,
                 s.pincode,
+                s.gst_type,
 
                 st.state_name,
                 d.district_name,
@@ -40,7 +41,8 @@ class InvoiceModel
                 ss.gst_no AS company_gst,
                 ss.district AS company_district,
                 ss.state AS company_state,
-                ss.pincode AS company_pincode
+                ss.pincode AS company_pincode,
+                ss.term_and_condition
 
             FROM stock_inward si
 

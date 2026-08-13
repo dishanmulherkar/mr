@@ -15,6 +15,7 @@ class AdminController
        
         $query = $this->model->getAll();
         $states = $this->model->getStates();
+        $super_stockists = $this->model->getSuperStockist();
         include 'view/admin/admin.php';
     }
 
@@ -28,8 +29,9 @@ class AdminController
         {
             $selectedStates = $this->model->getAdminStates($id);
         }
-
+            
         $states = $this->model->getStates();
+        $super_stockists = $this->model->getSuperStockist();
 
         $query = $this->model->getAll();
 
@@ -39,15 +41,14 @@ class AdminController
         public function store()
         {
             $data = [
-
                 'admin_name' => $_POST['admin_name'],
                 'user_name'  => $_POST['user_name'],
                 'email'      => $_POST['email'],
                 'mobile'     => $_POST['mobile'],
                 'password'   => $_POST['password'],
                 'role'       => $_POST['role'],
-                'status'     => $_POST['status']
-
+                'status'     => $_POST['status'],
+                'super_stockist_id' => $_POST['super_stockist_id'] ?? null
             ];
 
             // First insert admin
@@ -72,7 +73,8 @@ class AdminController
             'mobile'     => $_POST['mobile'],
             'password'   => $_POST['password'],
             'role'       => $_POST['role'],
-            'status'     => $_POST['status']
+            'status'     => $_POST['status'],
+            'super_stockist_id' => $_POST['super_stockist_id'] ?? null
 
         ];
 

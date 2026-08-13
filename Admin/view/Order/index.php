@@ -114,34 +114,63 @@ include 'view/layout/header.php';
                                     </td>
                                     <td class="text-end fw-bold text-success">&#8377;<?= number_format($row['total_amt'], 2); ?></td>
                                     
-                                    <td class="text-center">
-                                        <!-- Approve / Review Button --> 
-                                         <?php  if ($row['status'] == 'Pending') {  ?>
-                                        <a href="<?= BASE_URL ?>Order/approve/<?= $row['order_id']; ?>" 
-                                           class="btn btn-primary btn-sm" 
-                                           title="Review & Approve Order">
-                                            <i class="fa fa-check-circle"></i> Approve
-                                        </a>
-                                        <?php }else { ?>
+                                   <td class="text-center">
+                                        <div class="dropdown">
+                                            <!-- Trigger Button -->
+                                            <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="actionDropdown<?= $row['order_id']; ?>" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="fa fa-cog"></i> Actions
+                                            </button>
+                                            
+                                            <!-- Dropdown Menu Options -->
+                                            <ul class="dropdown-menu shadow" aria-labelledby="actionDropdown<?= $row['order_id']; ?>">
+                                                
+                                                <!-- 1. Approve / Update -->
+                                                <?php if ($row['status'] == 'Pending') { ?>
+                                                    <li>
+                                                        <a class="dropdown-item" href="<?= BASE_URL ?>Order/approve/<?= $row['order_id']; ?>" title="Review & Approve Order">
+                                                            <i class="fa fa-check-circle text-primary me-2"></i> View
+                                                        </a>
+                                                    </li>
+                                                <?php } elseif($row['status'] == 'Approved') { ?>
+                                                    <li>
+                                                        <a class="dropdown-item" href="<?= BASE_URL ?>Order/approve/<?= $row['order_id']; ?>" title="Review & Update Order">
+                                                            <i class="fa fa-check-circle text-primary me-2"></i> Update
+                                                        </a>
+                                                    </li>
+                                                    <!-- 2. Invoice -->
+                                                    <li>
+                                                        <a class="dropdown-item" href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
+                                                            <i class="fa fa-file-text-o text-info me-2"></i> Invoice
+                                                        </a>
+                                                    </li>
+                                                <?php } elseif($row['status'] == 'Processed') { ?>
+                                                    <li>
+                                                        <a class="dropdown-item" href="<?= BASE_URL ?>Order/approve/<?= $row['order_id']; ?>" title="Review & Update Order">
+                                                            <i class="fa fa-check-circle text-primary me-2"></i> View
+                                                        </a>
+                                                    </li>
+                                                    <!-- 2. Invoice -->
+                                                    <li>
+                                                        <a class="dropdown-item" href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
+                                                            <i class="fa fa-file-text-o text-info me-2"></i> Invoice
+                                                        </a>
+                                                    </li>
+                                                <?php } ?>
 
-                                        <a href="<?= BASE_URL ?>Order/approve/<?= $row['order_id']; ?>" 
-                                           class="btn btn-primary btn-sm" 
-                                           title="Review & Update Order">
-                                            <i class="fa fa-check-circle"></i> Update
-                                        </a> 
-                                         <?php } ?>
-                                        
-                                        <!-- Delete / Cancel Order (Optional) -->
-                                        <a href="<?= BASE_URL ?>order/delete/<?= $row['order_id']; ?>" 
-                                           class="btn btn-danger btn-sm" 
-                                           title="Delete Order"
-                                           onclick="return confirm('Are you sure you want to delete this order?');">
-                                            <i class="fa fa-trash"></i>
-                                        </a>
+                                                
 
-                                        <a href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
-                                                🧾 Invoice
-                                            </a>
+                                                <!-- Divider -->
+                                                <li><hr class="dropdown-divider"></li>
+
+                                                <!-- 3. Delete -->
+                                                <li>
+                                                    <a class="dropdown-item text-danger" href="<?= BASE_URL ?>order/delete/<?= $row['order_id']; ?>" 
+                                                    onclick="return confirm('Are you sure you want to delete this order?');" title="Delete Order">
+                                                        <i class="fa fa-trash me-2"></i> Delete
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
                                     </td>
                                 </tr>
                         <?php 

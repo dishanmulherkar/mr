@@ -27,15 +27,16 @@ class ProductModel
 
     public function insert($data, $status)
     {
+        $hsn_code = mysqli_real_escape_string($this->con, ($data['product_hsn_code']));
         $pn = mysqli_real_escape_string($this->con, trim($data['product_name']));
         $pk = mysqli_real_escape_string($this->con, trim($data['packing']));
 
         // Insert without product_code
         $insert = mysqli_query($this->con, "
             INSERT INTO products
-            (product_name, packing, status)
+            (product_name, packing, status,hsn_code)
             VALUES
-            ('$pn','$pk','$status')
+            ('$pn','$pk','$status','$hsn_code')
         ");
 
         if(!$insert)
@@ -63,13 +64,13 @@ class ProductModel
     {
         $id  = intval($id);
         $pn  = mysqli_real_escape_string($this->con, trim($data['product_name']));
-        $pc  = mysqli_real_escape_string($this->con, trim($data['product_code']));
+        $hsn_code = mysqli_real_escape_string($this->con, ($data['product_hsn_code']));
         $pk  = mysqli_real_escape_string($this->con, trim($data['packing']));
         
 
         return mysqli_query($this->con, "
             UPDATE products SET 
-                product_name='$pn', product_code='$pc', packing='$pk', status='$status' 
+                product_name='$pn', packing='$pk', status='$status',hsn_code='$hsn_code'
             WHERE p_id = '$id'
         ");
     }

@@ -1,5 +1,5 @@
 <?php 
-$pageTitle = "Admin";
+$pageTitle = "Employee";
 // 3. Include the bottom layout and scripts
 include 'view/layout/header.php'; 
 ?>
@@ -9,7 +9,7 @@ include 'view/layout/header.php';
                         <a href="<?= BASE_URL ?>login/logout" style="float:right"><button type="button" class="btn btn-secondary btn-sm">Logout</button></a>
                         </div>
                         <hr style="margin-top: 10px; margin-bottom: 10px; border-top: 1px solid #333;">
-                         <h3>Admin</h3>
+                         <h3>Employee</h3>
                        <form method="post"
 action="<?= isset($ROW)
 ? BASE_URL.'admin/update/'.$ROW['admin_id']
@@ -47,7 +47,7 @@ action="<?= isset($ROW)
                             </div>
 
                             <!-- Email -->
-                            <div class="col-lg-6">
+                            <div class="col-lg-4">
                                 <div class="form-group">
                                     <label>Email</label>
                                     <input type="email"
@@ -60,7 +60,7 @@ action="<?= isset($ROW)
                             </div>
 
                              <!-- Mobile -->
-                            <div class="col-lg-6">
+                            <div class="col-lg-4">
                                 <div class="form-group">
                                     <label>Mobile</label>
                                     <input type="tel"
@@ -73,7 +73,7 @@ action="<?= isset($ROW)
                             </div>
 
                              <!-- Password -->
-                            <div class="col-lg-6">
+                            <div class="col-lg-4">
                                 <div class="form-group">
                                     <label>Password</label>
 
@@ -95,7 +95,7 @@ action="<?= isset($ROW)
                             </div>
                             
                             <!-- Role -->
-                                <div class="col-lg-6">
+                                <div class="col-lg-4">
                                     <div class="form-group">
                                         <label>Role</label>
                                         <select name="role" id="role" class="form-control" required>
@@ -110,37 +110,70 @@ action="<?= isset($ROW)
                                                 <?= (isset($ROW['role']) && $ROW['role']=='Super Admin') ? 'selected' : ''; ?>>
                                                 Super Admin
                                             </option>
+
+                                            <option value="ASM"
+                                                <?= (isset($ROW['role']) && $ROW['role']=='ASM') ? 'selected' : ''; ?>>
+                                                ASM
+                                            </option>
+                                            <option value="Dispatch"
+                                                <?= (isset($ROW['role']) && $ROW['role']=='Dispatch') ? 'selected' : ''; ?>>
+                                                Dispatch
+                                            </option>
                                         </select>
                                     </div>
                                 </div>
 
-                    <div class="col-lg-6" id="stateDiv">
-                        <div class="form-group">
-                            <label>Assign States</label>
+                                <div class="col-lg-4" id="stateDiv">
+                                    <div class="form-group">
+                                        <label>Assign States</label>
 
-                            <select
-                                name="state_id[]"
-                                id="state_id"
-                                class="form-control"
-                                multiple>
+                                        <select
+                                            name="state_id[]"
+                                            id="state_id"
+                                            class="form-control"
+                                            multiple>
 
-                                <?php while($srow=mysqli_fetch_assoc($states)){ ?>
+                                            <?php while($srow=mysqli_fetch_assoc($states)){ ?>
 
-                                    <option
-                                        value="<?= $srow['state_id']; ?>"
-                                        <?= (isset($selectedStates) && in_array($srow['state_id'],$selectedStates)) ? 'selected' : ''; ?>>
+                                                <option
+                                                    value="<?= $srow['state_id']; ?>"
+                                                    <?= (isset($selectedStates) && in_array($srow['state_id'],$selectedStates)) ? 'selected' : ''; ?>>
 
-                                        <?= htmlspecialchars($srow['state_name']); ?>
+                                                    <?= htmlspecialchars($srow['state_name']); ?>
 
-                                    </option>
+                                                </option>
 
-                                <?php } ?>
+                                            <?php } ?>
 
-                            </select>
+                                        </select>
 
-                        </div>
-                    </div>
-                            
+                                    </div>
+                                </div>
+
+                                 <div class="col-lg-4" id="SuperStockistDiv">
+                                    <div class="form-group">
+                                        <label>Assign Super Stockists</label>
+
+                                        <select
+                                            name="super_stockist_id"
+                                            id="super_stockist_id"
+                                            class="form-control">
+                                                <option value="">Select Super Stockist</option>
+                                            <?php while($srow=mysqli_fetch_assoc($super_stockists)){ ?>
+
+                                               <option
+                                                    value="<?= $srow['super_stockist_id']; ?>"
+                                                    <?= (isset($ROW['stockist_id']) && $ROW['stockist_id'] == $srow['super_stockist_id']) ? 'selected' : ''; ?>>
+                                                    <?= htmlspecialchars($srow['ss_name']); ?>
+                                                </option>
+
+                                            <?php } ?>
+
+                                        </select>
+
+                                    </div>
+                                </div>
+                                        
 
                         <!-- Status -->
                         <div class="col-lg-6 mt-3">
@@ -363,12 +396,12 @@ include 'view/layout/footer.php';
     });
 
 
-setTimeout(function(){
-    let alerts = document.querySelectorAll('.alert');
-    alerts.forEach(function(alert){
-        alert.style.display = 'none';
-    });
-}, 5000);
+    setTimeout(function(){
+        let alerts = document.querySelectorAll('.alert');
+        alerts.forEach(function(alert){
+            alert.style.display = 'none';
+        });
+    }, 5000);
 
 
 
@@ -377,19 +410,28 @@ setTimeout(function(){
         width: '100%'
     });
 
+    SuperStockistDiv
     function toggleState() {
 
-        if ($('#role').val() == 'Admin') {
+        if ($('#role').val() == 'Admin' ||   $('#role').val() == 'Dispatch'  || $('#role').val() == 'ASM') {
 
             $('#stateDiv').show();
 
             $('#state_id').prop('required', true);
+
+            $('#SuperStockistDiv').show();
+
+            $('#super_stockist_id').prop('required', true);
 
         } else {
 
             $('#stateDiv').hide();
 
             $('#state_id').prop('required', false).val(null).trigger('change');
+
+                $('#SuperStockistDiv').hide();
+
+            $('#super_stockist_id').prop('required', false).val(null).trigger('change');
 
         }
 
@@ -403,20 +445,20 @@ setTimeout(function(){
 
     document.getElementById("togglePassword").addEventListener("click", function () {
 
-    const pass = document.getElementById("password");
-    const icon = this.querySelector("i");
+        const pass = document.getElementById("password");
+        const icon = this.querySelector("i");
 
-    if (pass.type === "password") {
-        pass.type = "text";
-        icon.classList.remove("fa-eye");
-        icon.classList.add("fa-eye-slash");
-    } else {
-        pass.type = "password";
-        icon.classList.remove("fa-eye-slash");
-        icon.classList.add("fa-eye");
-    }
+        if (pass.type === "password") {
+            pass.type = "text";
+            icon.classList.remove("fa-eye");
+            icon.classList.add("fa-eye-slash");
+        } else {
+            pass.type = "password";
+            icon.classList.remove("fa-eye-slash");
+            icon.classList.add("fa-eye");
+        }
 
-});
+    });
 
 });
     

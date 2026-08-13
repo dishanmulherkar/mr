@@ -57,9 +57,7 @@ include 'view/layout/header.php';
 
                     <!-- =====================  FORM  ===================== -->
                     <form method="post"
-                          action="<?= isset($ROW)
-            ? BASE_URL.'products/update/'.$ROW['p_id']
-            : BASE_URL.'products/store'; ?>">
+                          action="<?= isset($ROW)  ? BASE_URL.'products/update/'.$ROW['p_id'] : BASE_URL.'products/store'; ?>">
 
                         <div class="container border px-3 py-3">
                             <div class="row">
@@ -77,10 +75,10 @@ include 'view/layout/header.php';
                                 <!-- Product Code -->
                                 <div class="col-lg-6">
                                     <div class="form-group">
-                                        <label>Product Code</label>
-                                        <input type="text" name="product_code" class="form-control"
-                                            placeholder="Enter Product Code" required
-                                            value="<?php echo $ROW ? htmlspecialchars($ROW['product_code']) : ''; ?>">
+                                    <label>Product HSN Code</label>
+                                        <input type="number" name="product_hsn_code" class="form-control"
+                                            placeholder="Enter Product HSN Code" required
+                                            value="<?php echo $ROW ? htmlspecialchars($ROW['hsn_code']) : ''; ?>">
                                     </div>
                                 </div>
 
@@ -137,10 +135,10 @@ include 'view/layout/header.php';
                                 <tr>
                                     <th class="text-center" style="width:50px;">Sr.</th>
                                     <th>Product Code</th>
+                                    <th>HSN Code</th>
                                     <th>Product Name</th>
                                     <th class="text-center">Packing</th>
                                     <th class="text-center">Status</th>
-                                    <th class="text-center">Created</th>
                                     <th class="text-center">Action</th>
                                 </tr>
                             </thead>
@@ -153,6 +151,7 @@ include 'view/layout/header.php';
                                 <tr>
                                     <td class="text-center"><?php echo $key; ?></td>
                                     <td><?php echo htmlspecialchars($row['product_code']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['hsn_code'] ?? ''); ?></td>
                                     <td><?php echo htmlspecialchars($row['product_name']); ?></td>
                                     <td class="text-center"><?php echo htmlspecialchars($row['packing']); ?></td>
                                     <td class="text-center">
@@ -160,11 +159,7 @@ include 'view/layout/header.php';
                                             <?php echo htmlspecialchars($row['status']); ?>
                                         </span>
                                     </td>
-                                    <td class="text-center">
-                                        <?php echo date('d-m-Y', strtotime($row['created_at'])); ?>
-                                    </td>
                                     <td class="text-center" style="white-space:nowrap;">
-                                       
                                         <!-- Edit -->
                                         <a href="<?= BASE_URL ?>products/edit/<?php echo $row['p_id']; ?>"
                                            class="btn btn-warning btn-sm ml-1" title="Edit">

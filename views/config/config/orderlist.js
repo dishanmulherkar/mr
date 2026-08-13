@@ -1,4 +1,3 @@
-
 // Order List Code 
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -10,33 +9,65 @@ document.addEventListener('DOMContentLoaded', function () {
     if (orderTableBody) {
         const stockistSel = document.getElementById('stockist');
         const fromDate     = document.getElementById('from_date');
-        // const toDate       = document.getElementById('to_date');
         const btnSearch    = document.getElementById('btnSearch');
         const btnReset     = document.getElementById('btnReset');
         const orderCount   = document.getElementById('orderCount');
 
-
-        // const statusClass = (s) => ({
-        //     'Pending':  'badge-pending',
-        //     'Approved': 'badge-approved',
-        //     'Rejected': 'badge-rejected'
-        // }[s] || 'badge-pending');
-
         const statusClass = (s) => ({
-    'Pending': 'badge-pending',
-    'Approved': 'badge-approved',
-    'Processed': 'badge-dispatch',
-    'Dispatch': 'badge-dispatch',
-    'Rejected': 'badge-rejected'
-}[s] || 'badge-pending');
+            'Pending': 'badge-pending',
+            'Approved': 'badge-approved',
+            'Processed': 'badge-dispatch',
+            'Dispatch': 'badge-dispatch',
+            'Rejected': 'badge-rejected'
+        }[s] || 'badge-pending');
 
+        // 1. Updated Action Icons: Now uses a Responsive Bootstrap Dropdown
         function actionIcons(o) {
-            let icons = `<a href="${BASE_URL}OrderEntry/details/${o.order_id}" title="View">👁</a>`;
+            let menuItems = `
+                <li>
+                    <a class="dropdown-item" href="${BASE_URL}OrderEntry/details/${o.order_id}" title="View Order">
+                        <i class="fa fa-eye text-primary me-2"></i> View
+                    </a>
+                </li>
+                
+            `;
+
             if (o.status === 'Pending') {
-                icons += ` <a href="${BASE_URL}OrderEntry/edit/${o.order_id}" title="Edit">✏</a>`;
-                icons += ` <a href="#" class="del-order" data-id="${o.order_id}" title="Delete">🗑</a>`;
+                menuItems += `
+                    <li>
+                        <a class="dropdown-item" href="${BASE_URL}OrderEntry/edit/${o.order_id}" title="Edit Order">
+                            <i class="fa fa-pencil text-warning me-2"></i> Edit
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger del-order" href="#" data-id="${o.order_id}" title="Delete Order">
+                            <i class="fa fa-trash text-danger me-2 pointer-events-none"></i> Delete
+                        </a>
+                    </li>
+                `;
             }
-            return icons;
+
+             if (o.status === 'Approved' || o.status === 'Processed') {
+                menuItems += `
+                   <li>
+                    <a class="dropdown-item" href="${BASE_URL}invoice/pdf/${o.order_id}" target="_blank" title="Download Invoice">
+                        <i class="fa fa-file-text-o text-info me-2"></i> Invoice
+                    </a>
+                </li>
+                `;
+            }
+
+            return `
+                <div class="dropdown">
+                    <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="actionBtn${o.order_id}" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa fa-cog"></i> Actions
+                    </button>
+                    <ul class="dropdown-menu shadow" aria-labelledby="actionBtn${o.order_id}">
+                        ${menuItems}
+                    </ul>
+                </div>
+            `;
         }
 
         function statusText(status) {
@@ -61,8 +92,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 from_date: fromDate.value || ''
             });
 
-            console.log(stockistSel.value);
-
             orderTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>`;
 
             fetch(`${BASE_URL}OrderEntry/list_orders?${params.toString()}`)
@@ -78,8 +107,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             <td>${o.order_no}</td>
                             <td>${o.order_date}</td>
                             <td>₹${Number(o.total_amt).toFixed(2)}</td>
-                           <td><span class="badge ${statusClass(o.status)}">${statusText(o.status)}</span></td>
-                            <td>${actionIcons(o)}</td>
+                            <td><span class="badge ${statusClass(o.status)}">${statusText(o.status)}</span></td>
+                            <td class="text-center">${actionIcons(o)}</td>
                         </tr>
                     `).join('');
                     orderCount.textContent = res.data.length;
@@ -93,15 +122,21 @@ document.addEventListener('DOMContentLoaded', function () {
         btnReset.addEventListener('click', () => {
             stockistSel.value = '';
             fromDate.value = '';
-            toDate.value = '';
+            // toDate.value = ''; // Uncomment if you are using toDate
             loadOrders();
         });
 
+        // 2. Updated Event Listener for Delete Button
         orderTableBody.addEventListener('click', function (e) {
-            if (e.target.classList.contains('del-order')) {
+            // Use .closest() to ensure clicking the font-awesome icon inside the <a> tag still triggers the event
+            const delBtn = e.target.closest('.del-order');
+            
+            if (delBtn) {
                 e.preventDefault();
-                const id = e.target.dataset.id;
-                if (!confirm('Delete this order?')) return;
+                const id = delBtn.dataset.id;
+                
+                if (!confirm('Are you sure you want to delete this order?')) return;
+                
                 fetch(`${BASE_URL}Order/delete/${id}`, { method: 'POST' })
                     .then(res => res.json())
                     .then(res => {
@@ -139,7 +174,5 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (this.value) { fetchMedicines(''); searchInput.focus(); }
             });
         }
-
     }
-
 });

@@ -113,12 +113,12 @@ class orderentry_mdl
         return $products;
     }
 
-    public function getOrderById($order_id, $mr_id)
+   public function getOrderById($order_id, $mr_id)
     {
         $order_id = (int)$order_id;
         $mr_id    = (int)$mr_id;
 
-        $stmt = $this->con->prepare("SELECT * FROM orders WHERE order_id = ? AND mr_id = ?");
+        $stmt = $this->con->prepare("SELECT o.*, s.stockist_name FROM orders o LEFT JOIN stockists s ON o.stockist_id = s.stockist_id WHERE o.order_id = ? AND o.mr_id = ?");
         $stmt->bind_param("ii", $order_id, $mr_id);
         $stmt->execute();
         $order = $stmt->get_result()->fetch_assoc();
@@ -126,11 +126,13 @@ class orderentry_mdl
 
         if (!$order) return null;
 
+        // UPDATED: Added approved_qty to the select statement
         $stmt = $this->con->prepare("
             SELECT 
                 od.product_id,
                 p.product_name AS name,
                 SUM(od.qty) AS qty,
+                SUM(od.approved_qty) AS approved_qty,
                 MAX(od.rate) AS pts,
                 MAX(od.gst) AS tax,
                 MAX(od.discount) AS discount,
@@ -148,15 +150,16 @@ class orderentry_mdl
         $items = [];
         while ($row = $result->fetch_assoc()) {
             $items[] = [
-                'id'         => (int)$row['product_id'],
-                'product_id' => (int)$row['product_id'],
-                'name'       => $row['name'],
-                'qty'        => (int)$row['qty'],
-                'pts'        => (float)$row['pts'],
-                'tax'        => (float)$row['tax'],
-                'discount'   => (float)$row['discount'],
-                'amt'        => (float)$row['amt'],
-                'net_total'  => (float)$row['net_total']
+                'id'           => (int)$row['product_id'],
+                'product_id'   => (int)$row['product_id'],
+                'name'         => $row['name'],
+                'qty'          => (int)$row['qty'],
+                'approved_qty' => $row['approved_qty'] !== null ? (int)$row['approved_qty'] : null, // Null means not reviewed yet
+                'pts'          => (float)$row['pts'],
+                'tax'          => (float)$row['tax'],
+                'discount'     => (float)$row['discount'],
+                'amt'          => (float)$row['amt'],
+                'net_total'    => (float)$row['net_total']
             ];
         }
         $stmt->close();
@@ -267,6 +270,7 @@ class orderentry_mdl
                 pb.batch_id,
                 pb.sale_rate AS rate,
                 pb.sale_tax AS gst,
+                pb.disc,
                 (SUM(COALESCE(sl.qty_in, 0)) - SUM(COALESCE(sl.qty_out, 0))) AS current_qty
             FROM product_batches pb
             INNER JOIN stock_ledger sl ON sl.batch_id = pb.batch_id
@@ -308,7 +312,7 @@ class orderentry_mdl
 
             $rate      = (float)$row['rate'];
             $gst       = (float)($row['gst'] ?? 0);
-            $discount  = 16.66; // Fixed discount percentage
+            $discount  = (float)($row['disc'] ?? 0); // Fixed discount percentage
 
             $net_pts   = $rate * (1 - ($discount / 100));
             $amt       = $alloc_qty * $net_pts;
@@ -443,4 +447,6 @@ class orderentry_mdl
         $stmt->close();
         return $orders;
     }
+
+
 }

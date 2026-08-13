@@ -62,7 +62,7 @@ class OrderModel
     public function getOrders($filters = [])
     {
         // Added LEFT JOIN to headquarter so we can filter by state_id
-        $sql = "SELECT o.*, s.stockist_name AS ss_name, m.mr_name 
+        $sql = "SELECT o.*, s.stockist_name AS ss_name, m.mr_name ,s.gst_type
                 FROM orders o
                 LEFT JOIN stockists s ON s.stockist_id = o.stockist_id
                 LEFT JOIN mr_users m ON m.m_id = o.mr_id
@@ -122,10 +122,12 @@ class OrderModel
             SELECT 
                 o.*, 
                 s.stockist_name AS ss_name, 
+                s.gst_type,
                 m.mr_name AS mr_name, 
                 s.stockist_id, 
                 h.super_stockist_id,
                 si.lr_no,
+                si.cd_percent,
                 si.eway_bill_no AS eway_bill,
                 si.vehicle_no,
                 si.transport_name,
@@ -179,200 +181,9 @@ class OrderModel
         return $items;
     }
 
-    public function processOrderApproval($data)
-    {
-        try {
-            // 1. Start Transaction
-            $this->con->begin_transaction();
-
-            // Cast primary keys
-            $order_id = (int)$data['order_id'];
-            $stockist_id = (int)$data['stockist_id'];
-            $super_stockist_id = (int)$data['super_stockist_id'];
-            $grand_total = (float)$data['grand_total']; 
-            
-            // Map form array names to variables
-            $approved_qtys = $data['approved_qty'] ?? [];
-            $product_ids   = $data['product_id'] ?? [];
-            $batch_ids     = $data['batch_id'] ?? [];
-            $batches       = $data['batch'] ?? [];
-            $mrps          = $data['mrp'] ?? [];
-            $rates         = $data['rate'] ?? [];
-            $taxes         = $data['tax'] ?? [];
-            $discs         = $data['disc'] ?? [];
-            $amounts       = $data['amount'] ?? [];
-            $detail_ids    = $data['detail_id'] ?? [];
-
-            // ---> FIX: Extract variables cleanly for bind_param <---
-            $lr_no = $data['lr_no'] ?? '';
-            $eway_bill_no = $data['eway_bill_no'] ?? '';
-            $vehicle_no = $data['vehicle_no'] ?? '';
-            $transport_name = $data['transport_name'] ?? '';
-            $credit_days = (int)($data['credit_days'] ?? 0);
-            $total_qty = (float)($data['total_qty'] ?? 0);
-            $header_discount = (float)($data['header_discount'] ?? 0);
-            $gst_amt = (float)($data['gst_amt'] ?? 0);
-            $other_charges = (float)($data['other_charges'] ?? 0);
-            $cgst = (float)($data['cgst'] ?? 0);
-            $sgst = (float)($data['sgst'] ?? 0);
-            $igst = (float)($data['igst'] ?? 0);
-            $remarks = $data['remarks'] ?? '';
-
-            // Calculate Sub-Total (Taxable Base) dynamically based on mapped arrays
-            $sub_total = 0;
-            if (!empty($approved_qtys)) {
-                foreach ($approved_qtys as $key => $raw_qty) {
-                    $qty = (int)$raw_qty;
-                    if ($qty > 0) {
-                        $rate = (float)($rates[$key] ?? 0);
-                        $disc = (float)($discs[$key] ?? 0);
-                        $base = $qty * $rate;
-                        $taxable = $base - ($base * ($disc / 100)); // Base minus discount
-                        $sub_total += $taxable;
-                    }
-                }
-            }
-
-            // Fetch MR ID from original order to store in stock_inward
-            $mr_id = 0;
-            $mr_query = $this->con->prepare("SELECT mr_id FROM orders WHERE order_id = ?");
-            $mr_query->bind_param("i", $order_id);
-            $mr_query->execute();
-            $mr_res = $mr_query->get_result();
-            if ($mr_row = $mr_res->fetch_assoc()) {
-                $mr_id = (int)$mr_row['mr_id'];
-            }
-            $mr_query->close();
-
-            // Fetch Stockist Name & GST No for snapshot
-            $stockist_name = '';
-            $gst_no = '';
-            $st_query = $this->con->prepare("SELECT stockist_name, gst_no FROM stockists WHERE stockist_id = ?"); 
-            $st_query->bind_param("i", $stockist_id);
-            $st_query->execute();
-            $st_res = $st_query->get_result();
-            if ($st_row = $st_res->fetch_assoc()) {
-                $stockist_name = $st_row['stockist_name'] ?? '';
-                $gst_no = $st_row['gst_no'] ?? '';
-            }
-            $st_query->close();
-
-            // 2. Update Orders Table 
-            $stmt1 = $this->con->prepare("UPDATE orders SET status = 'Approved', total_amt = ? WHERE order_id = ?");
-            $stmt1->bind_param("di", $grand_total, $order_id);
-            $stmt1->execute();
-
-            // 3. Insert into Stock Inward 
-            $inward_no = 'INW-' . $order_id . '-' . time();
-            $admin_id = 1; // Default admin ID
-            $fy_id = 1;    // Default financial year
-
-            $stmt2 = $this->con->prepare("
-                INSERT INTO stock_inward (
-                    inward_no, super_stockist_id, stockist_id, stockist_name, gst_no, mr_id, order_id, 
-                    lr_no, eway_bill_no, vehicle_no, transport_name, credit_days, 
-                    admin_id, fy_id, inward_date, 
-                    total_qty, sub_total, discount, gst_amount, other_charges, grand_total, 
-                    cgst_amount, sgst_amount, igst_amount, remarks
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, 
-                    ?, ?, ?, ?, ?, 
-                    ?, ?, CURDATE(), 
-                    ?, ?, ?, ?, ?, ?, 
-                    ?, ?, ?, ?
-                )
-            ");
-            
-            // Now using the concrete variables defined above
-            $stmt2->bind_param(
-                "siissiissssiiiddddddddds", 
-                $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
-                $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
-                $admin_id, $fy_id, 
-                $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $grand_total,
-                $cgst, $sgst, $igst, $remarks
-            );
-
-            $stmt2->execute();
-            $inward_id = $this->con->insert_id;
-
-            // Prepare statements for Loop
-            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, amt = ?, net_total = ? WHERE detail_id = ?");
-            $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            
-            // Stock Inward Details insert query
-            $stmt_inward_det  = $this->con->prepare("
-                INSERT INTO stock_inward_details 
-                (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            
-            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, 'stock_inward', ?)");
-
-            // 4. Loop through items safely
-            if (!empty($approved_qtys)) {
-                foreach ($approved_qtys as $key => $raw_qty) {
-                    
-                    $qty = (int)$raw_qty;
-                    if ($qty <= 0) continue; 
-
-                    $detail_id  = !empty($detail_ids[$key]) ? (int)$detail_ids[$key] : null;
-                    $product_id = (int)($product_ids[$key] ?? 0);
-                    $batch_id   = (int)($batch_ids[$key] ?? 0);
-                    $batch_str  = (string)($batches[$key] ?? ''); 
-                    
-                    // Values mapped from inputs
-                    $mrp              = (float)($mrps[$key] ?? 0.00);
-                    $rate             = (float)($rates[$key] ?? 0.00);
-                    $discount_percent = (float)($discs[$key] ?? 0.00);
-                    $gst_percent      = (float)($taxes[$key] ?? 0.00);
-                    $net_total        = (float)($amounts[$key] ?? 0.00); 
-
-                    // Mathematically accurate values for database insertion
-                    $base_amount      = $qty * $rate;
-                    $disc_amount      = $base_amount * ($discount_percent / 100);
-                    $amt              = $base_amount - $disc_amount; // Taxable base amount
-                    $gst_amount_item  = $amt * ($gst_percent / 100); // Tax amount
-                    
-                    $qty_float        = (float)$qty; 
-
-                    // A. UPDATE OR INSERT ORDER DETAILS
-                    if (!empty($detail_id)) {
-                        $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
-                        $stmt_update_item->execute();
-                    } else {
-                        $stmt_insert_item->bind_param("iiiiiidd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
-                        $stmt_insert_item->execute();
-                    }
-
-                    // B. INSERT INWARD DETAILS
-                    $stmt_inward_det->bind_param(
-                        "iisdidddddd", 
-                        $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total
-                    );
-                    $stmt_inward_det->execute();
-
-                    // C. INSERT DUAL ENTRIES INTO STOCK LEDGER 
-                    $stmt_ledger_out->bind_param("iiiidddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
-                    $stmt_ledger_out->execute();
-
-                    $stmt_ledger_in->bind_param("iiiidddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
-                    $stmt_ledger_in->execute();
-                }
-            }
-
-            // 5. Commit Transaction
-            $this->con->commit();
-            return ['success' => true, 'msg' => 'Order approved and stock updated successfully.'];
-
-        } catch (Exception $e) {
-            $this->con->rollback();
-            return ['success' => false, 'msg' => 'Database error: ' . $e->getMessage()];
-        }
-    }
+  
     
-    public function getBatchesByStockistAndProduct($stockist_id, $product_id, $current_order_id = 0)
+ public function getBatchesByStockistAndProduct($stockist_id, $product_id, $current_order_id = 0)
     {
         // 1. Get inward_id for the current order to ignore its allocated stock
         $inward_id = 0;
@@ -387,7 +198,7 @@ class OrderModel
             $stmt_inw->close();
         }
 
-        // 2. Calculate stock, explicitly ignoring the qty_out for THIS inward_id
+        // 2. Updated SQL: Adds back the reserved quantity for this order directly into the stock math
         $stmt = $this->con->prepare("
             SELECT
                 pb.batch_id,
@@ -397,8 +208,14 @@ class OrderModel
                 pb.sale_rate,
                 pb.sale_tax,
                 ROUND(
-                    SUM(COALESCE(sl.qty_in, 0)) - 
-                    SUM(IF(sl.reference_table = 'stock_inward' AND sl.reference_id = ?, 0, COALESCE(sl.qty_out, 0)))
+                    (SUM(COALESCE(sl.qty_in, 0)) - 
+                    SUM(IF(sl.reference_table = 'stock_inward' AND sl.reference_id = ?, 0, COALESCE(sl.qty_out, 0))))
+                    + 
+                    COALESCE((
+                        SELECT SUM(od.approved_qty) 
+                        FROM order_details od 
+                        WHERE od.order_id = ? AND od.batch_id = pb.batch_id
+                    ), 0)
                 , 3) AS current_qty
             FROM product_batches pb
             INNER JOIN stock_ledger sl
@@ -411,8 +228,12 @@ class OrderModel
             ORDER BY pb.expiry_date ASC, pb.batch_id ASC
         ");
 
-        // "iii" stands for 3 integers: inward_id, stockist_id, product_id
-        $stmt->bind_param("iii", $inward_id, $stockist_id, $product_id);
+        // Parameters mapping: 
+        // 1. ? for inward_id (in the IF condition)
+        // 2. ? for current_order_id (in the subquery adding back the reserved qty)
+        // 3. ? for stockist_id
+        // 4. ? for product_id
+        $stmt->bind_param("iiii", $inward_id, $current_order_id, $stockist_id, $product_id);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -436,7 +257,6 @@ class OrderModel
 
         return $batches;
     }
-
     public function getProductsBySuperStockist($super_stockist_id)
     {
         $stmt = $this->con->prepare("
@@ -455,18 +275,21 @@ class OrderModel
         return $rows;
     }
 
-    // ADD THIS TO YOUR OrderModel CLASS
-    public function updateApprovedOrder($data)
+
+    public function processOrderApproval($data)
     {
         try {
+            // 1. Start Transaction
             $this->con->begin_transaction();
 
+            // Cast primary keys
             $order_id = (int)$data['order_id'];
             $stockist_id = (int)$data['stockist_id'];
             $super_stockist_id = (int)$data['super_stockist_id'];
-            $grand_total = (float)$data['grand_total'];
-            $admin_id = 1;
-
+            
+            $exact_grand_total = (float)$data['grand_total']; 
+            $rounded_net_amount = round($exact_grand_total);
+            
             // Map form array names to variables
             $approved_qtys = $data['approved_qty'] ?? [];
             $product_ids   = $data['product_id'] ?? [];
@@ -479,13 +302,227 @@ class OrderModel
             $amounts       = $data['amount'] ?? [];
             $detail_ids    = $data['detail_id'] ?? [];
 
-            // ---> FIX: Extract variables cleanly for bind_param <---
+            // Extract variables cleanly
+            $lr_no = $data['lr_no'] ?? '';
+            $eway_bill_no = $data['eway_bill_no'] ?? '';
+            $vehicle_no = $data['vehicle_no'] ?? '';
+            $transport_name = $data['transport_name'] ?? '';
+            $credit_days = (int)($data['credit_days'] ?? 0);
+            $total_qty = (float)($data['total_qty'] ?? 0);
+            $cd_percent = (float)($data['cd_percent'] ?? 0);
+            $header_discount = (float)($data['header_discount'] ?? 0);
+            $gst_amt = (float)($data['gst_amt'] ?? 0);
+            $other_charges = (float)($data['other_charges'] ?? 0);
+            $cgst = (float)($data['cgst'] ?? 0);
+            $sgst = (float)($data['sgst'] ?? 0);
+            $igst = (float)($data['igst'] ?? 0);
+            $remarks = $data['remarks'] ?? '';
+
+            // Calculate Sub-Total (Taxable Base with CD applied row-wise)
+            $sub_total = 0;
+            if (!empty($approved_qtys)) {
+                foreach ($approved_qtys as $key => $raw_qty) {
+                    $qty = (int)$raw_qty;
+                    if ($qty > 0) {
+                        $rate = (float)($rates[$key] ?? 0);
+                        $disc = (float)($discs[$key] ?? 0);
+                        $base = $qty * $rate;
+                        $first_disc = $base - ($base * ($disc / 100));
+                        $taxable = $first_disc - ($first_disc * ($cd_percent / 100)); // CD % applied
+                        $sub_total += $taxable;
+                    }
+                }
+            }
+
+            // Fetch MR ID
+            $mr_id = 0;
+            $mr_query = $this->con->prepare("SELECT mr_id FROM orders WHERE order_id = ?");
+            $mr_query->bind_param("i", $order_id);
+            $mr_query->execute();
+            $mr_res = $mr_query->get_result();
+            if ($mr_row = $mr_res->fetch_assoc()) {
+                $mr_id = (int)$mr_row['mr_id'];
+            }
+            $mr_query->close();
+
+            // Fetch Stockist Name & GST No
+            $stockist_name = '';
+            $gst_no = '';
+            $st_query = $this->con->prepare("SELECT stockist_name, gst_no FROM stockists WHERE stockist_id = ?"); 
+            $st_query->bind_param("i", $stockist_id);
+            $st_query->execute();
+            $st_res = $st_query->get_result();
+            if ($st_row = $st_res->fetch_assoc()) {
+                $stockist_name = $st_row['stockist_name'] ?? '';
+                $gst_no = $st_row['gst_no'] ?? '';
+            }
+            $st_query->close();
+
+            // Update Orders Table
+            $stmt1 = $this->con->prepare("UPDATE orders SET status = 'Approved', total_amt = ? WHERE order_id = ?");
+            $stmt1->bind_param("di", $exact_grand_total, $order_id);
+            $stmt1->execute();
+            $stmt1->close();
+
+            // Insert into Stock Inward
+            $inward_no = 'T-'. $order_id ;
+            $admin_id = 1; 
+            $fy_id = 1;    
+
+          $stmt2 = $this->con->prepare("
+                INSERT INTO stock_inward (
+                    inward_no, super_stockist_id, stockist_id, stockist_name, gst_no, mr_id, order_id, 
+                    lr_no, eway_bill_no, vehicle_no, transport_name, credit_days, 
+                    admin_id, fy_id, inward_date, 
+                    total_qty, sub_total, discount, gst_amount, other_charges, grand_total, 
+                    cgst_amount, sgst_amount, igst_amount, remarks, cd_percent
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, 
+                    ?, ?, ?, ?, ?, 
+                    ?, ?, CURDATE(), 
+                    ?, ?, ?, ?, ?, ?, 
+                    ?, ?, ?, ?, ?
+                )
+            ");
+            
+            // Fixed the string from 26 characters to exactly 25 characters
+            $stmt2->bind_param(
+                "siissiissssiiidddddddddsd", 
+                $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
+                $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
+                $admin_id, $fy_id, 
+                $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $exact_grand_total,
+                $cgst, $sgst, $igst, $remarks, $cd_percent
+            );
+
+            $stmt2->execute();
+            $inward_id = $this->con->insert_id;
+            $stmt2->close();
+
+            // Payment Ledger Entry
+            $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ?");
+            $check_ledger->bind_param("i", $inward_id);
+            $check_ledger->execute();
+            $res_ledger = $check_ledger->get_result();
+            
+            if ($row_ledger = $res_ledger->fetch_assoc()) {
+                $ledger_id = $row_ledger['id'];
+                $upd_ledger = $this->con->prepare("UPDATE payment_ledgers SET amount = ? WHERE id = ?");
+                $upd_ledger->bind_param("di", $rounded_net_amount, $ledger_id);
+                $upd_ledger->execute();
+                $upd_ledger->close();
+            } else {
+                $ins_ledger = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, transaction_type, reference_id, amount, balance_action) VALUES (?, 'bill_added', ?, ?, 'increase_debt')");
+                $ins_ledger->bind_param("iid", $stockist_id, $inward_id, $rounded_net_amount);
+                $ins_ledger->execute();
+                $ins_ledger->close();
+            }
+            $check_ledger->close();
+
+            // Prepare statements for Loop
+            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, amt = ?, net_total = ? WHERE detail_id = ?");
+            $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt_inward_det  = $this->con->prepare("
+                INSERT INTO stock_inward_details 
+                (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, 'stock_inward', ?)");
+
+            if (!empty($approved_qtys)) {
+                foreach ($approved_qtys as $key => $raw_qty) {
+                    $qty = (int)$raw_qty;
+                    if ($qty <= 0) continue; 
+
+                    $detail_id  = !empty($detail_ids[$key]) ? (int)$detail_ids[$key] : null;
+                    $product_id = (int)($product_ids[$key] ?? 0);
+                    $batch_id   = (int)($batch_ids[$key] ?? 0);
+                    $batch_str  = (string)($batches[$key] ?? ''); 
+                    
+                    $mrp              = (float)($mrps[$key] ?? 0.00);
+                    $rate             = (float)($rates[$key] ?? 0.00);
+                    $discount_percent = (float)($discs[$key] ?? 0.00);
+                    $gst_percent      = (float)($taxes[$key] ?? 0.00);
+
+                    // Compound Calculation: Base -> Item Discount -> CD Percent
+                    $base_amount      = $qty * $rate;
+                    $disc_amount      = $base_amount * ($discount_percent / 100);
+                    $after_first_disc = $base_amount - $disc_amount;
+                    
+                    // CD % applied directly to taxable base
+                    $cd_disc_amount   = $after_first_disc * ($cd_percent / 100);
+                    $amt              = $after_first_disc - $cd_disc_amount; // Final product-wise taxable amount including CD
+                    
+                    $gst_amount_item  = $amt * ($gst_percent / 100); // Product-wise GST calculated accurately on CD-included taxable value
+                    $net_total        = $amt + $gst_amount_item;
+                    $qty_float        = (float)$qty; 
+
+                    if (!empty($detail_id)) {
+                        $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
+                        $stmt_update_item->execute();
+                    } else {
+                        $stmt_insert_item->bind_param("iiiiiidd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
+                        $stmt_insert_item->execute();
+                    }
+
+                    $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
+                    $stmt_inward_det->execute();
+
+                    $stmt_ledger_out->bind_param("iiiidddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
+                    $stmt_ledger_out->execute();
+
+                    $stmt_ledger_in->bind_param("iiiidddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
+                    $stmt_ledger_in->execute();
+                }
+            }
+
+            $stmt_update_item->close();
+            $stmt_insert_item->close();
+            $stmt_inward_det->close();
+            $stmt_ledger_out->close();
+            $stmt_ledger_in->close();
+
+            $this->con->commit();
+            return ['success' => true, 'msg' => 'Order approved and stock updated successfully.'];
+
+        } catch (Exception $e) {
+            $this->con->rollback();
+            return ['success' => false, 'msg' => 'Database error: ' . $e->getMessage()];
+        }
+    }
+    
+    public function updateApprovedOrder($data)
+    {
+        try {
+            $this->con->begin_transaction();
+
+            $order_id = (int)$data['order_id'];
+            $stockist_id = (int)$data['stockist_id'];
+            $super_stockist_id = (int)$data['super_stockist_id'];
+            
+            $exact_grand_total = (float)$data['grand_total'];
+            $rounded_net_amount = round($exact_grand_total); 
+            $admin_id = 1;
+
+            $approved_qtys = $data['approved_qty'] ?? [];
+            $product_ids   = $data['product_id'] ?? [];
+            $batch_ids     = $data['batch_id'] ?? [];
+            $batches       = $data['batch'] ?? [];
+            $mrps          = $data['mrp'] ?? [];
+            $rates         = $data['rate'] ?? [];
+            $taxes         = $data['tax'] ?? [];
+            $discs         = $data['disc'] ?? [];
+            $amounts       = $data['amount'] ?? [];
+            $detail_ids    = $data['detail_id'] ?? [];
+
             $lr_no = $data['lr_no'] ?? '';
             $eway_bill_no = $data['eway_bill_no'] ?? ''; 
             $vehicle_no = $data['vehicle_no'] ?? '';
             $transport_name = $data['transport_name'] ?? '';
             $credit_days = (int)($data['credit_days'] ?? 0);
             $total_qty = (float)($data['total_qty'] ?? 0);
+            $cd_percent = (float)($data['cd_percent'] ?? 0);
             $header_discount = (float)($data['header_discount'] ?? 0);
             $gst_amt = (float)($data['gst_amt'] ?? 0);
             $other_charges = (float)($data['other_charges'] ?? 0);
@@ -494,7 +531,7 @@ class OrderModel
             $igst_amount = (float)($data['igst'] ?? 0);
             $remarks = $data['remarks'] ?? '';
 
-            // 1. Get the existing Inward ID for this order
+            // 1. Get existing Inward ID
             $inward_id = 0;
             $stmt_inw = $this->con->prepare("SELECT inward_id FROM stock_inward WHERE order_id = ?");
             $stmt_inw->bind_param("i", $order_id);
@@ -505,16 +542,17 @@ class OrderModel
             }
             $stmt_inw->close();
 
-            // 2. CLEANUP: Delete old ledger & inward details so we can insert fresh updated ones
+            // 2. CLEANUP
             $stmt_del_ledger = $this->con->prepare("DELETE FROM stock_ledger WHERE reference_table = 'stock_inward' AND reference_id = ?");
             $stmt_del_ledger->bind_param("i", $inward_id);
             $stmt_del_ledger->execute();
+            $stmt_del_ledger->close();
 
             $stmt_del_inw_det = $this->con->prepare("DELETE FROM stock_inward_details WHERE inward_id = ?");
             $stmt_del_inw_det->bind_param("i", $inward_id);
             $stmt_del_inw_det->execute();
+            $stmt_del_inw_det->close();
 
-            // 3. Remove items from order_details that were deleted by the user in JS
             $kept_detail_ids = array_filter($detail_ids);
             if (!empty($kept_detail_ids)) {
                 $id_list = implode(',', array_map('intval', $kept_detail_ids));
@@ -523,7 +561,7 @@ class OrderModel
                 $this->con->query("DELETE FROM order_details WHERE order_id = $order_id");
             }
 
-            // Calculate Sub-Total (Taxable Base)
+            // Calculate Sub-Total with CD
             $sub_total = 0;
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -532,48 +570,70 @@ class OrderModel
                         $rate = (float)($rates[$key] ?? 0);
                         $disc = (float)($discs[$key] ?? 0);
                         $base = $qty * $rate;
-                        $taxable = $base - ($base * ($disc / 100));
+                        $first_disc = $base - ($base * ($disc / 100));
+                        $taxable = $first_disc - ($first_disc * ($cd_percent / 100));
                         $sub_total += $taxable;
                     }
                 }
             }
 
-            // 4. Update Orders Master
+            // Update Orders Master
             $stmt1 = $this->con->prepare("UPDATE orders SET total_amt = ? WHERE order_id = ?");
-            $stmt1->bind_param("di", $grand_total, $order_id);
+            $stmt1->bind_param("di", $exact_grand_total, $order_id);
             $stmt1->execute();
+            $stmt1->close();
 
-            // 5. Update Stock Inward Master
+            // Update Stock Inward Master
             $stmt2 = $this->con->prepare("
                 UPDATE stock_inward SET 
                 lr_no=?, eway_bill_no=?, vehicle_no=?, transport_name=?, credit_days=?, 
                 total_qty=?, sub_total=?, discount=?, gst_amount=?, other_charges=?, 
-                grand_total=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?
+                grand_total=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?
                 WHERE order_id=?
             ");
             
-            $stmt2->bind_param("ssssidddddddddsi", 
+            $stmt2->bind_param("ssssidddddddddsii", 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, 
-                $grand_total, $cgst_amount, $sgst_amount, $igst_amount, $remarks,
+                $exact_grand_total, $cgst_amount, $sgst_amount, $igst_amount, $remarks, $cd_percent,
                 $order_id
             );
             $stmt2->execute();
+            $stmt2->close();
 
-            // Prepare Statements for loop 
+            // Update Ledger Amount
+            if ($inward_id > 0) {
+                $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ?");
+                $check_ledger->bind_param("i", $inward_id);
+                $check_ledger->execute();
+                $res_ledger = $check_ledger->get_result();
+                
+                if ($row_ledger = $res_ledger->fetch_assoc()) {
+                    $ledger_id = $row_ledger['id'];
+                    $upd_ledger = $this->con->prepare("UPDATE payment_ledgers SET amount = ? WHERE id = ?");
+                    $upd_ledger->bind_param("di", $rounded_net_amount, $ledger_id);
+                    $upd_ledger->execute();
+                    $upd_ledger->close();
+                } else {
+                    $ins_ledger = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, transaction_type, reference_id, amount, balance_action) VALUES (?, 'bill_added', ?, ?, 'increase_debt')");
+                    $ins_ledger->bind_param("iid", $stockist_id, $inward_id, $rounded_net_amount);
+                    $ins_ledger->execute();
+                    $ins_ledger->close();
+                }
+                $check_ledger->close();
+            }
+
+            // Loop items
             $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, amt = ?, net_total = ? WHERE detail_id = ?");
             $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            
             $stmt_inward_det  = $this->con->prepare("
                 INSERT INTO stock_inward_details 
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            
             $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'stock_inward', ?)");
             $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, 'stock_inward', ?)");
 
-            // 6. Loop Items (Re-insert ledger and inward details)
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
                     $qty = (int)$raw_qty;
@@ -584,22 +644,23 @@ class OrderModel
                     $batch_id   = (int)($batch_ids[$key] ?? 0);
                     $batch_str  = (string)($batches[$key] ?? '');
                     
-                    // Values mapped from inputs
                     $mrp              = (float)($mrps[$key] ?? 0.00);
                     $rate             = (float)($rates[$key] ?? 0.00);
                     $discount_percent = (float)($discs[$key] ?? 0.00);
                     $gst_percent      = (float)($taxes[$key] ?? 0.00);
 
-                    // Mathematically accurate values for database insertion
+                    // Compound Calculation: Base -> Item Discount -> CD Percent
                     $base_amount      = $qty * $rate;
                     $disc_amount      = $base_amount * ($discount_percent / 100);
-                    $amt              = $base_amount - $disc_amount; // Taxable base amount
-                    $gst_amount_item  = $amt * ($gst_percent / 100); // Tax amount
-                    $net_total        = $amt + $gst_amount_item;
+                    $after_first_disc = $base_amount - $disc_amount;
                     
+                    $cd_disc_amount   = $after_first_disc * ($cd_percent / 100);
+                    $amt              = $after_first_disc - $cd_disc_amount;
+                    
+                    $gst_amount_item  = $amt * ($gst_percent / 100);
+                    $net_total        = $amt + $gst_amount_item;
                     $qty_float        = (float)$qty; 
 
-                    // A. UPDATE OR INSERT ORDER DETAILS
                     if (!empty($detail_id)) {
                         $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
@@ -608,14 +669,9 @@ class OrderModel
                         $stmt_insert_item->execute();
                     }
 
-                    // B. RE-INSERT INWARD DETAILS
-                    $stmt_inward_det->bind_param(
-                        "iisdidddddd", 
-                        $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total
-                    );
+                    $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    // C. RE-INSERT DUAL ENTRIES INTO STOCK LEDGER 
                     $stmt_ledger_out->bind_param("iiiidddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
                     $stmt_ledger_out->execute();
 
@@ -623,6 +679,12 @@ class OrderModel
                     $stmt_ledger_in->execute();
                 }
             }
+
+            $stmt_update_item->close();
+            $stmt_insert_item->close();
+            $stmt_inward_det->close();
+            $stmt_ledger_out->close();
+            $stmt_ledger_in->close();
 
             $this->con->commit();
             return ['success' => true];

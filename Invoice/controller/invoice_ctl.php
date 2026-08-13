@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/../model/invoice_mdl.php';
+require_once __DIR__ . '/../model/Invoice_mdl.php';
 
 class InvoiceController
 {
@@ -60,7 +60,7 @@ class InvoiceController
          */
         ob_start();
 
-        require __DIR__ . '/../View/invoice.php';
+        require __DIR__ . '/../view/invoice.php';
 
         $html = ob_get_clean();
 

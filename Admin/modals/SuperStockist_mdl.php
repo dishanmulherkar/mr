@@ -36,13 +36,14 @@ class SupplierModel
         $status = mysqli_real_escape_string($this->con, intval($data['status']));
          $address = mysqli_real_escape_string($this->con, intval($data['address']));
           $gst_no = mysqli_real_escape_string($this->con, intval($data['gst_no']));
+          $terms = mysqli_real_escape_string($this->con, $data['terms_and_conditions'] ?? '');
 
         // Insert without party_code
         $insert = mysqli_query($this->con, "
             INSERT INTO super_stockist
-            (ss_name,person_name,country,state,district,pincode, status,address)
+            (ss_name,person_name,country,state,district,pincode, status,address,term_and_condition)
             VALUES
-            ('$stockist_name','$person_name','$country','$state_id','$district','$pincode', '$status','$address','$gst_no')
+            ('$stockist_name','$person_name','$country','$state_id','$district','$pincode', '$status','$address','$gst_no','$terms')
         ");
 
         if(!$insert)
@@ -65,10 +66,11 @@ class SupplierModel
         $status = mysqli_real_escape_string($this->con, intval($data['status']));
          $address = mysqli_real_escape_string($this->con, trim($data['address']));
           $gst_no = mysqli_real_escape_string($this->con, intval($data['gst_no']));
+           $terms = mysqli_real_escape_string($this->con, $data['terms_and_conditions'] ?? '');
 
         return mysqli_query($this->con,
         "UPDATE super_stockist SET 
-                ss_name='$stockist_name',person_name='$person_name',country='$country',state='$state_id',district='$district',pincode='$pincode', status='$status' ,address='$address',gst_no='$gst_no'
+                ss_name='$stockist_name',person_name='$person_name',country='$country',state='$state_id',district='$district',pincode='$pincode', status='$status' ,address='$address',gst_no='$gst_no',term_and_condition = '$terms'
             WHERE super_stockist_id = '$id' ");
     }
 

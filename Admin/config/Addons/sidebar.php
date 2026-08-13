@@ -91,11 +91,13 @@
                 </a>
                 <div class="collapse" id="superStockistMenu">
                     <ul class="nav flex-column ms-4 mt-1">
+                         <?php if($admin_role == 'Super Admin'){ ?>
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>supplier" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-users-gear" style="width: 20px;"></i> Manage Super Stockists
                             </a>
                         </li>
+                         <?php } ?>
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>purchase" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-cart-shopping" style="width: 20px;"></i> Purchase Entry
@@ -184,6 +186,26 @@
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>Order" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage Orders
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </li>
+
+             <!-- ================= Order ================= -->
+            <li class="nav-item searchable-folder">
+                <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#paymentMenu" aria-expanded="false" href="#">
+                    <span>
+                        <i class="fa-solid fa-boxes-stacked" style="width: 20px;"></i>
+                        <span class="ms-2">Payment</span>
+                    </span>
+                    <i class="fa-solid fa-angle-down toggle-icon"></i>
+                </a>
+                <div class="collapse" id="paymentMenu">
+                    <ul class="nav flex-column ms-4 mt-1">
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage Payments
                             </a>
                         </li>
                     </ul>
