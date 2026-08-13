@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 case 'Pending':
                     return '⏳ Pen';
                 case 'Approved':
-                    return '✓ App';
+                    return '✓ Appr';
                 case 'Processed':
                 case 'Dispatch':
                     return '🚚 Disp';
@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     orderTableBody.innerHTML = res.data.map(o => `
                         <tr>
-                            <td>${o.order_no}</td>
+                            
                             <td>${o.order_date}</td>
                             <td>₹${Number(o.total_amt).toFixed(2)}</td>
                             <td><span class="badge ${statusClass(o.status)}">${statusText(o.status)}</span></td>

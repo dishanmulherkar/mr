@@ -105,7 +105,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td>₹${parseFloat(p.original_amount).toFixed(2)}</td>
                 <td style="color: #dc3545;"><strong>₹${parseFloat(amount).toFixed(2)}</strong></td>
                 <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
-                <td>${payButton}</td>
             `;
             paymentTable.appendChild(tr);
         });

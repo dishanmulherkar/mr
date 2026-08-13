@@ -22,7 +22,7 @@ class HeadquarterController
              $asm = $this->model->getASM();
         $ROW = null; 
 
-        include 'view/headquarter/index.php';
+        include 'view/Headquarter/index.php';
     }
 
     // Handle storing new record

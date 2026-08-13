@@ -86,4 +86,32 @@ class SalesEntryController
             ]);
         }
     }
+
+    public function list() {
+        if (!isset($_SESSION['mr_id'])) { header('Location: ' . BASE_URL); exit; }
+        $mr_id = $_SESSION['mr_id'];
+        
+        // Assuming your model has a function to get stockists
+        $stockists = $this->model->getStockists($mr_id); 
+        
+        include 'view/SalesEntry/saleslist.php';
+    }
+
+    // 2. AJAX Fetch List Data
+    public function fetch_list() {
+        header('Content-Type: application/json');
+        
+        $mr_id = isset($_GET['mr_id']) ? (int)$_GET['mr_id'] : 0;
+        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+        $sale_type = isset($_GET['sale_type']) ? $_GET['sale_type'] : '';
+        $sale_date = isset($_GET['sale_date']) ? $_GET['sale_date'] : '';
+
+        // Call the model to get the data
+        $sales = $this->model->getFilteredSales($mr_id, $stockist_id, $sale_type, $sale_date);
+
+        echo json_encode(['success' => true, 'sales' => $sales]);
+        exit;
+    }
+
+
 }

@@ -357,5 +357,39 @@ class SalesModel
             }
         }
     }
+
+    public function getFilteredSales($mr_id, $stockist_id, $sale_type, $sale_date) {
+        $cond = "s.m_id = " . (int)$mr_id;
+
+        if ($stockist_id > 0) {
+            $cond .= " AND s.stockist_id = $stockist_id";
+        }
+        if (!empty($sale_type)) {
+            $sale_type = mysqli_real_escape_string($this->con, $sale_type);
+            $cond .= " AND c.customer_type = '$sale_type'";
+        }
+        if (!empty($sale_date)) {
+            $sale_date = mysqli_real_escape_string($this->con, $sale_date);
+            $cond .= " AND DATE(s.sale_date) = '$sale_date'";
+        }
+
+        $query = "
+            SELECT s.*, st.stockist_name, c.customer_name ,c.customer_type
+            FROM sales_entries s
+            LEFT JOIN stockists st ON s.stockist_id = st.stockist_id
+            LEFT JOIN customers c ON s.c_id = c.c_id
+            WHERE $cond
+            ORDER BY s.sale_date DESC
+        ";
+
+        $result = $this->con->query($query);
+        $sales = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $sales[] = $row;
+            }
+        }
+        return $sales;
+    }
 }
 ?>

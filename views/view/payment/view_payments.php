@@ -72,12 +72,11 @@ include 'view/layout/header.php';
             <thead id="billHeaders">
             <tr>
                 <th>Date</th>
-                <th>Order / Bill No</th>
+                <th>Bill No</th>
                 <th>Stockist Name</th>
                 <th>Bill Amount</th>
                 <th>Pending Balance</th>
                 <th>Bill Status</th>
-                <th width="100">Action</th>
             </tr>
             </thead>
             

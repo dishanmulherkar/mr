@@ -1,9 +1,4 @@
 <?php
-/**
- * RUDRADEO PHARMACEUTICAL INVOICE
- * Exact PDF Layout Match for Dompdf
- * Matches: T-381 Jeevak Ayurved Format
- */
 
 // ========== DATA EXTRACTION ==========
 $invoiceNo = $invoice['inward_no'] ?? ('T-' . ($invoice['order_id'] ?? ''));
@@ -45,7 +40,6 @@ $gstType = strtoupper($invoice['gst_type'] ?? 'CGST_SGST'); // Expected: CGST_SG
 // Totals
 $dbTotalQty = (float)($invoice['total_qty'] ?? 0);
 $dbSubTotal = (float)($invoice['sub_total'] ?? 0);
-// $dbHeaderDiscount = (float)($invoice['discount'] ?? 0);
 $dbSgst = (float)($invoice['sgst_amount'] ?? 0);
 $dbCgst = (float)($invoice['cgst_amount'] ?? 0);
 $dbIgst = (float)($invoice['igst_amount'] ?? 0);
@@ -61,20 +55,35 @@ if ($cdAmount == 0 && $cdPercent > 0) {
     $cdAmount = $dbSubTotal * ($cdPercent / 100);
 }
 
-// Calculate totals
+// ========== CORRECTED: Calculate totals with proper discount separation ==========
 $trueGrossAmount = 0;
-$trueItemDiscount = 0;
+$trueItemDiscount = 0;      // Line-item discounts only
+$trueCdDiscount = 0;        // Cash discounts only
+
 foreach ($items as $item) {
     $qty = (float)($item['qty'] ?? 0);
     $rate = (float)($item['rate'] ?? 0);
     $amt = (float)($item['amt'] ?? ($qty * $rate));
     $rowBase = $qty * $rate;
-    $rowDiscount = $rowBase - $amt;
-    $trueGrossAmount += $rowBase;
+    
+    // CORRECTED: Calculate line-item discount
+    $discPerc = (float)($item['discount_percent'] ?? 0);
+    $rowDiscount = $rowBase * ($discPerc / 100);
     $trueItemDiscount += $rowDiscount;
+    $trueGrossAmount += $rowBase;
+    
+    // CORRECTED: Calculate CD discount (applied after line discount)
+    $afterFirstDisc = $rowBase - $rowDiscount;
+    $itemCdPerc = (float)($item['cd_percent'] ?? ($cdPercent ?? 0));
+    $rowCdDiscount = $afterFirstDisc * ($itemCdPerc / 100);
+    $trueCdDiscount += $rowCdDiscount;
 }
 
-$totalDiscount = $trueItemDiscount - $cdAmount ;
+// CORRECTED: Total of all discounts
+$totalLineItemDiscount = $trueItemDiscount;
+$totalCdDiscount = $trueCdDiscount;
+$totalAllDiscounts = $trueItemDiscount + $trueCdDiscount + $additionalDiscount;
+
 $netAmountRounded = round($dbGrandTotal);
 $roundOff = $netAmountRounded - $dbGrandTotal;
 
@@ -178,7 +187,7 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 55%; border-right: 1px solid #000; padding: 3px 0; vertical-align: top;">
                 <div style="font-weight: bold; text-decoration: underline; font-size: 8pt; margin-bottom: 2px;">To,</div>
                 <div style="font-size: 8pt;  padding: 0px 3px; line-height: 1.3;">
-                    <strong>M/S. <?= htmlspecialchars($stockistName) ?></strong><br>
+                    <strong>M/S.  <?= htmlspecialchars($stockistName) ?></strong><br>
                     <?php 
                     $addressLines = array_filter([
                         $stockistAddress ? 'AT:- ' . $stockistAddress : null,
@@ -407,8 +416,8 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 75%; border-right: 1px solid #000;  padding: 0px 0; vertical-align: top;">
                
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 0px;">
-                     <tr style="background: #fff;">
-                        <td style="">
+                     <tr style="">
+                        <td style=" border-left: 1px  #000;">
                             <div style="font-weight: bold; font-size: 8pt; margin-bottom: 2px; ">Company GSTin: <?= htmlspecialchars($companyGst) ?></div>
                         </td>
                         <td style="">
@@ -444,70 +453,92 @@ table { border-collapse: collapse; width: 100%; }
                  <div style="font-weight: bold; font-size: 8pt; margin-top: 10px;"><?= htmlspecialchars($message) ?></div>
             </td>
             
-            <!-- RIGHT: Totals Column -->
+            <!-- RIGHT: Totals Column (CORRECTED) -->
             <td style="width: 25%; padding: 3px;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Gross Amount</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($trueGrossAmount, 2) ?></td>
-                    </tr>
-                    <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Discount</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($totalDiscount, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;"><strong>Gross Amount</strong></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><strong><?= number_format($trueGrossAmount, 2) ?></strong></td>
                     </tr>
                     
+                    <!-- Line-Item Discount (First Discount %) -->
+                    <?php if ($totalLineItemDiscount > 0): ?>
+                    <tr>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Disc</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">-<?= number_format($totalLineItemDiscount, 2) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    
+                    <!-- Cash Discount (CD %) - CORRECTED -->
+                    <?php if ($totalCdDiscount > 0): ?>
+                    <tr>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Cash Disc(<?= number_format($cdPercent, 2) ?>%)</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">-<?= number_format($totalCdDiscount, 2) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    
+                    <!-- Additional Discount (Invoice Level) -->
                     <?php if ($additionalDiscount > 0): ?>
                     <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add. Discount</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($additionalDiscount, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add.Discount</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">-<?= number_format($additionalDiscount, 2) ?></td>
                     </tr>
                     <?php endif; ?>
-
-                    <?php if ($cdAmount > 0): ?>
-                    <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Cash Disc (<?= number_format($cdPercent, 2) ?>%)</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($cdAmount, 2) ?></td>
+                    
+                    <!-- Subtotal After All Discounts -->
+                    <?php if ($totalAllDiscounts > 0): ?>
+                    <tr style="border-top: 1px solid #000; font-weight: bold;">
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Subtotal</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($trueGrossAmount - $totalAllDiscounts, 2) ?></td>
+                    </tr>
+                    <?php else: ?>
+                    <tr style="border-top: 1px solid #000; font-weight: bold;">
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Taxable Amount</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($dbSubTotal, 2) ?></td>
                     </tr>
                     <?php endif; ?>
-
+                    
+                    <!-- GST/Tax Components -->
                     <?php if ($gstType === 'CGST_SGST'): ?>
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add : SGST</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($dbSgst, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">+<?= number_format($dbSgst, 2) ?></td>
                     </tr>
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add : CGST</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($dbCgst, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">+<?= number_format($dbCgst, 2) ?></td>
                     </tr>
                     <?php elseif ($gstType === 'IGST'): ?>
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add : IGST</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($dbIgst, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">+<?= number_format($dbIgst, 2) ?></td>
                     </tr>
                     <?php elseif ($gstType === 'VAT'): ?>
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add : VAT</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($dbVat, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">+<?= number_format($dbVat, 2) ?></td>
                     </tr>
                     <?php endif; ?>
 
+                    <!-- Other Charges -->
                     <?php if ($dbOther != 0): ?>
                     <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Other +/-</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($dbOther, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Other Charges</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= $dbOther > 0 ? '+' : '' ?> <?= number_format($dbOther, 2) ?></td>
                     </tr>
                     <?php endif; ?>
-                    <tr>
+                    
+                    <!-- <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Freight</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">0.00</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">+ 0.00</td>
                     </tr>
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Credit Note</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">0.00</td>
-                    </tr>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">- 0.00</td>
+                    </tr> -->
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Round Off</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($roundOff, 2) ?></td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= $roundOff > 0 ? '+' : '' ?> <?= number_format($roundOff, 2) ?></td>
                     </tr>
                 </table>
             </td>
@@ -516,18 +547,18 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 75%;">
                 <table>
                     <tr style="font-weight: bold; ">
-                        <td style="border: none;  font-size: 9pt; ">
+                        <td style="border: none;  font-size: 8pt; ">
                             <div>Amount in Words: <span> </span></div>
                         </td>
-                        <td style="border: none; padding: 0px 0px; font-size: 9pt; "> <?= htmlspecialchars($amountInWords ?? 'Total Amount In Words') ?></td>
+                        <td style="border: none; padding: 0px 0px; font-size: 8pt; "> <?= htmlspecialchars($amountInWords ?? 'Total Amount In Words') ?></td>
                     </tr>
                 </table>
             </td>
             <td style="width: 25%; ">
                 <table>
-                    <tr style="font-weight: bold; border-left: 1px solid #946b6b;  ">
-                        <td style="border: none; padding: 0px 0px; font-size: 9pt; text-align: left;">Net Amount</td>
-                        <td style="border: none; padding: 0px 0px; font-size: 9pt; text-align: right;"><?= number_format($netAmountRounded, 2) ?></td>
+                    <tr style="font-weight: bold; border-left: 1px solid #000;  ">
+                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: left;">Net Amount</td>
+                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: right;"><?= number_format($netAmountRounded, 2) ?></td>
                     </tr>
                 </table>
             </td>

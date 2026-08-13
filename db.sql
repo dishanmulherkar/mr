@@ -152,7 +152,7 @@ ALTER TABLE `order_details` ADD COLUMN `batch_id` INT NOT NULL AFTER `product_id
 
 -- stock inward alter 
 
-ALTER TABLE stock_inward
+ALTER TABLE stock_inward   /done
     ADD COLUMN mr_id INT NOT NULL DEFAULT 0 AFTER stockist_id,
     ADD COLUMN order_id INT DEFAULT NULL AFTER mr_id,
     ADD COLUMN inward_no VARCHAR(30) NULL UNIQUE AFTER inward_id,
@@ -238,8 +238,7 @@ CREATE TABLE payment_ledgers (
 );
 
 
-ALTER TABLE `admins` 
-  ADD COLUMN stockist_id BIGINT NOT NULL :
+
 
 ALTER TABLE `stock_inward` 
 ADD COLUMN `cd_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00',
@@ -257,14 +256,18 @@ ADD vehicle_no VARCHAR(50) NULL AFTER eway_bill_no,
 ADD transport_name VARCHAR(255) NULL AFTER vehicle_no,
 ADD credit_days INT DEFAULT 0 AFTER transport_name;
 
-
+-- 12-8-26
 ALTER TABLE super_stockist 
 ADD term_and_condition TEXT NULL;
 
 -- Modify your existing column to allow the new mobile roles
 ALTER TABLE admins 
 MODIFY COLUMN role ENUM('Super Admin', 'Admin', 'ASM', 'Dispatch') NOT NULL;
-
+ALTER TABLE `admins` 
+  ADD COLUMN stockist_id BIGINT NOT NULL ;
 
 -- date 13-8-26
 ALTER TABLE headquarter ADD asm_id INT NULL;
+
+ALTER TABLE mr_users 
+ADD target DECIMAL(12,2) DEFAULT 0.00 AFTER mobile; 

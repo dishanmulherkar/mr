@@ -69,7 +69,7 @@ include 'view/layout/header.php';
         <table class="inv-table">
             <thead>
             <tr>
-                <th>Order No</th>
+                <!-- <th>Order No</th> -->
                 <th>Date</th>
                 <th>Amount</th>
                 <th>Status</th>
