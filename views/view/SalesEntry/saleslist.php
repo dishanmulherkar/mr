@@ -4,17 +4,105 @@ include 'view/layout/header.php';
 ?>
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/salesentry.css">
 <style>
-    .btn-download {
-        background: #dc3545; color: white; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 12px;
+   /* Card Container Layout */
+    .sales-card-container {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px; /* Reduced gap between cards */
+        margin-top: 10px;
     }
-    .btn-download:hover { background: #c82333; color: white; }
+    
+    @media (min-width: 768px) {
+        .sales-card-container {
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        }
+    }
+
+    /* Highly Compact Card Styles */
+    .sale-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 8px 10px; /* Much smaller padding inside */
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        display: flex;
+        flex-direction: column;
+        gap: 4px; /* Tiny gap between rows */
+    }
+    
+    .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .customer-info {
+        font-weight: 600;
+        font-size: 14px;
+        color: #222;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .badge-type {
+        background: #e9ecef;
+        color: #495057;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .text-amount {
+        font-size: 14px;
+        color: #198754;
+        font-weight: bold;
+    }
+
+    .stockist-info {
+        font-size: 12px;
+        color: #666;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 60%;
+    }
+
+    .date-action-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .sale-card-date {
+        font-size: 11px;
+        color: #777;
+    }
+
+    /* Tiny Download Icon Button */
+    .btn-download-icon {
+        background: #dc3545; 
+        color: white; 
+        padding: 4px 8px; 
+        border-radius: 4px; 
+        text-decoration: none; 
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .btn-download-icon:hover { background: #c82333; color: white; text-decoration: none; }
 </style>
 
 <div class="page-content">
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
         <h4>Sales List</h4>
-        <!-- Button to go to the Sales Entry Page -->
-        <a href="<?= BASE_URL ?>sales/entry" class="btn-submit" style="padding: 6px 12px; text-decoration: none;">
+        <a href="<?= BASE_URL ?>SalesEntry" class="btn-submit" style="padding: 6px 12px; text-decoration: none;">
             <i class="fa fa-plus"></i> New Sale
         </a>
     </div>
@@ -40,23 +128,9 @@ include 'view/layout/header.php';
         <button id="btnReset" class="btn-ok" style="background:#6c757d;">Reset</button>
     </div>
 
-    <!-- Sales Table -->
-    <div class="inv-table-wrap">
-        <table class="inv-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Stockist</th>
-                    <th>Customer Name</th>
-                    <th>Type</th>
-                    <th>Total Amount</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody id="salesTableBody">
-                <tr><td colspan="7" style="text-align:center;">Loading...</td></tr>
-            </tbody>
-        </table>
+    <!-- Card Container (Replaces the Table) -->
+    <div id="salesListContainer" class="sales-card-container">
+        <div style="text-align:center; padding: 20px; width: 100%;">Loading...</div>
     </div>
 </div>
 

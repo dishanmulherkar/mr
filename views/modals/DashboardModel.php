@@ -26,22 +26,37 @@ private $db;
 
         return mysqli_fetch_assoc($result);
     }
-
-    // Primary Sale
+// Primary Sale
     public function getPrimarySale($mr_id, $start_date, $end_date)
     {
+        // 1. Base query without the date filter
         $query = "
-            SELECT COALESCE(SUM(sid.qty * sid.rate),0) AS primary_sale
+            SELECT COALESCE(SUM(sid.qty * sid.rate), 0) AS primary_sale
             FROM stock_inward si
             INNER JOIN stock_inward_details sid
                 ON si.inward_id = sid.inward_id
             INNER JOIN stockists st
                 ON si.stockist_id = st.stockist_id
-            WHERE st.hq_id='$mr_id'
-            AND si.inward_date BETWEEN '$start_date' AND '$end_date'
+            WHERE st.hq_id = '$mr_id'
         ";
 
+        // 2. Append the date filter ONLY if dates are passed in
+        if (!empty($start_date) && !empty($end_date)) {
+            // Escape the variables to prevent SQL injection
+            $start = mysqli_real_escape_string($this->db, $start_date);
+            $end = mysqli_real_escape_string($this->db, $end_date);
+            
+            // Using DATE() ensures it matches properly even if inward_date has a timestamp (e.g. 2026-08-14 15:30:00)
+            $query .= " AND DATE(si.inward_date) BETWEEN '$start' AND '$end'";
+        }
+
+        // 3. Execute query
         $result = mysqli_query($this->db, $query);
+
+        // Optional: Error handling if the query fails
+        if (!$result) {
+            die(mysqli_error($this->db));
+        }
 
         return mysqli_fetch_assoc($result)['primary_sale'];
     }

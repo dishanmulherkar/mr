@@ -326,9 +326,9 @@ include 'view/layout/header.php';
                                     <th class="text-center">Status</th>
                                     <th class="text-center">State</th>
                                     <th class="text-center">District</th>
-                                    <th class="text-center">Pincode</th>
-                                    
-                                    <th class="text-center">Address</th>
+                                    <!-- <th class="text-center">Pincode</th> -->
+<!--                                     
+                                    <th class="text-center">Address</th> -->
                                     <th class="text-center">Action</th>
                                 </tr>
                             </thead>
@@ -362,15 +362,15 @@ include 'view/layout/header.php';
                                         <?php endif; ?>
                                     </td>
                                                     
-                                    <td class="text-center"><?php echo htmlspecialchars($row['state_name']); ?></td>
+                                   <td class="text-center"><?php echo htmlspecialchars($row['state_name'] ?? ''); ?></td>
                                     
                                     <td class="text-center"><?php 
                                     
                                     echo htmlspecialchars($row['district']);
                                      ?></td>
-                                    <td class="text-center"><?php echo htmlspecialchars($row['pincode']); ?></td>
+                                    <!-- <td class="text-center"><?php echo htmlspecialchars($row['pincode']); ?></td>
                                     
-                                    <td class="text-center"><?php echo htmlspecialchars($row['address'] ?? '—'); ?></td>
+                                    <td class="text-center"><?php echo htmlspecialchars($row['address'] ?? '—'); ?></td> -->
 
                                     <!-- Actions -->
                                     <td class="text-center">

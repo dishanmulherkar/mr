@@ -269,5 +269,25 @@ ALTER TABLE `admins`
 -- date 13-8-26
 ALTER TABLE headquarter ADD asm_id INT NULL;
 
-ALTER TABLE mr_users 
-ADD target DECIMAL(12,2) DEFAULT 0.00 AFTER mobile; 
+-- 14-8-26
+
+ALTER TABLE sales_entries 
+ADD total_pts_amt DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER c_id;
+ALTER TABLE sales_details 
+ADD pts_rate DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER rate,
+ADD pts_amt DECIMAL(12,2) NOT NULL DEFAULT '0.00' AFTER pts_rate;
+
+-- Add PTS rate and line amount to inward details
+ALTER TABLE stock_inward_details 
+ADD pts_rate DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER mrp,
+ADD pts_amt DECIMAL(12,2) NOT NULL DEFAULT '0.00' AFTER pts_rate;
+
+-- Add Total PTS amount to the main inward header
+ALTER TABLE stock_inward 
+ADD total_pts_amt DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER grand_total;
+
+-- pending
+ALTER TABLE stock_ledger 
+ADD pts_rate DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER amt,
+ADD pts_amt DECIMAL(12,2) NOT NULL DEFAULT '0.00' AFTER pts_rate;
+

@@ -93,7 +93,7 @@ class SalesModel
             SELECT 
                 p.p_id,
                 p.product_name,
-                MAX(pb.sale_rate) AS pts,
+                MAX(pb.mrp) AS pts,
                 SUM(COALESCE(sl.qty_in, 0) - COALESCE(sl.qty_out, 0)) AS total_stock
             FROM stock_ledger sl
             INNER JOIN products p ON p.p_id = sl.p_id
@@ -135,7 +135,7 @@ class SalesModel
             SELECT 
                 pb.batch_id,
                 pb.batch_no,
-                pb.sale_rate AS rate,
+                pb.mrp AS rate,
                 pb.sale_tax AS gst,
                 (SUM(COALESCE(sl.qty_in, 0)) - SUM(COALESCE(sl.qty_out, 0))) AS current_qty
             FROM product_batches pb

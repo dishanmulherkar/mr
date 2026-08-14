@@ -5,10 +5,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const dateFilter = document.getElementById('dateFilter');
     const btnSearch = document.getElementById('btnSearch');
     const btnReset = document.getElementById('btnReset');
-    const tableBody = document.getElementById('salesTableBody');
+    
+    // Updated container reference
+    const listContainer = document.getElementById('salesListContainer');
 
     function fetchSales() {
-        tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading records...</td></tr>';
+        listContainer.innerHTML = '<div style="text-align:center; padding:20px; width:100%;">Loading records...</div>';
 
         const params = new URLSearchParams({
             mr_id: mr_id,
@@ -22,39 +24,62 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    renderTable(data.sales);
+                    renderCards(data.sales);
                 } else {
-                    tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">${data.msg}</td></tr>`;
+                    listContainer.innerHTML = `<div style="text-align:center; padding:20px; color:red; width:100%;">${data.msg}</div>`;
                 }
             })
             .catch(error => {
-                tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:red;">Network Error</td></tr>';
+                listContainer.innerHTML = '<div style="text-align:center; padding:20px; color:red; width:100%;">Network Error</div>';
             });
     }
 
-    function renderTable(sales) {
-        tableBody.innerHTML = '';
+    function renderCards(sales) {
+        listContainer.innerHTML = '';
 
         if (!sales || sales.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No sales found.</td></tr>';
+            listContainer.innerHTML = '<div style="text-align:center; padding:20px; width:100%;">No sales found.</div>';
             return;
         }
 
         sales.forEach(s => {
-            let tr = document.createElement('tr');
+            let card = document.createElement('div');
+            card.className = 'sale-card';
             
-            // The PDF Download Link triggers the 'invoice' function in your controller
-            let downloadBtn = `<a href="${BASE_URL}sales/invoice/${s.sale_id}" target="_blank" class="btn-download"><i class="fa fa-file-pdf"></i> Invoice</a>`;
+            // Format Type to just "Chem" or "Doc"
+            let cType = s.customer_type ? s.customer_type.toLowerCase() : '';
+            let typeShort = cType === 'chemist' ? 'Chem' : (cType === 'doctor' ? 'Doc' : cType);
 
-            tr.innerHTML = `
-                <td>${s.sale_date}</td>
-                <td>${s.stockist_name || '-'}</td>
-                <td>${s.customer_name || '-'}</td>
-                <td><span style="text-transform: capitalize;">${s.customer_type}</span></td>
-                <td><strong>₹${parseFloat(s.total_amt).toFixed(2)}</strong></td>
-                <td>${downloadBtn}</td>
+            // Date formatting
+            let dateOnly = s.sale_date ? s.sale_date.split(' ')[0] : '';
+            
+            // Tiny Download Arrow Button
+            let downloadBtn = `<a href="${BASE_URL}invoice/sales_pdf/${s.s_id}" target="_blank" class="btn-download-icon" title="Download"><i class="fa fa-download"></i></a>`;
+                                
+            // Build the compact 2-row card HTML
+            card.innerHTML = `
+                <!-- Row 1: Customer Name + Type Badge | Amount -->
+                <div class="card-row">
+                    <div class="customer-info">
+                        ${s.customer_name || '-'} 
+                        <span class="badge-type">${typeShort}</span>
+                    </div>
+                    <div class="text-amount">₹${parseFloat(s.total_amt).toFixed(2)}</div>
+                </div>
+                
+                <!-- Row 2: Stockist | Date & Download -->
+                <div class="card-row">
+                    <div class="stockist-info">
+                        ${s.stockist_name || '-'}
+                    </div>
+                    <div class="date-action-wrap">
+                        <span class="sale-card-date">${dateOnly}</span>
+                        ${downloadBtn}
+                    </div>
+                </div>
             `;
-            tableBody.appendChild(tr);
+            
+            listContainer.appendChild(card);
         });
     }
 
