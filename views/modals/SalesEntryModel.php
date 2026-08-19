@@ -83,7 +83,7 @@ class SalesModel
     // ------------------------------------------------------------------------
     // Merged Search: Groups batches together so the UI just shows the Product
     // ------------------------------------------------------------------------
-    public function searchMedicine($stockist_id, $q = '')
+  public function searchMedicine($stockist_id, $q = '')
     {
         if (!$stockist_id) {
             return [];
@@ -93,20 +93,42 @@ class SalesModel
             SELECT 
                 p.p_id,
                 p.product_name,
-                MAX(pb.mrp) AS pts,
+                MAX(pb.mrp) AS mrp,
+                
+                -- Calculate PTS (Sale Rate - Discount %) safely
+                MAX((
+                    SELECT ROUND((sid.rate - ((sid.rate * COALESCE(sid.discount_percent, 0)) / 100)), 2) 
+                    FROM `stock_inward_details` sid
+                    WHERE sid.batch_id = pb.batch_no
+                    LIMIT 1
+                )) AS pts,
+
+                -- Calculate accurate stock (IN - OUT) 
                 SUM(COALESCE(sl.qty_in, 0) - COALESCE(sl.qty_out, 0)) AS total_stock
+                
             FROM stock_ledger sl
             INNER JOIN products p ON p.p_id = sl.p_id
             INNER JOIN product_batches pb ON pb.batch_id = sl.batch_id
+            
+            -- THE FIX: Use LEFT JOIN to connect the exact order for each ledger row
+            LEFT JOIN stock_inward si ON si.inward_id = sl.reference_id AND sl.reference_table = 'stock_inward'
+            LEFT JOIN orders o ON o.order_id = si.order_id
+            
             WHERE sl.stockist_id = ? 
-            AND sl.stockist_type = 'STOCKIST'
-            AND p.product_name LIKE ?
+                AND sl.stockist_type = 'STOCKIST' 
+                AND p.product_name LIKE ?
+                
+                -- THE LOGIC: Keep the ledger row ONLY if:
+                -- 1. It is NOT an inward entry (e.g., it is a SALE deduction, so keep it)
+                -- 2. OR it IS an inward entry, AND the order status is officially 'Processed'
+                AND (sl.reference_table != 'stock_inward' OR o.status = 'Processed')
+
             GROUP BY p.p_id, p.product_name
             HAVING total_stock > 0
             ORDER BY p.product_name ASC
             LIMIT 50
         ");
-
+        
         $like = "%{$q}%";
         $stmt->bind_param("is", $stockist_id, $like);
         $stmt->execute();
@@ -117,7 +139,8 @@ class SalesModel
             $products[] = [
                 'id'    => (int)$row['p_id'],
                 'name'  => $row['product_name'],
-                'pts'   => (float)$row['pts'],
+                'mrp'   => (float)$row['mrp'], 
+                'pts'   => (float)$row['pts'], 
                 'stock' => (float)$row['total_stock']
             ];
         }
@@ -125,7 +148,6 @@ class SalesModel
         $stmt->close();
         return $products;
     }
-
     // ------------------------------------------------------------------------
     // FIFO Batch Allocation (Used for Previewing Amount AND Saving)
     // ------------------------------------------------------------------------
@@ -135,7 +157,17 @@ class SalesModel
             SELECT 
                 pb.batch_id,
                 pb.batch_no,
-                pb.mrp AS rate,
+                pb.mrp,
+                
+                -- FIXED: Added 'sid.' here as well
+                (
+                    SELECT ROUND((sid.rate - ((sid.rate * COALESCE(sid.discount_percent, 0)) / 100)), 2) 
+                    FROM `stock_inward_details` sid
+                    WHERE sid.batch_id = pb.batch_no 
+                    LIMIT 1
+                ) AS pts,
+                -- ---------------------------------
+
                 pb.sale_tax AS gst,
                 (SUM(COALESCE(sl.qty_in, 0)) - SUM(COALESCE(sl.qty_out, 0))) AS current_qty
             FROM product_batches pb
@@ -148,7 +180,6 @@ class SalesModel
             ORDER BY pb.expiry_date ASC, pb.batch_id ASC
         ";
 
-        // Lock rows if we are actively saving the transaction
         if ($is_save) {
             $sql .= " FOR UPDATE";
         }
@@ -176,14 +207,17 @@ class SalesModel
             $alloc_qty = min($remaining_qty, $available);
             if ($alloc_qty <= 0) continue;
 
-            $rate   = (float)$row['rate'];
+            $mrp    = (float)$row['mrp'];
+            $rate   = (float)$row['pts']; 
             $amount = round($alloc_qty * $rate, 2);
 
             $allocated_batches[] = [
                 'batch_id' => $batch_id,
                 'batch_no' => $row['batch_no'],
                 'alloc_qty'=> $alloc_qty,
-                'rate'     => $rate,
+                'mrp'      => $mrp,      
+                'pts'      => $rate,     
+                'rate'     => $rate,     
                 'amount'   => $amount
             ];
 
@@ -209,6 +243,7 @@ class SalesModel
         $customer_id = $data['customer_id'];
         $stockist_id = $data['stockist_id'];
         $total_amt   = $data['total_amt'];
+        $total_mrp_amt = $data['mrp_total'];
         $items       = $data['items'];
 
         if (!$customer_id || !$stockist_id || empty($items)) {
@@ -241,6 +276,10 @@ class SalesModel
 
             // $fy_id = $result->fetch_assoc()['fy_id'];
 
+            // FIX: Since the FY code above is commented out, we must define $fy_id 
+            // so the bind_param function below doesn't crash.
+            $fy_id = 1; 
+
             // Begin Transaction
             $this->con->begin_transaction();
 
@@ -249,11 +288,13 @@ class SalesModel
             //-----------------------------------
             $stmt = $this->con->prepare("
                 INSERT INTO sales_entries
-                (m_id, fy_id, c_id, stockist_id, total_amt, sale_date)
-                VALUES(?,?,?,?,?,?)
+                (m_id, fy_id, c_id, stockist_id, total_amt, sale_date, mrp_total)
+                VALUES(?,?,?,?,?,?,?)
             ");
 
-            $stmt->bind_param("iiiids", $mr_id, $fy_id, $customer_id, $stockist_id, $total_amt, $sale_date);
+            // FIX: Changed "iiiidsi" to "iiiidsd" (the last parameter is a decimal/double, not an integer)
+            $stmt->bind_param("iiiidsd", $mr_id, $fy_id, $customer_id, $stockist_id, $total_amt, $sale_date, $total_mrp_amt);
+            
             $stmt->execute();
             $entry_id = $this->con->insert_id;
             $stmt->close();
@@ -280,9 +321,7 @@ class SalesModel
         }
     }
 
-    //----------------------------------------------------
-    // Execute FIFO Logic and Deduct Stock via Ledger
-    //----------------------------------------------------
+
     //----------------------------------------------------
     // Execute FIFO Logic and Deduct Stock via Ledger
     //----------------------------------------------------

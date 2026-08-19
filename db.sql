@@ -244,9 +244,8 @@ ALTER TABLE `stock_inward`
 ADD COLUMN `cd_percent` DECIMAL(5,2) NOT NULL DEFAULT '0.00',
 ADD COLUMN `cd_amt` DECIMAL(10,2) NOT NULL DEFAULT '0.00' ;
 
-ALTER TABLE `stock_inward` 
-  ADD COLUMN drc BIGINT NOT NULL ,
-  ADD COLUMN mrc BIGINT NOT NULL ;
+
+
   
 
   ALTER TABLE stock_inward
@@ -291,3 +290,50 @@ ALTER TABLE stock_ledger
 ADD pts_rate DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER amt,
 ADD pts_amt DECIMAL(12,2) NOT NULL DEFAULT '0.00' AFTER pts_rate;
 
+-- 17-8-26
+ALTER TABLE `sales_entries` 
+ADD COLUMN `mrp_total` DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER `total_amt`;
+
+-- 18-8-26
+ALTER TABLE `stock_inward` 
+  ADD COLUMN drc BIGINT NOT NULL ,
+  ADD COLUMN mrc BIGINT NOT NULL ,
+  ADD COLUMN paid_amt DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+ADD COLUMN pay_status ENUM('unpaid', 'partial', 'paid') NOT NULL DEFAULT 'unpaid';
+
+CREATE TABLE payment_allocations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Changed to BIGINT to match payment_ledgers
+    ledger_id BIGINT NOT NULL, 
+    
+    inward_id INT NOT NULL, 
+    amount_allocated DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (ledger_id) REFERENCES payment_ledgers(id) ON DELETE CASCADE,
+    FOREIGN KEY (inward_id) REFERENCES stock_inward(inward_id) ON DELETE CASCADE
+);
+
+ALTER TABLE mr_users 
+ADD COLUMN commission_rate DECIMAL(5,2) NOT NULL DEFAULT 7.00;
+
+-- 1. Table to store the main payout record
+CREATE TABLE commission_payouts (
+    payout_id INT AUTO_INCREMENT PRIMARY KEY,
+    hq_id INT NOT NULL,
+    total_payout DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Table to store the multiple dynamic adjustments
+CREATE TABLE commission_adjustments (
+    adjustment_id INT AUTO_INCREMENT PRIMARY KEY,
+    payout_id INT NOT NULL,
+    description VARCHAR(255),
+    adj_type ENUM('+', '-') NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (payout_id) REFERENCES commission_payouts(payout_id) ON DELETE CASCADE
+);
+
+ALTER TABLE stock_inward ADD COLUMN commission_payout_id INT NULL;

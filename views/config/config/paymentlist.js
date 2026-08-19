@@ -1,27 +1,42 @@
 document.addEventListener('DOMContentLoaded', function() {
     
     const viewToggle = document.getElementById('viewToggle');
-    const billHeaders = document.getElementById('billHeaders');
-    const paymentHeaders = document.getElementById('paymentHeaders');
-    
     const stockistFilter = document.getElementById('stockist');
     const statusFilter = document.getElementById('statusFilter');
     const fromDateFilter = document.getElementById('from_date');
     const btnSearch = document.getElementById('btnSearch');
     const btnReset = document.getElementById('btnReset');
-    const paymentTable = document.getElementById('paymentTable');
+    
+    // Container reference
+    const cardContainer = document.getElementById('paymentCardContainer');
     const paymentCount = document.getElementById('paymentCount');
+
+    // Modal Elements (Make sure these are in your PHP HTML)
+    const proofModal = document.getElementById('proofModal');
+    const modalProofImage = document.getElementById('modalProofImage');
+    const closeProofModal = document.getElementById('closeProofModal');
+
+    // Close Modal Events
+    if (closeProofModal) {
+        closeProofModal.addEventListener('click', () => {
+            proofModal.style.display = 'none';
+        });
+    }
+    
+    window.addEventListener('click', (e) => {
+        if (e.target === proofModal) {
+            proofModal.style.display = 'none';
+        }
+    });
 
     // Update Status Dropdown Options based on the View Selected
     function updateStatusOptions() {
         if (viewToggle.value === 'bills') {
             statusFilter.innerHTML = `
-                <option value="pending" selected>Pending / Unpaid Bills</option>
-                <option value="paid">Paid / Cleared Bills</option>
+                <option value="pending" selected>Unpaid Bills</option>
+                <option value="paid">Paid Bills</option>
                 <option value="all">All Bills</option>
             `;
-            billHeaders.style.display = 'table-header-group';
-            paymentHeaders.style.display = 'none';
         } else {
             statusFilter.innerHTML = `
                 <option value="pending" selected>Pending Approvals</option>
@@ -29,19 +44,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 <option value="rejected">Rejected Payments</option>
                 <option value="all">All Payments</option>
             `;
-            billHeaders.style.display = 'none';
-            paymentHeaders.style.display = 'table-header-group';
         }
     }
 
     function fetchPayments() {
-        paymentTable.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading records...</td></tr>';
+        cardContainer.innerHTML = '<div class="empty-state"><i class="fa fa-spinner fa-spin"></i> Loading records...</div>';
 
         const params = new URLSearchParams({
             route: 'payment',
             action: 'fetch_list', 
             mr_id: typeof mr_id !== 'undefined' ? mr_id : 0,
-            view_mode: viewToggle.value, // Tells PHP to get bills OR payments
+            view_mode: viewToggle.value, 
             stockist_id: stockistFilter.value,
             status_filter: statusFilter.value,
             from_date: fromDateFilter.value
@@ -52,28 +65,29 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     if(viewToggle.value === 'bills') {
-                        renderBillTable(data.payments);
+                        renderBillCards(data.payments);
                     } else {
-                        renderPaymentTable(data.payments);
+                        renderPaymentCards(data.payments);
                     }
                 } else {
-                    paymentTable.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">${data.msg}</td></tr>`;
+                    cardContainer.innerHTML = `<div class="empty-state" style="color:red;">${data.msg}</div>`;
                     paymentCount.textContent = 0;
                 }
             })
             .catch(error => {
                 console.error('Error fetching payments:', error);
-                paymentTable.innerHTML = '<tr><td colspan="7" style="text-align:center; color:red;">Failed to connect to server.</td></tr>';
+                cardContainer.innerHTML = '<div class="empty-state" style="color:red;">Failed to connect to server.</div>';
             });
     }
 
-    // Render Logic for BILLS
-    function renderBillTable(payments) {
-        paymentTable.innerHTML = '';
+    
+    // Render Logic for BILLS (Card View)
+    function renderBillCards(payments) {
+        cardContainer.innerHTML = '';
         let count = 0;
 
         if (!payments || payments.length === 0) {
-            paymentTable.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found</td></tr>';
+            cardContainer.innerHTML = '<div class="empty-state">No bills found for the selected filters.</div>';
             paymentCount.textContent = 0;
             return;
         }
@@ -84,47 +98,65 @@ document.addEventListener('DOMContentLoaded', function() {
             if (filterVal === 'paid' && p.status !== 'PAID') return;
 
             count++;
-            let orderNoText = p.order_id ? `ORD0${p.order_id}` : (p.reference_no || 'N/A');
-            let amount = p.pending_amount || 0;
+            let orderNoText = p.inward_no ? `${p.inward_no}` : (p.inward_no || 'N/A');
+            
+            // FIX: Ensure amounts are mathematically rounded integers
+            let originalAmt = Math.round(p.original_amount || 0);
+            let pendingAmt = Math.round(p.pending_amount || 0);
             
             let statusClass = 'badge-pending';
             let displayStatus = p.status || 'UNPAID';
             
-            if (p.status === 'PAID') statusClass = 'badge-approved';
-            else if (p.status !== 'PARTIAL') statusClass = 'badge-rejected';
-            
-            let payButton = p.status !== 'PAID' 
-                ? `<a href="${BASE_URL}payment/entry?stockist_id=${p.stockist_id}" class="btn-submit" style="padding:4px 10px; font-size:12px; text-decoration:none; display:inline-block; border-radius:4px;">Pay Now</a>`
-                : `<span style="color:#28a745; font-weight:600; font-size:12px;">Cleared ✓</span>`;
+            if (p.status === 'PAID') {
+                statusClass = 'badge-approved';
+                pendingAmt = 0; // FIX: Force pending to 0 if the bill is marked PAID
+            } else if (p.status !== 'PARTIAL') {
+                statusClass = 'badge-rejected';
+            }
 
-            let tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${p.created_at ? p.created_at.split(' ')[0] : '-'}</td>
-                <td><strong>${orderNoText}</strong></td>
-                <td>${p.stockist_name || '-'}</td>
-                <td>₹${parseFloat(p.original_amount).toFixed(2)}</td>
-                <td style="color: #dc3545;"><strong>₹${parseFloat(amount).toFixed(2)}</strong></td>
-                <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
+            let card = document.createElement('div');
+            card.className = 'payment-card';
+            card.innerHTML = `
+                <div class="card-header">
+                    <strong>${orderNoText}</strong> <span style= "font-size:12px;">${p.created_at ? p.created_at.split(' ')[0] : '-'}</span>
+                    <span class="status-badge ${statusClass}">${displayStatus}</span>
+                </div>
+                <div class="card-body">
+                    <div class="card-row">
+                        <span>Stockist</span>
+                        <span style="text-align: right; max-width: 60%;">${p.stockist_name || '-'}</span>
+                    </div>
+                    <div class="card-row">
+                        <span>Bill Amount</span>
+                        <span>₹${originalAmt.toFixed(2)}</span>
+                    </div>
+                    <div class="card-row amount-highlight">
+                        <span>Pending Balance</span>
+                        <strong style="color: #dc3545;">₹${pendingAmt.toFixed(2)}</strong>
+                    </div>
+                </div>
             `;
-            paymentTable.appendChild(tr);
+            cardContainer.appendChild(card);
         });
 
+        if(count === 0) {
+            cardContainer.innerHTML = '<div class="empty-state">No matching bills found.</div>';
+        }
         paymentCount.textContent = count;
     }
 
-    // Render Logic for SUBMITTED PAYMENTS
-    function renderPaymentTable(payments) {
-        paymentTable.innerHTML = '';
+    // Render Logic for SUBMITTED PAYMENTS (Card View)
+    function renderPaymentCards(payments) {
+        cardContainer.innerHTML = '';
         let count = 0;
 
         if (!payments || payments.length === 0) {
-            paymentTable.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found</td></tr>';
+            cardContainer.innerHTML = '<div class="empty-state">No payments found for the selected filters.</div>';
             paymentCount.textContent = 0;
             return;
         }
 
         payments.forEach(p => {
-            // Lowercase matching to prevent case-sensitivity bugs
             let filterVal = statusFilter.value.toLowerCase();
             let recordStatus = p.status ? p.status.toLowerCase() : 'pending';
 
@@ -135,26 +167,59 @@ document.addEventListener('DOMContentLoaded', function() {
             if (recordStatus === 'approved') statusClass = 'badge-approved';
             if (recordStatus === 'rejected') statusClass = 'badge-rejected';
 
-            // Capitalize for visual display only
             let displayStatus = recordStatus.charAt(0).toUpperCase() + recordStatus.slice(1);
 
+            // UPDATED: Changed from an <a> tag to a <button> that triggers the popup
             let actionBtn = p.proof_image 
-                ? `<a href="${BASE_URL}${p.proof_image}" target="_blank" class="btn btn-sm btn-info text-white" style="text-decoration:none; padding:4px 8px; border-radius:4px;"><i class="fa fa-eye"></i> Proof</a>` 
-                : '-';
+                ? `<button type="button" class="view-proof-btn" data-img="${BASE_URL}../${p.proof_image}" style="background-color: #17a2b8; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;"><i class="fa fa-eye"></i> View Proof</button>` 
+                : `<span style="color:#aaa; font-size:13px;">No Proof</span>`;
 
-            let tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${p.payment_date || '-'}</td>
-                <td><strong>${p.reference_no || 'N/A'}</strong></td>
-                <td>${p.stockist_name || '-'}</td>
-                <td style="color: #28a745;"><strong>₹${parseFloat(p.amount).toFixed(2)}</strong></td>
-                <td>${p.payment_mode || 'Bank'}</td>
-                <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
-                <td>${actionBtn}</td>
+            let card = document.createElement('div');
+            card.className = 'payment-card';
+            card.innerHTML = `
+                <div class="card-header">
+                    <strong>Ref: ${p.reference_no || 'N/A'}</strong>
+                    <span class="status-badge ${statusClass}">${displayStatus}</span>
+                </div>
+                <div class="card-body">
+                    <div class="card-row">
+                        <span>Pay Date</span>
+                        <span>${p.payment_date || '-'}</span>
+                    </div>
+                    <div class="card-row">
+                        <span>Stockist</span>
+                        <span style="text-align: right; max-width: 60%;">${p.stockist_name || '-'}</span>
+                    </div>
+                    <div class="card-row">
+                        <span>Pay Mode</span>
+                        <span>${p.payment_mode || 'Bank'}</span>
+                    </div>
+                    <div class="card-row amount-highlight">
+                        <span>Amount Paid</span>
+                        <strong style="color: #28a745;">₹${parseFloat(p.amount).toFixed(2)}</strong>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    ${actionBtn}
+                </div>
             `;
-            paymentTable.appendChild(tr);
+            cardContainer.appendChild(card);
         });
 
+        // NEW: Attach click events to all dynamically created View Proof buttons
+        document.querySelectorAll('.view-proof-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const imgSrc = this.getAttribute('data-img');
+                if (modalProofImage && proofModal) {
+                    modalProofImage.src = imgSrc;
+                    proofModal.style.display = 'flex';
+                }
+            });
+        });
+
+        if(count === 0) {
+            cardContainer.innerHTML = '<div class="empty-state">No matching payments found.</div>';
+        }
         paymentCount.textContent = count;
     }
 

@@ -57,8 +57,8 @@ include 'view/layout/header.php';
                                                 while($row = mysqli_fetch_assoc($query))
                                                 {
                                                     $qty  = (int)$row['qty'];
-                                                    $rate = (float)$row['pts'];
-                                                    $amt  = $qty * $rate;
+                                                    $rate = (float)$row['rate'];
+                                                    $amt  = 	(float)$row['net_total'];
 
                                                     $grand_total += $amt;
                                                 ?>

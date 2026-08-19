@@ -40,6 +40,7 @@ class LoginController
             $_SESSION['mr_name']=$user['hq_name'];
             $_SESSION['status']=$user['status'];
             $_SESSION['state_id']= $user['state']; 
+            $_SESSION['hq_id']= $user['hq_id']; 
 
             echo json_encode([
                 'status'=>'success',

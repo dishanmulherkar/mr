@@ -46,9 +46,10 @@ if (!$order_data) {
 <div class="page-content">
 
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
-        <h4>Order Reference: ORD0<?= $order_data['order_id'] ?></h4>
+        <!-- <h2>Order NO: ORD0<?= $order_data['order_id'] ?></h2> -->
+        <h5>Invoice NO :<?= $order_data['inward_no'] ?> </h5>
         <a href="<?= BASE_URL ?>OrderEntry/view" class="btn-submit" style="background: #6c757d; padding: 6px 12px;">
-            <i class="fa fa-arrow-left"></i> Back to List
+            <i class="fa fa-arrow-left"></i>
         </a>
     </div>
 

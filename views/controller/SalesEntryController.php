@@ -68,6 +68,7 @@ class SalesEntryController
                 'customer_id' => (int)($_POST['customer_id'] ?? 0),
                 'stockist_id' => (int)($_POST['stockist_id'] ?? 0),
                 'total_amt'   => (float)($_POST['total_amt'] ?? 0),
+                'mrp_total'   => (float)($_POST['mrp_total'] ?? 0),
                 'items'       => json_decode($_POST['items'] ?? '[]', true)
 
             ];

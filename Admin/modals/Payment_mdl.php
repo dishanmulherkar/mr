@@ -38,10 +38,8 @@ class PaymentApproval_mdl {
     // Secure Transaction to Approve or Reject a Payment
     public function processApproval($payment_id, $admin_id, $action_status) {
         try {
-            // Start Transaction
             $this->con->begin_transaction();
 
-            // 1. Fetch and lock the pending payment record (prevents double-clicks/race conditions)
             $stmt = $this->con->prepare("SELECT stockist_id, amount_paid FROM payment_details WHERE id = ? AND approval_status = 'pending' FOR UPDATE");
             $stmt->bind_param("i", $payment_id);
             $stmt->execute();
@@ -52,17 +50,15 @@ class PaymentApproval_mdl {
             }
             
             $payment = $result->fetch_assoc();
-            $stockist_id = $payment['stockist_id'];
-            $amount_paid = $payment['amount_paid'];
+            $stockist_id = (int)$payment['stockist_id'];
+            $amount_paid = (float)$payment['amount_paid'];
             $stmt->close();
 
-            // 2. Update the payment_details table
             $stmt = $this->con->prepare("UPDATE payment_details SET approval_status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?");
             $stmt->bind_param("sii", $action_status, $admin_id, $payment_id);
             $stmt->execute();
             $stmt->close();
 
-            // 3. ONLY if Approved, Insert into the payment_ledgers to decrease debt
             if ($action_status === 'approved') {
                 $transaction_type = 'payment_made';
                 $balance_action = 'decrease_debt';
@@ -70,10 +66,60 @@ class PaymentApproval_mdl {
                 $stmt = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, transaction_type, reference_id, amount, balance_action) VALUES (?, ?, ?, ?, ?)");
                 $stmt->bind_param("isids", $stockist_id, $transaction_type, $payment_id, $amount_paid, $balance_action);
                 $stmt->execute();
+                
+                $ledger_id = $this->con->insert_id; 
                 $stmt->close();
+
+                $remaining_payment = $amount_paid;
+
+                $stmt_bills = $this->con->prepare("
+                    SELECT inward_id, grand_total, paid_amt 
+                    FROM stock_inward 
+                    WHERE stockist_id = ? AND pay_status != 'paid' 
+                    ORDER BY inward_id ASC
+                ");
+                $stmt_bills->bind_param("i", $stockist_id);
+                $stmt_bills->execute();
+                $unpaid_bills = $stmt_bills->get_result();
+                $stmt_bills->close();
+
+                if ($unpaid_bills->num_rows > 0) {
+                    $stmt_alloc = $this->con->prepare("INSERT INTO payment_allocations (ledger_id, inward_id, amount_allocated) VALUES (?, ?, ?)");
+                    $stmt_update = $this->con->prepare("UPDATE stock_inward SET paid_amt = ?, pay_status = ? WHERE inward_id = ?");
+
+                    while ($bill = $unpaid_bills->fetch_assoc()) {
+                        if ($remaining_payment <= 0) break; 
+
+                        $bill_balance = (float)$bill['grand_total'] - (float)$bill['paid_amt'];
+                        
+                        $allocate_amount = min($remaining_payment, $bill_balance);
+                        
+                        $stmt_alloc->bind_param("iid", $ledger_id, $bill['inward_id'], $allocate_amount);
+                        $stmt_alloc->execute();
+
+                        $new_paid_amt = (float)$bill['paid_amt'] + $allocate_amount;
+                        
+                        // ==========================================
+                        // THE FIX: Standard Round-Off Comparison
+                        // ==========================================
+                        // Round both the Grand Total and the Paid Amount to the nearest whole number (integer)
+                        $rounded_grand_total = round((float)$bill['grand_total']);
+                        $rounded_paid_amt = round($new_paid_amt);
+                        
+                        // Compare the rounded whole numbers
+                        $new_status = ($rounded_paid_amt >= $rounded_grand_total) ? 'paid' : 'partial';
+
+                        $stmt_update->bind_param("dsi", $new_paid_amt, $new_status, $bill['inward_id']);
+                        $stmt_update->execute();
+
+                        $remaining_payment -= $allocate_amount;
+                    }
+
+                    $stmt_alloc->close();
+                    $stmt_update->close();
+                }
             }
 
-            // Commit the transaction
             $this->con->commit();
             return ['success' => true, 'msg' => 'Payment marked as ' . strtoupper($action_status) . ' successfully.'];
 

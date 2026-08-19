@@ -195,6 +195,11 @@ switch($page)
         include 'controller/Payment_ctl.php';
         $controller = new PaymentApproval_ctl($con);
         break;  
+    
+    case 'commision':
+    include 'controller/commision/Commission_ctl.php';
+    $controller = new CommissionController($con);
+    break;  
 
     case 'dashboard':
     default:

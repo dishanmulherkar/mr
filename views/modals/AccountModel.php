@@ -14,8 +14,9 @@ class AccountModel
         $mr_id = (int)$mr_id;
 
         $result = mysqli_query($this->db,"
-            SELECT *
-            FROM mr_users
+            SELECT mr.*, h.hq_name
+            FROM mr_users mr
+            INNER JOIN headquarter h ON h.headquarter_id = mr.hq_id 
             WHERE m_id='$mr_id'
             LIMIT 1
         ");

@@ -74,7 +74,10 @@ include 'view/layout/header.php';
 
         <!-- ── Total ─────────────────────────────────────── -->
         <div class="footer-total">
-          Total Amount : <span id="total-amount">₹ 0.00</span>
+          Total PTS : <span id="total-amount">₹ 0.00</span>
+        </div>
+        <div class="footer-total">
+          Total Mrp Amt : <span id="total-amount-pts">₹ 0.00</span>
         </div>
 
         <!-- ── Submit ─────────────────────────────────────── -->

@@ -32,8 +32,8 @@ class AccountController
         $mr=$this->model->getMR($mr_id);
 
         $districts=$this->model->getDistricts($mr['state']);
-        $totalStockist=$this->model->totalStockist($mr_id);
-        $totalCustomer=$this->model->totalCustomer($mr_id);
+        $totalStockist=$this->model->totalStockist($mr['hq_id']);
+        $totalCustomer=$this->model->totalCustomer($mr['hq_id']);
         $initials = $this->initials($mr['mr_name']);
 
 

@@ -57,24 +57,20 @@ class payment_manage_ctl {
             $result = $this->model->addPayment($_POST, $_FILES);
 
             if ($result['success']) {
-                // Set success message in session if you use session alerts
-                // $_SESSION['success_msg'] = $result['msg'];
-                
-                // Redirect back to the payment list
-               header("Location: " . BASE_URL . "payment");
+                // Set the success message in the session
+                $_SESSION['success_msg'] = "Payment submitted successfully. It will reflect in your ledger once the Admin approves it.";
+                header("Location: " . BASE_URL . "payment");
                 exit;
             } else {
-                // Set error message
-                // $_SESSION['error_msg'] = $result['msg'];
-                
-                            // Redirect back to the entry form
-                            header("Location: " . BASE_URL . "payment/entry");
+                // Set the error message in the session (using the message from your model)
+                $_SESSION['error_msg'] = $result['msg'];
+                // Redirect back to the entry form
+                header("Location: " . BASE_URL . "payment/entry");
                 exit;
             }
         } else {
             // Direct access not allowed, push back to index
             header("Location: " . BASE_URL . "payment");
-
             exit;
         }
     }

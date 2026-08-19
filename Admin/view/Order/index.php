@@ -140,7 +140,7 @@ include 'view/layout/header.php';
                                                     <!-- 2. Invoice -->
                                                     <li>
                                                         <a class="dropdown-item" href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
-                                                            <i class="fa fa-file-text-o text-info me-2"></i> Invoice
+                                                            <i class="fa fa-download text-info me-2"></i> DOWNLOAD
                                                         </a>
                                                     </li>
                                                 <?php } elseif($row['status'] == 'Processed') { ?>
@@ -152,7 +152,7 @@ include 'view/layout/header.php';
                                                     <!-- 2. Invoice -->
                                                     <li>
                                                         <a class="dropdown-item" href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
-                                                            <i class="fa fa-file-text-o text-info me-2"></i> Invoice
+                                                            <i class="fa fa-download text-info me-2"></i> DOWNLOAD
                                                         </a>
                                                     </li>
                                                 <?php } ?>

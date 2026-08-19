@@ -172,7 +172,8 @@ class InvoiceModel
                 p.product_name,
                 p.hsn_code,
                 pb.batch_no,
-                pb.expiry_date
+                pb.expiry_date,
+                pb.mrp as sale_mrp
             FROM sales_details sd
             LEFT JOIN products p 
                 ON p.p_id = sd.p_id

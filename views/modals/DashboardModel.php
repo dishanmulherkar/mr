@@ -8,36 +8,47 @@ private $db;
     }
 
     // Financial Year / Target
-    public function getTargetDetails($mr_id)
+   public function getTargetDetails($mr_id)
     {
+        // 1. Escape the variable to prevent SQL injection
+        $mr_id = mysqli_real_escape_string($this->db, $mr_id);
+
+        // 2. Added aliases (fy.) to the WHERE clause to fix ambiguous columns
         $query = "
             SELECT
-                fy_id,
-                target_amount,
-                start_date,
-                end_date
-            FROM financial_year
-            WHERE hq_id='$mr_id'
-            AND status='1'
+                fy.fy_id,
+                fy.target_amount,
+                fy.start_date,
+                fy.end_date
+            FROM financial_year fy
+            INNER JOIN mr_users h
+                ON h.m_id ='$mr_id'
+            INNER JOIN headquarter hq
+                ON hq.headquarter_id =  h.hq_id
+            WHERE fy.hq_id =  h.hq_id
+            AND fy.status = '1'
             LIMIT 1
         ";
 
         $result = mysqli_query($this->db, $query);
 
+        // Optional: Error handling to easily catch DB issues
+        if (!$result) {
+            die(mysqli_error($this->db));
+        }
+
         return mysqli_fetch_assoc($result);
     }
 // Primary Sale
-    public function getPrimarySale($mr_id, $start_date, $end_date)
+    public function getPrimarySale($mr_id, $start_date, $end_date,$hq_id)
     {
         // 1. Base query without the date filter
-        $query = "
-            SELECT COALESCE(SUM(sid.qty * sid.rate), 0) AS primary_sale
-            FROM stock_inward si
-            INNER JOIN stock_inward_details sid
-                ON si.inward_id = sid.inward_id
-            INNER JOIN stockists st
-                ON si.stockist_id = st.stockist_id
-            WHERE st.hq_id = '$mr_id'
+           $query = "
+           SELECT COALESCE(SUM(si.sub_total), 0) AS primary_sale
+        FROM stock_inward si
+        INNER JOIN stockists st
+            ON si.stockist_id = st.stockist_id
+        WHERE st.hq_id = '$hq_id'
         ";
 
         // 2. Append the date filter ONLY if dates are passed in
@@ -84,7 +95,7 @@ private $db;
             INNER JOIN sales_details sd
                 ON se.s_id=sd.s_id
             WHERE se.m_id='$mr_id'
-            AND se.fy_id='$fy_id'
+            
         ";
 
         $result = mysqli_query($this->db, $query);

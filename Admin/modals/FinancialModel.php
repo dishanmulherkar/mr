@@ -24,11 +24,13 @@ class FinancialModel
                 $this->con,
                 "SELECT
                     fy.*,
-                    h.hq_name,
+                    h.mr_name,
                     s.state_name
                 FROM financial_year fy
-                INNER JOIN mr_users h
-                    ON fy.hq_id = h.m_id
+                INNER JOIN headquarter hq
+                    ON hq.headquarter_id = fy.hq_id
+                LEFT JOIN mr_users h
+                    ON hq.headquarter_id = h.hq_id
                 INNER JOIN state s
                     ON h.state = s.state_id
                 ORDER BY fy.created_at DESC"

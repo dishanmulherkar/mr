@@ -12,7 +12,7 @@ class LoginModel
     public function getUserByEmail($email)
     {
         $stmt = $this->db->prepare("
-            SELECT m_id,hq_name,email,password,status,state
+            SELECT m_id,hq_name,email,password,status,state ,hq_id
             FROM mr_users
             WHERE email=?
         ");

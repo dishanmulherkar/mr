@@ -203,6 +203,7 @@ function addToCart() {
             name       : selectedProduct.name,
             qty,
             pts        : parseFloat(selectedProduct.pts),
+            mrp         : parseFloat(selectedProduct.mrp),
             maxStock   : selectedProduct.stock,
         };
         editingIndex = -1;
@@ -228,6 +229,7 @@ function addToCart() {
                 name       : selectedProduct.name,
                 qty,
                 pts        : parseFloat(selectedProduct.pts),
+                  mrp         : parseFloat(selectedProduct.mrp),
                 maxStock   : selectedProduct.stock,
             });
         }
@@ -251,29 +253,41 @@ function renderCart() {
     if (!cart.length) {
         tbody.innerHTML = '<tr id="empty-row"><td colspan="6" style="text-align:center;color:var(--txt-muted);padding:22px 0;">No items added yet</td></tr>';
         document.getElementById('total-amount').textContent    = '₹ 0.00';
+        document.getElementById('total-amount-pts').textContent    = '₹ 0.00';
         document.getElementById('btn-submit').disabled         = true;
         return;
     }
 
     let total = 0;
+    let mrp_total = 0;
+    
     cart.forEach((item, idx) => {
-        const amt = item.qty * item.pts;
-        total    += amt;
+        // FIX: Ensure pts and mrp are valid numbers even if missing from old session storage
+        const safe_pts = Number(item.pts) || 0;
+        const safe_mrp = Number(item.mrp) || 0;
+
+        const amt = item.qty * safe_pts;
+        const mrp_amt = item.qty * safe_mrp;
+        console.log(mrp_amt);
+        total += amt;
+        mrp_total += mrp_amt;
+        
         const tr  = document.createElement('tr');
+        
         tr.innerHTML = `
         <td>${idx + 1}</td>
         <td>
-    ${esc(item.name)}
-    <br>
-    
-</td>
-        <td>${item.qty}</td>
-        <td>
-        <button class="btn-remove" onclick="startEdit(${idx})" title="Edit" style="color:var(--violet)">✎</button>
+            ${esc(item.name)}
+            <br>
+           
         </td>
+        <td>${item.qty}</td>
+        <td>₹${amt.toFixed(2)}</td>
         <td>
-        <button class="btn-remove" onclick="removeItem(${idx})" title="Remove">✕</button>
-        </td>`;
+            <button class="btn-remove" onclick="startEdit(${idx})" title="Edit" style="color:var(--violet)">✎</button>
+            <button class="btn-remove" onclick="removeItem(${idx})" title="Remove">✕</button>
+        </td>
+        `;
         tbody.appendChild(tr);
     });
 
@@ -282,15 +296,22 @@ function renderCart() {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
-    document.getElementById('btn-submit').disabled      = false;
+    console.log(mrp_total);
+    document.getElementById('total-amount-pts').textContent =
+    '₹ ' + mrp_total.toLocaleString('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    
+    document.getElementById('btn-submit').disabled = false;
 }
+
 
 function removeItem(idx) {
     cart.splice(idx, 1);
     renderCart();
     saveCartSession();
 }
-
 /* ════════════════════════════════════════════════════
    SUBMIT
 ════════════════════════════════════════════════════ */
@@ -320,85 +341,82 @@ document.getElementById('btn-submit').addEventListener('click', function () {
         return;
     }
 
- const total_amt = cart.reduce(
-    (sum, item) => sum + (parseFloat(item.qty) * parseFloat(item.pts)),
-    0
-);
+    // Calculate total PTS amount
+    const total_amt = cart.reduce(
+        (sum, item) => sum + (parseFloat(item.qty) * parseFloat(item.pts || 0)),
+        0
+    );
+
+    // ADDED: Calculate total MRP amount
+    const total_mrp_amt = cart.reduce(
+        (sum, item) => sum + (parseFloat(item.qty) * parseFloat(item.mrp || 0)),
+        0
+    );
 
     const btn = this;
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
     fetch( 'SalesEntry/saveSale', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: new URLSearchParams({
-        customer_id,
-        stockist_id,
-        sale_date,
-        type: sale_type,
-        total_amt: total_amt.toFixed(2),
-        items: JSON.stringify(
-            cart.map(i => ({
-                product_id: i.product_id,
-                batch_id: i.batch_id,
-                qty: i.qty,
-                pts: i.pts
-            }))
-        )
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+            customer_id,
+            stockist_id,
+            sale_date,
+            type: sale_type,
+            total_amt: total_amt.toFixed(2),
+            mrp_total: total_mrp_amt.toFixed(2), // <-- ADDED THIS: Sending the MRP total to PHP
+            items: JSON.stringify(
+                cart.map(i => ({
+                    product_id: i.product_id,
+                    batch_id: i.batch_id,
+                    qty: i.qty,
+                    pts: i.pts
+                }))
+            )
+        })
     })
-})
-.then(async response => {
+    .then(async response => {
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.msg || "Server Error");
+        }
+        return data;
+    })
+    .then(data => {
+        if (data.success) {
+            showToast(
+                'Sale saved! Entry #' + data.entry_id,
+                'success'
+            );
 
-    const data = await response.json();
+            cart = [];
+            renderCart();
 
-    if (!response.ok) {
-        throw new Error(data.msg || "Server Error");
-    }
+            sessionStorage.removeItem('saved_sales_cart');
+            sessionStorage.removeItem('saved_sales_form');
 
-    return data;
-})
-.then(data => {
+            document.getElementById('customer-select').value = '';
+            document.getElementById('stockist-select').value = '';
 
-    if (data.success)
-    {
-        showToast(
-            'Sale saved! Entry #' + data.entry_id,
-            'success'
-        );
+            document.getElementById('date-from').value =
+                new Date().toISOString().split('T')[0];
 
-        cart = [];
-        renderCart();
-
-        sessionStorage.removeItem('saved_sales_cart');
-        sessionStorage.removeItem('saved_sales_form');
-
-        document.getElementById('customer-select').value = '';
-        document.getElementById('stockist-select').value = '';
-
-        document.getElementById('date-from').value =
-            new Date().toISOString().split('T')[0];
-
-        stockistSel.dispatchEvent(new Event('change'));
-    }
-    else
-    {
-        showToast(data.msg, 'error');
-    }
-})
-.catch(error => {
-
-    showToast(error.message, 'error');
-
-})
-.finally(() => {
-
-    btn.disabled = false;
-    btn.textContent = 'Submit';
-
-});
+            stockistSel.dispatchEvent(new Event('change'));
+        } else {
+            showToast(data.msg, 'error');
+        }
+    })
+    .catch(error => {
+        showToast(error.message, 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = 'Submit';
+    });
 });
 /* ════════════════════════════════════════════════════
    HELPERS
@@ -430,6 +448,7 @@ function startEdit(idx) {
         batch_label : item.batch,
         name        : item.name,
         pts         : item.pts,
+        mrp         : item.mrp,   // <-- ADDED THIS: Keep MRP memory during edit
         stock       : item.maxStock,
     };
 

@@ -158,7 +158,7 @@ action="<?= isset($ROW)
                                             name="super_stockist_id"
                                             id="super_stockist_id"
                                             class="form-control">
-                                                <option value="">Select Super Stockist</option>
+                                                <option value="">Select Super Stockist  </option>
                                             <?php while($srow=mysqli_fetch_assoc($super_stockists)){ ?>
 
                                                <option

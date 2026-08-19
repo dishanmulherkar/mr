@@ -70,176 +70,192 @@ class Payment_model {
     // Save a new pending payment entry
     public function addPayment($data, $file) {
         try {
-            $stockist_id = (int)$data['stockist_id'];
-            $amount_paid = (float)$data['amount_paid'];
-            $payment_method = $data['payment_method'];
-            $bank_details = $data['bank_details'] ?? '';
+            $stockist_id = (int)($data['stockist_id'] ?? 0);
+            $amount_paid = (float)($data['amount_paid'] ?? 0);
+
+            $payment_method = trim($data['payment_method'] ?? '');
+
+            // If "Other" is selected, use the custom payment method
+            if ($payment_method === 'Other') {
+                $other_payment_method = trim($data['other_payment_method'] ?? '');
+
+                if ($other_payment_method === '') {
+                    throw new Exception("Please enter the other payment method.");
+                }
+
+                $payment_method = $other_payment_method;
+            }
+
+            $bank_details = trim($data['bank_details'] ?? '');
             $approval_status = 'pending';
 
             $screenshot_path = null;
-            if (isset($file['screenshot']) && $file['screenshot']['error'] === UPLOAD_ERR_OK) {
+
+            // Upload payment proof
+            if (
+                isset($file['screenshot']) &&
+                $file['screenshot']['error'] === UPLOAD_ERR_OK
+            ) {
+
                 $physical_upload_dir = '../uploads/payments/';
-                
+
                 if (!is_dir($physical_upload_dir)) {
                     mkdir($physical_upload_dir, 0777, true);
                 }
 
-                $file_extension = pathinfo($file['screenshot']['name'], PATHINFO_EXTENSION);
+                $file_extension = strtolower(
+                    pathinfo($file['screenshot']['name'], PATHINFO_EXTENSION)
+                );
+
+                // Allowed file types
+                $allowed_extensions = ['jpg', 'jpeg', 'png', 'pdf'];
+
+                if (!in_array($file_extension, $allowed_extensions)) {
+                    throw new Exception("Invalid file type. Only JPG, JPEG, PNG and PDF are allowed.");
+                }
+
+                // Check file size - 2MB
+                if ($file['screenshot']['size'] > 2 * 1024 * 1024) {
+                    throw new Exception("Payment proof file must be less than 2MB.");
+                }
+
                 $new_filename = 'pay_' . time() . '_' . rand(1000, 9999) . '.' . $file_extension;
+
                 $target_file = $physical_upload_dir . $new_filename;
 
-                if (move_uploaded_file($file['screenshot']['tmp_name'], $target_file)) {
+                if (move_uploaded_file(
+                    $file['screenshot']['tmp_name'],
+                    $target_file
+                )) {
+
                     $screenshot_path = 'uploads/payments/' . $new_filename;
+
                 } else {
-                    throw new Exception("Failed to upload the screenshot.");
+                    throw new Exception("Failed to upload the payment proof.");
                 }
             }
 
+            // Insert payment
             $stmt = $this->con->prepare("
                 INSERT INTO payment_details 
-                (stockist_id, amount_paid, payment_method, bank_details, screenshot_path, approval_status) 
+                (
+                    stockist_id,
+                    amount_paid,
+                    payment_method,
+                    bank_details,
+                    screenshot_path,
+                    approval_status
+                ) 
                 VALUES (?, ?, ?, ?, ?, ?)
             ");
-            
-            $stmt->bind_param("idssss", $stockist_id, $amount_paid, $payment_method, $bank_details, $screenshot_path, $approval_status);
-            
+
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . $this->con->error);
+            }
+
+            $stmt->bind_param(
+                "idssss",
+                $stockist_id,
+                $amount_paid,
+                $payment_method,
+                $bank_details,
+                $screenshot_path,
+                $approval_status
+            );
+
             if ($stmt->execute()) {
+
                 $stmt->close();
-                return ['success' => true, 'msg' => 'Payment entry submitted successfully. Pending approval.'];
+
+                return [
+                    'success' => true,
+                    'msg' => 'Payment entry submitted successfully. Pending approval.'
+                ];
+
             } else {
+
                 throw new Exception($stmt->error);
             }
 
         } catch (Exception $e) {
-            return ['success' => false, 'msg' => 'Database error: ' . $e->getMessage()];
+
+            return [
+                'success' => false,
+                'msg' => 'Database error: ' . $e->getMessage()
+            ];
         }
     }
 
+    // Action: Fetch filtered payments and ledger history from the database (SECURED TO HQ)
     // Action: Fetch filtered payments and ledger history from the database (SECURED TO HQ)
     public function getFilteredPayments($mr_id, $stockist_id, $from_date) {
         $mr_id = (int)$mr_id;
         $stockist_id = (int)$stockist_id;
         
         $cond = "1=1";
+        
         if ($stockist_id > 0) {
             $cond .= " AND s.stockist_id = " . $stockist_id;
         }
 
-        // FIX: Added the HQ Security Filter so they can't see other HQs' bills
         if ($mr_id > 0) {
             $cond .= " AND s.hq_id IN (SELECT hq_id FROM mr_users WHERE m_id = $mr_id)";
         }
 
-        // We use the EXACT SAME conditions as the getOutstandingBalance query
-        // so PHP and SQL never disagree on what is a debit or credit.
+        if (!empty($from_date)) {
+            $safe_date = mysqli_real_escape_string($this->con, $from_date);
+            $cond .= " AND DATE(si.created_at) = '$safe_date'";
+        }
+
+        // FIX: Added ROUND() to grand_total and paid_amt. 
+        // Used GREATEST(0, ...) so pending amount never shows negative fractional values.
         $query = "
             SELECT 
-                l.id as ledger_id,
-                l.stockist_id,
+                si.inward_id AS record_id,
+                si.created_at,
                 s.stockist_name,
-                l.transaction_type,
-                l.balance_action,
-                l.reference_id,
-                l.amount,
-                l.created_at,
-                si.inward_no,
+                si.stockist_id,
                 si.order_id,
-                (CASE WHEN LOWER(l.balance_action) = 'increase_debt' OR LOWER(l.transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN 1 ELSE 0 END) AS is_debit,
-                (CASE WHEN LOWER(l.balance_action) = 'decrease_debt' OR LOWER(l.transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment') THEN 1 ELSE 0 END) AS is_credit
-            FROM payment_ledgers l
-            INNER JOIN stockists s ON l.stockist_id = s.stockist_id
-            LEFT JOIN stock_inward si ON l.transaction_type = 'bill_added' AND l.reference_id = si.inward_id
+                si.inward_no AS reference_no,
+                ROUND(si.grand_total) AS original_amount,
+                GREATEST(0, ROUND(si.grand_total) - ROUND(si.paid_amt)) AS pending_amount,
+                UPPER(si.pay_status) AS status,
+                si.inward_no
+            FROM stock_inward si
+            INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE $cond
-            ORDER BY l.stockist_id ASC, l.created_at ASC, l.id ASC
+            ORDER BY si.created_at DESC, si.inward_id DESC
         ";
 
         $result = $this->con->query($query);
-        $raw_ledger = [];
+        $processed_rows = [];
+        
         if ($result) {
             while ($row = $result->fetch_assoc()) {
-                $raw_ledger[] = $row;
-            }
-        }
-
-        $stockist_ledgers = [];
-        foreach ($raw_ledger as $row) {
-            $st_id = $row['stockist_id'];
-            if (!isset($stockist_ledgers[$st_id])) {
-                $stockist_ledgers[$st_id] = [
-                    'bills' => [],
-                    'credits' => 0
-                ];
-            }
-
-            // Rely perfectly on SQL's classification to avoid typo/casing mismatches
-            $is_debit = (int)$row['is_debit'] === 1;
-            $is_credit = (int)$row['is_credit'] === 1;
-
-            if ($is_debit) {
-                $ref_text = $row['inward_no'];
-                if (!$ref_text) {
-                    // Fallback to formatted transaction name (e.g., "Opening Balance")
-                    $ref_text = ucwords(str_replace('_', ' ', $row['transaction_type'])); 
-                }
-
-                $stockist_ledgers[$st_id]['bills'][] = [
-                    'record_id' => $row['ledger_id'],
-                    'created_at' => $row['created_at'],
-                    'stockist_name' => $row['stockist_name'],
-                    'stockist_id' => $st_id,
-                    'order_id' => $row['order_id'],
-                    'reference_no' => $ref_text,
-                    'original_amount' => (float)$row['amount'],
-                    'pending_amount' => (float)$row['amount'],
-                    'status' => 'UNPAID'
-                ];
-            } else if ($is_credit) {
-                $stockist_ledgers[$st_id]['credits'] += (float)$row['amount'];
-            }
-        }
-
-        $processed_rows = [];
-        foreach ($stockist_ledgers as $st_id => $data) {
-            $available_credit = $data['credits'];
-
-            foreach ($data['bills'] as &$bill) {
-                if ($available_credit >= $bill['pending_amount']) {
-                    $available_credit -= $bill['pending_amount'];
-                    $bill['pending_amount'] = 0;
-                    $bill['status'] = 'PAID';
-                } else if ($available_credit > 0) {
-                    $bill['pending_amount'] -= $available_credit;
-                    $available_credit = 0;
-                    $bill['status'] = 'PARTIAL';
-                }
+                $row['original_amount'] = (float)$row['original_amount'];
+                $row['pending_amount']  = (float)$row['pending_amount'];
                 
-                // Only push to array if it matches date filter (if provided)
-                if (!empty($from_date)) {
-                    if (date('Y-m-d', strtotime($bill['created_at'])) !== $from_date) {
-                        continue;
-                    }
+                if (empty($row['reference_no'])) {
+                    $row['reference_no'] = 'Bill ' . $row['record_id'];
                 }
-                $processed_rows[] = $bill;
+
+                $processed_rows[] = $row;
             }
         }
-
-        // Sort newest first
-        usort($processed_rows, function($a, $b) {
-            return strtotime($b['created_at']) - strtotime($a['created_at']);
-        });
 
         return $processed_rows;
     }
+
 
     public function getOutstandingBalance($stockist_id) 
     {
         $stockist_id = (int)$stockist_id;
         
-        // Exact same logic used in the SELECT CASE statements above
+        // FIX: Added ROUND() around the SUM functions to ensure the final outstanding balance is clean
         $stmt = $this->con->prepare("
             SELECT 
-                COALESCE(SUM(CASE WHEN LOWER(balance_action) = 'increase_debt' OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0) - 
-                COALESCE(SUM(CASE WHEN LOWER(balance_action) = 'decrease_debt' OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment') THEN amount ELSE 0 END), 0) AS total_outstanding
+                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) = 'increase_debt' OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
+                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) = 'decrease_debt' OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment') THEN amount ELSE 0 END), 0)) AS total_outstanding
             FROM payment_ledgers 
             WHERE stockist_id = ?
         ");

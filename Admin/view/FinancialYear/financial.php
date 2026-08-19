@@ -156,7 +156,7 @@ include 'view/layout/header.php';
         <tr>
             <th class="text-center">Sr. No</th>
             <th class="text-center">State</th>
-            <th class="text-center">HQ</th>
+            <th class="text-center">MR</th>
             <th class="text-center">Financial Year</th>
             <th class="text-center">Start Date</th>
             <th class="text-center">End Date</th>
@@ -226,7 +226,7 @@ include 'view/layout/header.php';
             </td>
 
             <td class="text-center">
-                <?php echo $row['hq_name']; ?>
+                <?php echo $row['mr_name']; ?>
             </td>
 
             <td class="text-center">

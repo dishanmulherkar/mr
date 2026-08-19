@@ -161,6 +161,20 @@ switch($page)
 
         break;
 
+     case 'account':
+
+        include 'controller/AccountController.php';
+
+        $controller = new AccountController($con);
+
+            if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+
+        exit;
+
 
     case 'dashboard':
     default:

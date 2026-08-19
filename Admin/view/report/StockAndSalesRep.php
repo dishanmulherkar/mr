@@ -126,13 +126,16 @@ include 'view/layout/header.php';
             <th>Product</th>
             <th>Batch</th>
             <th>Rate</th>
+            <th>PTS</th>
             <th>Opening</th>
             <th>Inward</th>
             <th>Adj (−)</th>        <!-- NEW -->
             <th>Sales</th>
             <th>SL AMT</th>
+            <!-- <th>SL AMT (PTS)</th> -->
             <th>Closing</th>
             <th>CL AMT</th>
+            <th>CL AMT (PTS)</th>
         </tr>
     </thead>
     <tbody>
@@ -146,6 +149,7 @@ $total_sales       = 0;
 $total_sale_amt    = 0;
 $total_closing     = 0;
 $total_closing_amt = 0;
+$total_closing_amt_pts = 0;
 
 if($query && mysqli_num_rows($query) > 0)
 {
@@ -158,8 +162,12 @@ if($query && mysqli_num_rows($query) > 0)
                  + $row['inward_qty']
                  - $row['adjustment_qty']
                  - $row['sales_qty'];
+        $discount = $row['disc'] ;
+        $sale_rate = $row['sale_rate'] ;
+        $pts = $sale_rate - (($sale_rate * $discount) / 100);
 
-        $closing_amount = $closing * (float)$row['pts'];
+        $closing_amount = $closing * (float)$row['sale_rate'];
+        $cl_amt_pts = $closing * (float)$pts;
 
         $total_opening     += $row['opening_stock'];
         $total_inward      += $row['inward_qty'];
@@ -168,12 +176,14 @@ if($query && mysqli_num_rows($query) > 0)
         $total_sale_amt    += $row['total_amount'];
         $total_closing     += $closing;
         $total_closing_amt += $closing_amount;
+        $total_closing_amt_pts += $cl_amt_pts;
 ?>
         <tr>
             <td><?= $i ?></td>
             <td><?= htmlspecialchars($row['product_name']) ?></td>
             <td><?= htmlspecialchars($row['batch_no']) ?></td>
-            <td><?= number_format((float)$row['pts'], 2) ?></td>
+            <td><?= number_format((float)$row['sale_rate'], 2) ?></td>
+            <td><?= number_format((float)$pts, 2) ?></td>
             <td><?= $row['opening_stock'] ?></td>
             <td><?= $row['inward_qty'] ?></td>
             <td class="text-danger">
@@ -183,6 +193,7 @@ if($query && mysqli_num_rows($query) > 0)
             <td><?= number_format($row['total_amount'], 2) ?></td>
             <td><?= $closing ?></td>
             <td><?= number_format($closing_amount, 2) ?></td>
+            <td><?= number_format($cl_amt_pts, 2) ?></td>
         </tr>
 <?php
     }
@@ -197,7 +208,7 @@ else
     </tbody>
 <tfoot class="table-secondary fw-bold">
 <tr>
-    <td colspan="4" class="text-end">Total</td>
+    <td colspan="5" class="text-end">Total</td>
 
     <td><?= $total_opening ?></td>
 
@@ -214,6 +225,7 @@ else
     <td><?= $total_closing ?></td>
 
     <td><?= number_format($total_closing_amt, 2) ?></td>
+    <td><?= number_format($total_closing_amt_pts, 2) ?></td>
 </tr>
 </tfoot>
 </table>

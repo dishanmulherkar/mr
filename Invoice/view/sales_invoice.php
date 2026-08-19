@@ -55,10 +55,10 @@ $totalRenderedQty = 0;
 foreach ($items as $item) {
     $qty = (float)($item['qty'] ?? 0);
     $rate = (float)($item['rate'] ?? 0);
-    $mrp = (float)($item['mrp'] ?? 0);
+    $mrp = (float)($item['sale_mrp'] ?? 0);
     
     // Amounts
-    $rowBase = $qty * $rate;
+    $rowBase = $qty * $mrp;
     $discPerc = (float)($item['discount_percent'] ?? 0);
     
     // Apply Item Discount Only (CD Removed)
@@ -273,10 +273,10 @@ table { border-collapse: collapse; width: 100%; }
             foreach ($items as $item): 
                 $qty = (float)($item['qty'] ?? 0);
                 $rate = (float)($item['rate'] ?? 0);
-                $mrp = (float)($item['mrp'] ?? 0);
+                $mrp = (float)($item['sale_mrp'] ?? 0);
                 $discPerc = (float)($item['discount_percent'] ?? 0);
                 
-                $rowBase = $qty * $rate;
+                $rowBase = $qty * $mrp;
                 $firstDiscAmount = $rowBase * ($discPerc / 100);
                 $amt = $rowBase - $firstDiscAmount;
                 
@@ -290,7 +290,7 @@ table { border-collapse: collapse; width: 100%; }
                 <td style="border: 1px solid #000; padding: 2px; text-align: left; font-size: 8pt;"><?= htmlspecialchars($item['product_name'] ?? '') ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= htmlspecialchars($item['batch_no'] ?? '') ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= !empty($item['expiry_date']) ? date('m/y', strtotime($item['expiry_date'])) : '' ?></td>
-                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt;"><?= number_format($rate, 2) ?></td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt;"><?= number_format($mrp, 2) ?></td>
                  <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;"><?= $qty ?></td>
                  <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt;"><?= number_format($net_total, 2) ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt;">&nbsp;</td>
@@ -357,7 +357,7 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 55%; ">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
-                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: left;  width: 33%;">Gross Amount</td>
+                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: left;  width: 33%;">MRP Amount</td>
                         <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 38%; border-right: 1px solid #000;"><?= number_format($trueGrossAmount, 2) ?></td>
                         <td style="border: none; padding: 3px 3px;  border-right: 1px solid #000;font-size: 8pt; text-align: right; width: 27%;"></td>
                         <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 33%;">
@@ -380,7 +380,7 @@ table { border-collapse: collapse; width: 100%; }
                 <table>
                     <tr style="font-weight: bold; ">
                         <td style="border: none;  font-size: 8pt; ">
-                            <div>Amount in Words: <span> </span></div>
+                            <div>Amount in Words: </div>
                         </td>
                         <td style="border: none; padding: 0px 0px; font-size: 8pt; "> <?= htmlspecialchars($amountInWords ?? 'Total Amount In Words') ?></td>
                     </tr>
@@ -389,8 +389,10 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 25%; ">
                 <table>
                     <tr style="font-weight: bold; border-left: 1px solid #161515;  ">
-                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: left;">Net Amount</td>
-                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: right;"><?= number_format($netAmountRounded, 2) ?></td>
+                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: left; width: 33%">MRP Total</td>
+                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: right; width: 38%; border-right: 1px solid #000;"><?= number_format($netAmountRounded, 2) ?></td>
+                        <td style="border: none; padding: 3px 3px;  font-size: 8pt; text-align: right; width: 27%;"></td>
+                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 33%; ">
                     </tr>
                 </table>
             </td>
@@ -414,7 +416,7 @@ table { border-collapse: collapse; width: 100%; }
             </td>
             <td style="width: 25%;  padding-bottom: 50px;">For, <?= htmlspecialchars($sellerName) ?></td>
         </tr>
-        <tr style="margin-top:25px; border-top: 1px solid #161515;">
+        <tr style="margin-top:25px;">
              <td style="width: 75%; margin-top:25px; "></td>
             <td style="width: 25%; ">
                  <div style="text-align: center; font-size: 7pt;   ">Authorised Signatory</div> 

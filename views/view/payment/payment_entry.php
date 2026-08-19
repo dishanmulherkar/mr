@@ -53,7 +53,23 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/salesentry.css">
 
 <div class="page-content">
+<!-- Place this inside your <div id="container"> or main content area -->
 
+<?php if (isset($_SESSION['success_msg'])): ?>
+    <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+        <i class="fa fa-check-circle"></i> <?= $_SESSION['success_msg']; ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php unset($_SESSION['success_msg']); // Clear the message after displaying ?>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['error_msg'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+        <i class="fa fa-exclamation-circle"></i> <?= $_SESSION['error_msg']; ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php unset($_SESSION['error_msg']); // Clear the message after displaying ?>
+<?php endif; ?>
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
         <h4>Payment Entry</h4>
         <!-- Back button to return to the list -->
@@ -94,11 +110,23 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
                 <label for="payment_method">Payment Method *</label>
                 <select name="payment_method" id="payment_method" class="form-control" required>
                     <option value="">-- Select Method --</option>
-                    <option value="GPay / UPI">GPay / UPI</option>
+                    <option value="UPI">UPI</option>
                     <option value="Bank Transfer (NEFT/RTGS)">Bank Transfer (NEFT/RTGS)</option>
                     <option value="Cheque">Cheque</option>
                     <option value="Cash">Cash</option>
+                    <option value="Other">Other</option>
                 </select>
+            </div>
+
+            <div class="form-group" id="other_method_wrapper" style="display: none;">
+                <label for="other_payment_method">Other Payment Method *</label>
+                <input 
+                    type="text" 
+                    name="other_payment_method" 
+                    id="other_payment_method" 
+                    class="form-control" 
+                    placeholder="Enter payment method..."
+                >
             </div>
 
             <div class="form-group">
@@ -191,5 +219,18 @@ $(document).ready(function() {
     if ($('#stockist_id').val() !== '') {
         fetchOutstanding($('#stockist_id').val());
     }
+
+    // Show/hide Other Payment Method field
+$('#payment_method').on('change', function() {
+    if ($(this).val() === 'Other') {
+        $('#other_method_wrapper').slideDown();
+        $('#other_payment_method').prop('required', true);
+    } else {
+        $('#other_method_wrapper').slideUp();
+        $('#other_payment_method')
+            .prop('required', false)
+            .val('');
+    }
+});
 });
 </script>

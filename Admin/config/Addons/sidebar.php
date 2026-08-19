@@ -192,7 +192,7 @@
                 </div>
             </li>
 
-             <!-- ================= Order ================= -->
+             <!-- ================= Payment ================= -->
             <li class="nav-item searchable-folder">
                 <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#paymentMenu" aria-expanded="false" href="#">
                     <span>
@@ -212,6 +212,33 @@
                 </div>
             </li>
 
+
+             <!-- ================= Commision ================= -->
+            <li class="nav-item searchable-folder">
+                <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#commisionMenu" aria-expanded="false" href="#">
+                    <span>
+                        <i class="fa-solid fa-boxes-stacked" style="width: 20px;"></i>
+                        <span class="ms-2">Commision</span>
+                    </span>
+                    <i class="fa-solid fa-angle-down toggle-icon"></i>
+                </a>
+                <div class="collapse" id="commisionMenu">
+                    <ul class="nav flex-column ms-4 mt-1">
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>commision/mrc_history" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage MR Commision
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>commision" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage Dr Commision
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+            </li>
+
             <!-- ================= INVENTORY ================= -->
             <li class="nav-item searchable-folder">
                 <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#inventoryMenu" aria-expanded="false" href="#">
@@ -229,7 +256,7 @@
                                 <i class="fa-solid fa-box" style="width: 20px;"></i> Product Master
                             </a>
                         </li>
-                        <li class="nav-item searchable-item">
+                        <!-- <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>product_batch" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-layer-group" style="width: 20px;"></i> Batch Wise Product
                             </a>
@@ -238,7 +265,7 @@
                             <a href="<?= BASE_URL ?>batch_status" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-calendar-check" style="width: 20px;"></i> Update Batch
                             </a>
-                        </li>
+                        </li> -->
                         <?php } ?>
                     </ul>
                 </div>

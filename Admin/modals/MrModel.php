@@ -139,14 +139,14 @@ class MrModel
         $password = mysqli_real_escape_string($this->con, $data['password']);
         $status = mysqli_real_escape_string($this->con, $data['status']);
         $credit_limit = mysqli_real_escape_string($this->con, $data['credit_limit']);
-                                     
+        $commission_rate = mysqli_real_escape_string($this->con, $data['commission_rate']);
 
         return mysqli_query(
             $this->con,
             "INSERT INTO mr_users
-            (admin_id,hq_id,mr_name,mobile,email,state,district,pincode,address,password,status,credit_limit)
+            (admin_id,hq_id,mr_name,mobile,email,state,district,pincode,address,password,status,credit_limit,commission_rate)
             VALUES
-            ('$admin_id','$hq_name','$mr_name','$mobile','$email','$state','$district','$pincode','$address','$password','$status','$credit_limit')"
+            ('$admin_id','$hq_name','$mr_name','$mobile','$email','$state','$district','$pincode','$address','$password','$status','$credit_limit','$commission_rate')"
         );
     }
 
@@ -164,6 +164,7 @@ class MrModel
         $password = mysqli_real_escape_string($this->con, $data['password']);
         $status = mysqli_real_escape_string($this->con, $data['status']);
          $credit_limit = mysqli_real_escape_string($this->con, $data['credit_limit']);
+          $commission_rate = mysqli_real_escape_string($this->con, $data['commission_rate']);
 
         return mysqli_query(
             $this->con,
@@ -179,7 +180,8 @@ class MrModel
                 password='$password',
                 status='$status',
                 admin_id = '$admin_id',
-                credit_limit = '$credit_limit'
+                credit_limit = '$credit_limit',
+                commission_rate = '$commission_rate'
             WHERE m_id='$id'"
         );
     }

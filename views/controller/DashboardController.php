@@ -13,6 +13,7 @@ class DashboardController
     public function index()
     {
         $mr_id = $_SESSION['mr_id'];
+        $hq_id = $_SESSION['hq_id'];
 
         // Target Details
         $target = $this->model->getTargetDetails($mr_id);
@@ -34,7 +35,8 @@ class DashboardController
         $primary_sale = $this->model->getPrimarySale(
             $mr_id,
             $start_date,
-            $end_date
+            $end_date,
+            $hq_id
         );
 
         $total_customers = $this->model->getTotalCustomers($mr_id);

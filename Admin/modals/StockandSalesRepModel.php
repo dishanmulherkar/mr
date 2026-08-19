@@ -76,10 +76,16 @@ class StockandSalesRepModel
             p.p_id,
             pb.batch_id,
             pb.batch_no,
-            pb.pts,
+            pb.sale_rate,
             s.stockist_name,
             p.product_name,
 
+            (
+                SELECT discount_percent
+                FROM stock_inward_details 
+                WHERE batch_id = pb.batch_no 
+                LIMIT 1
+            ) AS disc,
             (
                 COALESCE(SUM(
                     CASE
@@ -194,7 +200,7 @@ class StockandSalesRepModel
         INNER JOIN stockists s
             ON s.stockist_id=sl.stockist_id
 
-        WHERE sl.stockist_id='$stockist_id'
+        WHERE sl.stockist_id='$stockist_id' AND sl.stockist_type = 'STOCKIST'
 
         GROUP BY
             sl.p_id,

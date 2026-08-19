@@ -61,16 +61,29 @@ class OrderModel
     // Fetch list of all orders with Super Stockist names
     public function getOrders($filters = [])
     {
-        // Added LEFT JOIN to headquarter so we can filter by state_id
-        $sql = "SELECT o.*, s.stockist_name AS ss_name, m.mr_name ,s.gst_type
+        // Base SQL
+        $sql = "SELECT o.*, s.stockist_name AS ss_name, m.mr_name, s.gst_type
                 FROM orders o
                 LEFT JOIN stockists s ON s.stockist_id = o.stockist_id
                 LEFT JOIN mr_users m ON m.m_id = o.mr_id
-                LEFT JOIN headquarter h ON h.headquarter_id = m.hq_id
-                WHERE 1=1"; 
+                LEFT JOIN headquarter h ON h.headquarter_id = m.hq_id";
+
+        // If not a Super Admin, strictly join with admin_state to restrict by assigned states
+        if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] !== 'Super Admin') {
+            $sql .= " INNER JOIN admin_state ast ON h.state_id = ast.state_id";
+        }
+
+        $sql .= " WHERE 1=1"; 
         
         $params = [];
         $types = "";
+
+        // Apply Admin Role Filter (Restrict to specific admin's states)
+        if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] !== 'Super Admin') {
+            $sql .= " AND ast.admin_id = ?";
+            $params[] = (int)$_SESSION['admin_id'];
+            $types .= "i";
+        }
 
         // Apply State Filter
         if (!empty($filters['state_id'])) {
@@ -97,12 +110,13 @@ class OrderModel
 
         $stmt = $this->con->prepare($sql);
         if (!empty($params)) {
+            // Bind parameters dynamically
             $stmt->bind_param($types, ...$params);
         }
         $stmt->execute();
+        
         return $stmt->get_result();
     }
-
     // Optional: Keep other helper getters if needed by your index view
     public function getProducts()
     {

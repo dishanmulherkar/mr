@@ -56,7 +56,7 @@ include 'view/layout/header.php';
                             </div>
                                 
                               <!-- HQ Name -->
-                                <div class="col-lg-4">
+                                <div class="col-lg-3">
                                     <div class="form-group">
                                         <label>Head Quarter</label>
                                         <select name="hq" id="hq" class="form-control" required>
@@ -73,7 +73,7 @@ include 'view/layout/header.php';
                                     </div>
                                 </div>
                                 
-                                <div class="col-lg-4">
+                                <div class="col-lg-3">
                                     <div class="form-group">
                                         <label>Credit Limit</label>
                                         <input type="number"
@@ -83,6 +83,19 @@ include 'view/layout/header.php';
                                             step="0.01"
                                             min="0"
                                             value="<?php echo isset($ROW['credit_limit']) ? $ROW['credit_limit'] : ''; ?>">
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3">
+                                    <div class="form-group">
+                                        <label>commission</label>
+                                        <input type="number"
+                                            name="commission_rate"
+                                            class="form-control"
+                                            placeholder="Enter commission"
+                                            step="0.01"
+                                            min="0"
+                                            value="<?php echo isset($ROW['commission_rate']) ? $ROW['commission_rate'] : ''; ?>">
                                     </div>
                                 </div>
                              

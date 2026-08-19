@@ -153,14 +153,14 @@ class InwardReportModel
             SELECT 
                 p.product_name, 
                 pb.batch_no, 
-                pb.pts, 
+                d.rate, 
                 d.qty, 
-                (d.qty * pb.pts) AS amount, 
+                d.net_total, 
                 si.stockist_id
             FROM stock_inward si
             INNER JOIN stock_inward_details d ON si.inward_id = d.inward_id
             INNER JOIN products p ON p.p_id = d.p_id
-            INNER JOIN product_batches pb ON pb.batch_id = d.batch_id
+            INNER JOIN product_batches pb ON pb.batch_no = d.batch_id
             WHERE si.inward_id = ?
             ORDER BY p.product_name, pb.batch_no
         ");
