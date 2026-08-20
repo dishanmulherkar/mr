@@ -40,6 +40,15 @@ include 'view/layout/header.php';
     .purchase-table .btn i {
         font-size: 11px;
     }
+    .batch-input-wrapper {
+        display: none;
+    }
+    .batch-input-wrapper.show {
+        display: block;
+    }
+    .copy-rates-checkbox {
+        margin-left: 10px;
+    }
 </style>
 
 <div id="container">
@@ -117,7 +126,7 @@ include 'view/layout/header.php';
                     <thead class="table-primary text-center">
                         <tr>
                             <th style="width:20%">Product</th>
-                            <th style="width:8%">Batch No</th>
+                            <th style="width:12%">Batch No</th>
                             <th style="width:8%">Expiry</th>
                             <th style="width:10%">MRP</th>
                             <th style="width:8%">P. Rate</th>
@@ -145,7 +154,12 @@ include 'view/layout/header.php';
                                         <?php } ?>
                                     </select>
                                 </td>
-                                <td><input type="text" class="form-control form-control-sm batch" placeholder="Batch"></td>
+                                <td>
+                                    <select class="form-select form-select-sm batch">
+                                        <option value="">Select Batch</option>
+                                    </select>
+                                    <input type="text" class="form-control form-control-sm batch-input" placeholder="New Batch" style="display:none;">
+                                </td>
                                 <td style="width:90px;">
                                     <input type="text" class="form-control form-control-sm expiry" placeholder="MM/YYYY" maxlength="7">
                                 </td>
@@ -160,6 +174,14 @@ include 'view/layout/header.php';
                                 <td><input type="text" class="form-control form-control-sm amount text-end" value="0.00" readonly></td>
                                 <td class="text-center">
                                     <button type="button" class="btn btn-success btn-sm add-row"><i class="fa fa-plus"></i></button>
+                                </td>
+                            </tr>
+                            <tr class="copy-rates-row">
+                                <td colspan="13" class="text-end">
+                                    <label class="form-check-label copy-rates-checkbox">
+                                        <input type="checkbox" class="form-check-input copy-rates" id="copy-rates">
+                                        Copy Purchase Rate/Tax to Sale Rate/Tax
+                                    </label>
                                 </td>
                             </tr>
                         <?php endif; ?>
@@ -351,120 +373,513 @@ include 'view/layout/header.php';
 <script>
 $(document).ready(function(){
 
-// Auto-format MM/YYYY or MM/YY for expiry input field
-$(document).on('input', '.expiry', function (e) {
-    let value = $(this).val();
+    // ============================================================
+    // EXPIRY DATE FORMATTING
+    // ============================================================
+    // Auto-format MM/YYYY or MM/YY for expiry input field
+    $(document).on('input', '.expiry', function (e) {
+        let value = $(this).val();
+        
+        // Remove all non-digit characters
+        value = value.replace(/\D/g, '');
+        
+        // Limit total digits to max 6 (MMYYYY) or 4 (MMYY)
+        if (value.length > 6) {
+            value = value.substring(0, 6);
+        }
+        
+        // Automatically insert slash after 2 digits (Month)
+        if (value.length > 2) {
+            value = value.substring(0, 2) + '/' + value.substring(2);
+        }
+        
+        $(this).val(value);
+    });
+
+    // Handle Backspace correctly so it removes the slash smoothly
+    $(document).on('keydown', '.expiry', function (e) {
+        let value = $(this).val();
+        
+        if (e.key === 'Backspace' && value.length === 3 && value.endsWith('/')) {
+            e.preventDefault();
+            $(this).val(value.substring(0, 2));
+        }
+    });
+
+    // ============================================================
+    // IMPROVED BATCH HANDLING - Helper Functions
+    // ============================================================
     
-    // Remove all non-digit characters
-    value = value.replace(/\D/g, '');
+    /**
+     * Clear all batch-related fields (expiry, MRP, rates, taxes)
+     */
+    function clearBatchFields(row) {
+        row.find('.expiry').val('');
+        row.find('.mrp').val('');
+        row.find('.rate').val('');
+        row.find('.tax').val('');
+        row.find('.srate').val('');
+        row.find('.stax').val('');
+    }
+
+    /**
+     * Clear entire entry row for next product entry
+     */
+    function clearEntryRow(row) {
+        row.find('.product').val('').trigger('change');
+        row.find('.batch').val('').show();
+        row.find('.batch-input').val('').hide();
+        row.find('.expiry').val('');
+        row.find('.mrp').val('');
+        row.find('.qty').val('');
+        row.find('.free_qty').val('');
+        row.find('.rate').val('');
+        row.find('.srate').val('');
+        row.find('.disc').val('');
+        row.find('.tax').val('');
+        row.find('.stax').val('');
+        row.find('.amount').val('0.00');
+        $('#copy-rates').prop('checked', false);
+
+        // Focus and open product select
+        row.find('.product').select2('open');
+    }
+
+    /**
+     * Update amount calculation for entry row
+     */
+    function updateEntryRowAmount(){
+        let row = $('.entry-row');
+        let qty  = parseFloat(row.find('.qty').val()) || 0;
+        let rate = parseFloat(row.find('.rate').val()) || 0;
+        let disc = parseFloat(row.find('.disc').val()) || 0;
+        let tax  = parseFloat(row.find('.tax').val()) || 0;
+
+        let base     = qty * rate;
+        let discAmt  = base * (disc / 100);
+        let taxable  = base - discAmt;
+        let taxAmt   = taxable * (tax / 100);
+        let amount   = taxable + taxAmt;
+
+        row.find('.amount').val(amount.toFixed(2));
+    }
+
+    // ============================================================
+    // 1. BATCH SELECTION - When product is selected
+    // ============================================================
+    $('.product').on('select2:select', function () {
+        let productId = $(this).val();
+        let row = $(this).closest('.entry-row');
+        let batchSelect = row.find('.batch');
+        let batchInput = row.find('.batch-input');
+
+        if (!productId) {
+            batchSelect.html('<option value="">Select Batch</option>');
+            batchSelect.show();
+            batchInput.hide().val('');
+            clearBatchFields(row);
+            return;
+        }
+
+        // Load batches via AJAX
+        $.ajax({
+            url: "<?= BASE_URL ?>purchase/getBatches",
+            type: "POST",
+            data: { product_id: productId },
+            success: function(response) {
+                batchSelect.html(response);
+                // Show dropdown, hide input
+                batchSelect.show();
+                batchInput.hide().val('');
+                
+                // Clear related fields when product changes
+                clearBatchFields(row);
+                
+                batchSelect.focus();
+            },
+            error: function() {
+                alert("Failed to load batches");
+                clearBatchFields(row);
+            }
+        });
+    });
+
+    // ============================================================
+    // 2. BATCH DROPDOWN CHANGE - Select existing or create new
+    // ============================================================
+    $(document).on('change', '.batch', function() {
+        let selectedValue = $(this).val();
+        let row = $(this).closest('.entry-row');
+        let batchInput = row.find('.batch-input');
+        let batchSelect = $(this);
+
+        if (selectedValue === '__new__') {
+            // Switch to NEW BATCH mode
+            batchSelect.hide();
+            batchInput.show().val('').focus();
+            
+            // ✅ Clear all price/tax fields for new batch
+            clearBatchFields(row);
+            
+        } else if (selectedValue) {
+            // EXISTING BATCH selected - populate all fields from batch data
+            let option = batchSelect.find('option:selected');
+            let mrp = option.data('mrp') || '';
+            let prate = option.data('prate') || '';
+            let ptax = option.data('ptax') || '';
+            let srate = option.data('srate') || '';
+            let stax = option.data('stax') || '';
+            let expiry = option.data('expiry') || '';
+
+            row.find('.mrp').val(mrp);
+            row.find('.rate').val(prate);
+            row.find('.tax').val(ptax);
+            row.find('.srate').val(srate);
+            row.find('.stax').val(stax);
+            row.find('.expiry').val(expiry);
+
+            // Hide batch input
+            batchInput.hide().val('');
+            
+            row.find('.qty').focus();
+        } else {
+            // EMPTY selection
+            clearBatchFields(row);
+            batchInput.hide().val('');
+        }
+    });
+
+    // ============================================================
+    // 3. NEW BATCH INPUT - Enter batch number manually
+    // ============================================================
+    $(document).on('keydown', '.batch-input', function(e) {
+        if(e.key === 'Enter') {
+            e.preventDefault();
+            let batchValue = $(this).val().trim();
+            
+            if (!batchValue) {
+                alert('Please enter a batch number');
+                return;
+            }
+            
+            let row = $(this).closest('.entry-row');
+            // Move to expiry field - should be empty for new batch
+            row.find('.expiry').focus().select();
+        }
+    });
+
+    $(document).on('blur', '.batch-input', function() {
+        let batchValue = $(this).val().trim();
+        if (batchValue) {
+            $(this).val(batchValue);
+        }
+    });
+
+    // ============================================================
+    // KEYBOARD NAVIGATION THROUGH FIELDS
+    // ============================================================
+
+    // 2. Press Enter on Expiry -> go to MRP
+    $(document).on('keydown', '.expiry', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.mrp').focus().select();
+        }
+    });
+
+    // 3. Press Enter on MRP -> go to Rate
+    $(document).on('keydown', '.mrp', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.rate').focus().select();
+        }
+    });
+
+    // 4. Press Enter on Rate -> go to Tax
+    $(document).on('keydown', '.rate', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.tax').focus().select();
+        }
+    });
+
+    // 5. Press Enter on Tax -> go to Sale Rate (srate)
+    $(document).on('keydown', '.tax', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.srate').focus().select();
+        }
+    });
+
+    // 6. Press Enter on Sale Rate -> go to Sale Tax (stax)
+    $(document).on('keydown', '.srate', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.stax').focus().select();
+        }
+    });
+
+    // 7. Press Enter on Sale Tax -> go to Qty
+    $(document).on('keydown', '.stax', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.qty').focus().select();
+        }
+    });
+
+    // 8. Press Enter on Qty -> go to Free Qty
+    $(document).on('keydown', '.qty', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.free_qty').focus().select();
+        }
+    });
+
+    // 9. Press Enter on Free Qty -> go to Discount (disc)
+    $(document).on('keydown', '.free_qty', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.disc').focus().select();
+        }
+    });
+
+    // 10. Press Enter on Discount -> Click the Add Row button
+    $(document).on('keydown', '.disc', function(e){
+        if(e.key === 'Enter'){
+            e.preventDefault();
+            $(this).closest('.entry-row').find('.add-row').click();
+        }
+    });
+
+    // ============================================================
+    // COPY RATES & AMOUNT UPDATES
+    // ============================================================
     
-    // Limit total digits to max 6 (MMYYYY) or 4 (MMYY)
-    if (value.length > 6) {
-        value = value.substring(0, 6);
-    }
+    // 4. Copy rates checkbox handler
+    $(document).on('change', '#copy-rates', function() {
+        let row = $('.entry-row');
+        if ($(this).is(':checked')) {
+            let rate = parseFloat(row.find('.rate').val()) || 0;
+            let tax = parseFloat(row.find('.tax').val()) || 0;
+            row.find('.srate').val(rate);
+            row.find('.stax').val(tax);
+        }
+    });
+
+    // When purchase rate changes and copy-rates is checked, update sale rate
+    $(document).on('keyup', '.rate', function() {
+        if ($('#copy-rates').is(':checked')) {
+            let row = $(this).closest('.entry-row');
+            let rate = $(this).val();
+            row.find('.srate').val(rate);
+        }
+        updateEntryRowAmount();
+    });
+
+    // When purchase tax changes and copy-rates is checked, update sale tax
+    $(document).on('keyup', '.tax', function() {
+        if ($('#copy-rates').is(':checked')) {
+            let row = $(this).closest('.entry-row');
+            let tax = $(this).val();
+            row.find('.stax').val(tax);
+        }
+        updateEntryRowAmount();
+    });
+
+    $(document).on('keyup change', '.qty, .rate, .disc, .tax', function(){
+        updateEntryRowAmount();
+    });
+
+    // ============================================================
+    // 4. EDIT ROW - Restore batch data properly
+    // ============================================================
+    let editRow = null;
+
+    $(document).on('click', '.edit-row', function(){
+        editRow = $(this).closest('tr');
+
+        let prodId = editRow.find('input[name="product_id[]"]').val();
+        let prodName = editRow.find('td:first').text().trim();
+        let batch = editRow.find('input[name="batch[]"]').val();
+        let expiry = editRow.find('input[name="expiry[]"]').val();
+        let mrp = editRow.find('input[name="mrp[]"]').val();
+        let rate = editRow.find('input[name="rate[]"]').val();
+        let tax = editRow.find('input[name="tax[]"]').val();
+        let srate = editRow.find('input[name="srate[]"]').val();
+        let stax = editRow.find('input[name="stax[]"]').val();
+        let qty = editRow.find('input[name="qty[]"]').val();
+        let freeQty = editRow.find('input[name="free_qty[]"]').val();
+        let disc = editRow.find('input[name="disc[]"]').val();
+
+        let entryRow = $('.entry-row');
+        let productSelect = entryRow.find('.product');
+        
+        // 1. Set product and trigger proper Select2 update
+        productSelect.val(prodId);
+        productSelect.trigger('change');
+        
+        // Force Select2 to refresh display
+        productSelect.select2('destroy');
+        productSelect.select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: "Select Product",
+            allowClear: true
+        });
+        productSelect.val(prodId).trigger('change');
+        
+        // 2. Trigger AJAX to load batches
+        productSelect.trigger('select2:select');
+        
+        // 2. After batch dropdown loads, check if batch exists
+        setTimeout(function() {
+            let batchSelect = entryRow.find('.batch');
+            let batchInput = entryRow.find('.batch-input');
+            
+            // Check if batch exists in dropdown
+            let batchOption = batchSelect.find('option[value="' + batch + '"]');
+            
+            if (batchOption.length > 0) {
+                // Batch exists in dropdown - select it
+                batchSelect.val(batch).trigger('change');
+            } else {
+                // Batch is new or custom - show as input
+                batchSelect.hide();
+                batchInput.show().val(batch);
+                
+                // Manually populate fields for custom batch
+                entryRow.find('.mrp').val(mrp);
+                entryRow.find('.rate').val(rate);
+                entryRow.find('.tax').val(tax);
+                entryRow.find('.srate').val(srate);
+                entryRow.find('.stax').val(stax);
+                entryRow.find('.expiry').val(expiry);
+            }
+            
+            // 3. Set remaining fields
+            entryRow.find('.qty').val(qty);
+            entryRow.find('.free_qty').val(freeQty);
+            entryRow.find('.disc').val(disc);
+            
+            updateEntryRowAmount();
+            
+            // Change button to Save mode
+            entryRow.find('.add-row').html('<i class="fa fa-save"></i>');
+            entryRow.find('.product').focus();
+            
+        }, 600);
+    });
+
+    // ============================================================
+    // 5. ADD/UPDATE ROW - Validation and save
+    // ============================================================
+    $(document).on('click', '.add-row', function(){
+        let row = $('.entry-row');
+        
+        let product     = row.find('.product').val();
+        let productName = row.find('.product option:selected').text();
+        
+        // Get batch value - if "__new__" selected, use custom input instead
+        let batchDropdown = row.find('.batch').val();
+        let batch;
+        if (batchDropdown === '__new__' || !batchDropdown) {
+            // Use custom batch input
+            batch = row.find('.batch-input').val();
+        } else {
+            // Use dropdown selection
+            batch = batchDropdown;
+        }
+        
+        let expiry      = row.find('.expiry').val();
+        let mrp         = row.find('.mrp').val();
+        let qty         = row.find('.qty').val();
+        let freeQty     = row.find('.free_qty').val() || 0;
+        let rate        = row.find('.rate').val();
+        let srate       = row.find('.srate').val();
+        let disc        = row.find('.disc').val() || 0;
+        let tax         = row.find('.tax').val() || 0;
+        let stax        = row.find('.stax').val() || 0;
+
+        // Validation
+        if(!product) { alert("Please select product."); return; }
+        if(!batch) { alert("Enter Batch Number."); return; }
+        if(!expiry) { alert("Select Expiry."); return; }
+        if(!qty || qty <= 0) { alert("Enter Quantity."); return; }
+        if(!rate || rate <= 0) { alert("Enter Purchase Rate."); return; }
+
+        // Check for duplicate (only if not in edit mode)
+        let exists = false;
+        if (!editRow) {
+            $('.purchase-table tbody tr').not('.entry-row').not('.copy-rates-row').each(function () {
+                let oldProduct = $(this).find('input[name="product_id[]"]').val();
+                let oldBatch   = $(this).find('input[name="batch[]"]').val();
+                if (oldProduct == product && oldBatch == batch) {
+                    exists = true;
+                    return false;
+                }
+            });
+
+            if (exists) {
+                alert("This Product with the same Batch already exists.");
+                return;
+            }
+        }
+
+        // Calculate amount
+        let base     = (parseFloat(qty) || 0) * (parseFloat(rate) || 0);
+        let discAmt  = base * ((parseFloat(disc) || 0) / 100);
+        let taxable  = base - discAmt;
+        let taxAmt   = taxable * ((parseFloat(tax) || 0) / 100);
+        let amount   = (taxable + taxAmt).toFixed(2);
+
+        // Create HTML row
+        let html = `
+        <tr>
+            <td>${productName}<input type="hidden" name="product_id[]" value="${product}"></td>
+            <td>${batch}<input type="hidden" name="batch[]" value="${batch}"></td>
+            <td>${expiry}<input type="hidden" name="expiry[]" value="${expiry}"></td>
+            <td class="text-end">${parseFloat(mrp).toFixed(2)}<input type="hidden" name="mrp[]" value="${mrp}"></td>
+            <td class="text-end">${parseFloat(rate).toFixed(2)}<input type="hidden" name="rate[]" value="${rate}"></td>
+            <td class="text-center">${parseFloat(tax).toFixed(2)}<input type="hidden" name="tax[]" value="${tax}"></td>
+            <td class="text-end">${parseFloat(srate).toFixed(2)}<input type="hidden" name="srate[]" value="${srate}"></td>
+            <td class="text-center">${parseFloat(stax).toFixed(2)}<input type="hidden" name="stax[]" value="${stax}"></td>
+            <td class="text-center">${qty}<input type="hidden" name="qty[]" value="${qty}"></td>
+            <td class="text-center">${freeQty}<input type="hidden" name="free_qty[]" value="${freeQty}"></td>
+            <td class="text-center">${parseFloat(disc).toFixed(2)}<input type="hidden" name="disc[]" value="${disc}"></td>
+            <td class="amount text-end fw-bold">${amount}<input type="hidden" name="amount[]" value="${amount}"></td>
+            <td class="text-center">
+                <button type="button" class="btn btn-warning btn-sm edit-row"><i class="fa fa-edit"></i></button>
+                <button type="button" class="btn btn-danger btn-sm delete-row"><i class="fa fa-trash"></i></button>
+            </td>
+        </tr>`;
+
+        // Add or Update
+        if(editRow) {
+            editRow.replaceWith(html);
+            editRow = null;
+            row.find('.add-row').html('<i class="fa fa-plus"></i>');
+        } else {
+            $(html).insertBefore('.copy-rates-row');
+        }
+
+        // Clear form
+        clearEntryRow(row);
+        
+        calculateTotal();
+    });
+
+    // ============================================================
+    // 6. DELETE ROW
+    // ============================================================
+    $(document).on('click', '.delete-row', function(){
+        $(this).closest('tr').remove();
+        calculateTotal();
+    });
+
+    // ============================================================
+    // SUPPLIER & TOTAL CALCULATION
+    // ============================================================
     
-    // Automatically insert slash after 2 digits (Month)
-    if (value.length > 2) {
-        value = value.substring(0, 2) + '/' + value.substring(2);
-    }
-    
-    $(this).val(value);
-});
-
-// Handle Backspace correctly so it removes the slash smoothly
-$(document).on('keydown', '.expiry', function (e) {
-    let value = $(this).val();
-    
-    if (e.key === 'Backspace' && value.length === 3 && value.endsWith('/')) {
-        e.preventDefault();
-        $(this).val(value.substring(0, 2));
-    }
-});
-// 1. When a product is selected from Select2 dropdown -> focus on Batch input
-$('.product').on('select2:select', function () {
-    $(this).closest('.entry-row').find('.batch').focus();
-});
-
-// 2. Press Enter on Batch -> go to Expiry
-$(document).on('keydown', '.batch', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.expiry').focus().select();
-    }
-});
-
-// 3. Press Enter on Expiry -> go to MRP
-$(document).on('keydown', '.expiry', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.mrp').focus().select();
-    }
-});
-
-// 4. Press Enter on MRP -> go to Rate
-$(document).on('keydown', '.mrp', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.rate').focus().select();
-    }
-});
-
-// 5. Press Enter on Rate -> go to Tax
-$(document).on('keydown', '.rate', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.tax').focus().select();
-    }
-});
-
-// 6. Press Enter on Tax -> go to Sale Rate (srate)
-$(document).on('keydown', '.tax', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.srate').focus().select();
-    }
-});
-
-// 7. Press Enter on Sale Rate -> go to Sale Tax (stax)
-$(document).on('keydown', '.srate', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.stax').focus().select();
-    }
-});
-
-// 8. Press Enter on Sale Tax -> go to Qty
-$(document).on('keydown', '.stax', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.qty').focus().select();
-    }
-});
-
-// 9. Press Enter on Qty -> go to Free Qty
-$(document).on('keydown', '.qty', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.free_qty').focus().select();
-    }
-});
-
-// 10. Press Enter on Free Qty -> go to Discount (disc)
-$(document).on('keydown', '.free_qty', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.disc').focus().select();
-    }
-});
-
-// 11. Press Enter on Discount -> Click the Add Row button
-$(document).on('keydown', '.disc', function(e){
-    if(e.key === 'Enter'){
-        e.preventDefault();
-        $(this).closest('.entry-row').find('.add-row').click();
-    }
-});
-
     let selectedStockist = "<?= $ROW['super_stockist_id'] ?? '' ?>";
     loadSuperStockist(selectedStockist);
 
@@ -490,142 +905,6 @@ $(document).on('keydown', '.disc', function(e){
         calculateTotal();
     });
 
-    let editRow = null;
-
-    $(document).on('keyup change','.qty,.rate,.disc,.tax',function(){
-        updateEntryRowAmount();
-    });
-
-    function updateEntryRowAmount(){
-        let row = $('.entry-row');
-        let qty  = parseFloat(row.find('.qty').val()) || 0;
-        let rate = parseFloat(row.find('.rate').val()) || 0;
-        let disc = parseFloat(row.find('.disc').val()) || 0;
-        let tax  = parseFloat(row.find('.tax').val()) || 0;
-
-        let base     = qty * rate;
-        let discAmt  = base * (disc / 100);
-        let taxable  = base - discAmt;
-        let taxAmt   = taxable * (tax / 100);
-        let amount   = taxable + taxAmt;
-
-        row.find('.amount').val(amount.toFixed(2));
-    }
-
-    $(document).on('click','.add-row',function(){
-        let row = $('.entry-row');
-        let product     = row.find('.product').val();
-        let productName = row.find('.product option:selected').text();
-        let batch   = row.find('.batch').val();
-        let expiry  = row.find('.expiry').val();
-        let mrp     = row.find('.mrp').val();
-        let qty     = row.find('.qty').val();
-        let freeQty = row.find('.free_qty').val();
-        let rate    = row.find('.rate').val();
-        let srate   = row.find('.srate').val();
-        let disc    = row.find('.disc').val() || 0;
-        let tax     = row.find('.tax').val() || 0;
-        let stax    = row.find('.stax').val() || 0;
-
-        if(product=="") { alert("Please select product."); return; }
-        if(batch=="") { alert("Enter Batch Number."); return; }
-        if(expiry=="") { alert("Select Expiry."); return; }
-        if(qty=="" || qty<=0) { alert("Enter Quantity."); return; }
-        if(rate=="" || rate<=0) { alert("Enter Purchase Rate."); return; }
-
-        let exists = false;
-        $('.purchase-table tbody tr').not('.entry-row').each(function () {
-            if (editRow && $(this)[0] === editRow[0]) return true;
-            let oldProduct = $(this).find('input[name="product_id[]"]').val();
-            let oldBatch   = $(this).find('input[name="batch[]"]').val();
-            if (oldProduct == product && oldBatch == batch) {
-                exists = true;
-                return false;
-            }
-        });
-
-        if (exists) {
-            alert("This Product with the same Batch already exists.");
-            return;
-        }
-
-        let base     = (parseFloat(qty) || 0) * (parseFloat(rate) || 0);
-        let discAmt  = base * ((parseFloat(disc) || 0) / 100);
-        let taxable  = base - discAmt;
-        let taxAmt   = taxable * ((parseFloat(tax) || 0) / 100);
-        let amount   = (taxable + taxAmt).toFixed(2);
-
-        let html = `
-        <tr>
-            <td>${productName}<input type="hidden" name="product_id[]" value="${product}"></td>
-            <td>${batch}<input type="hidden" name="batch[]" value="${batch}"></td>
-            <td>${expiry}<input type="hidden" name="expiry[]" value="${expiry}"></td>
-            <td class="text-end">${mrp}<input type="hidden" name="mrp[]" value="${mrp}"></td>
-            <td class="text-end">${rate}<input type="hidden" name="rate[]" value="${rate}"></td>
-            <td class="text-center">${tax}<input type="hidden" name="tax[]" value="${tax}"></td>
-            <td class="text-end">${srate}<input type="hidden" name="srate[]" value="${srate}"></td>
-            <td class="text-center">${stax}<input type="hidden" name="stax[]" value="${stax}"></td>
-            <td class="text-center">${qty}<input type="hidden" name="qty[]" value="${qty}"></td>
-            <td class="text-center">${freeQty}<input type="hidden" name="free_qty[]" value="${freeQty}"></td>
-            <td class="text-center">${disc}<input type="hidden" name="disc[]" value="${disc}"></td>
-            <td class="amount text-end fw-bold">${amount}<input type="hidden" name="amount[]" value="${amount}"></td>
-            <td class="text-center">
-                <button type="button" class="btn btn-warning btn-sm edit-row"><i class="fa fa-edit"></i></button>
-                <button type="button" class="btn btn-danger btn-sm delete-row"><i class="fa fa-trash"></i></button>
-            </td>
-        </tr>`;
-
-        if(editRow) {
-            editRow.replaceWith(html);
-            editRow = null;
-            $('.add-row').html('<i class="fa fa-plus"></i>');
-        } else {
-            $('.purchase-table tbody').append(html);
-        }
-
-        row.find('.product').val('').trigger('change');
-        row.find('.batch').val('');
-        row.find('.expiry').val('');
-        row.find('.mrp').val('');
-        row.find('.qty').val('');
-        row.find('.free_qty').val('');
-        row.find('.rate').val('');
-        row.find('.srate').val('');
-        row.find('.disc').val('');
-        row.find('.tax').val('');
-        row.find('.amount').val('0.00');
-        row.find('.stax').val('');
-
-        row.find('.product').select2('open');
-
-        calculateTotal();
-    });
-
-    $(document).on('click','.edit-row',function(){
-        editRow = $(this).closest('tr');
-
-        let prodId = editRow.find('input[name="product_id[]"]').val();
-        $('.entry-row .product').val(prodId).trigger('change');
-        $('.entry-row .batch').val(editRow.find('input[name="batch[]"]').val());
-        $('.entry-row .expiry').val(editRow.find('input[name="expiry[]"]').val());
-        $('.entry-row .mrp').val(editRow.find('input[name="mrp[]"]').val());
-        $('.entry-row .qty').val(editRow.find('input[name="qty[]"]').val());
-        $('.entry-row .free_qty').val(editRow.find('input[name="free_qty[]"]').val());
-        $('.entry-row .rate').val(editRow.find('input[name="rate[]"]').val());
-        $('.entry-row .srate').val(editRow.find('input[name="srate[]"]').val());
-        $('.entry-row .disc').val(editRow.find('input[name="disc[]"]').val());
-        $('.entry-row .tax').val(editRow.find('input[name="tax[]"]').val());
-        $('.entry-row .stax').val(editRow.find('input[name="stax[]"]').val());
-
-        updateEntryRowAmount();
-        $('.add-row').html('<i class="fa fa-save"></i>');
-    });
-
-    $(document).on('click','.delete-row',function(){
-        $(this).closest('tr').remove();
-        calculateTotal();
-    });
-
     $(document).on('keyup change', '#discount, #cd_percent, #other_charges, #other_charges_sign', function(){
         calculateTotal();
     });
@@ -636,7 +915,7 @@ $(document).on('keydown', '.disc', function(e){
         let totalDisc = 0;
         let totalTax = 0;
 
-        $('.purchase-table tbody tr').not('.entry-row').each(function(){
+        $('.purchase-table tbody tr').not('.entry-row').not('.copy-rates-row').each(function(){
             let qty  = parseFloat($(this).find('input[name="qty[]"]').val()) || 0;
             let rate = parseFloat($(this).find('input[name="rate[]"]').val()) || 0;
             let disc = parseFloat($(this).find('input[name="disc[]"]').val()) || 0;
@@ -716,6 +995,10 @@ $(document).on('keydown', '.disc', function(e){
         $('#input_vat').val(vat.toFixed(2));
     }
 
+    // ============================================================
+    // SELECT2 & FORM SUBMISSION
+    // ============================================================
+
     $('.select2').select2({
         theme: 'bootstrap-5',
         width: '100%',
@@ -724,7 +1007,7 @@ $(document).on('keydown', '.disc', function(e){
     });
 
     $('#purchaseForm').on('submit',function(e){
-        if($('.purchase-table tbody tr:not(.entry-row)').length == 0) {
+        if($('.purchase-table tbody tr:not(.entry-row):not(.copy-rates-row)').length == 0) {
             alert("Please add at least one product");
             e.preventDefault();
             return false;

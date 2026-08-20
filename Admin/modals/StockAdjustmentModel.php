@@ -25,7 +25,7 @@ class StockAdjustmentModel
                 batch_id,
                 product_id,
                 batch_no,
-                pts
+                sale_rate
             FROM product_batches
             WHERE status='1'
             ORDER BY batch_no ASC
@@ -120,12 +120,9 @@ class StockAdjustmentModel
 
             try
             {
-                
-
                 $inward_id      = mysqli_insert_id($this->con);
                 $trans_date     = $inward_date;
                 $trans_datetime = $inward_date.' '.date('H:i:s');
-
                 $warning = false;
 
                 foreach($post['product'] as $key => $p_id)
@@ -244,26 +241,31 @@ class StockAdjustmentModel
         
          public function getCurrentStock($stockist_id, $p_id, $batch_id)
         {
-            $query = mysqli_query($this->con,"
-                SELECT current_qty
-                FROM stockist_stock
+            // Sanitize inputs to prevent SQL Injection
+            $stockist_id = mysqli_real_escape_string($this->con, $stockist_id);
+            $p_id = mysqli_real_escape_string($this->con, $p_id);
+            $batch_id = mysqli_real_escape_string($this->con, $batch_id);
+
+            // Calculate (IN - OUT) from the ledger
+            // The outer COALESCE ensures it returns 0 instead of NULL if no records exist at all
+            $query = mysqli_query($this->con, "
+                SELECT COALESCE(SUM(COALESCE(qty_in, 0) - COALESCE(qty_out, 0)), 0) AS current_qty
+                FROM stock_ledger
                 WHERE stockist_id='$stockist_id'
                 AND p_id='$p_id'
                 AND batch_id='$batch_id'
-                LIMIT 1
             ");
 
-            if(mysqli_num_rows($query))
-            {
-                return mysqli_fetch_assoc($query);
+            if ($query && $row = mysqli_fetch_assoc($query)) {
+                return $row;
             }
 
             return ['current_qty' => 0];
         }
 
-        public function getProductsByState($state_id)
+        public function getProductsByState()
         {
-            $state_id = intval($state_id);
+            // $state_id = intval($state_id);
 
             $sql = "
                 SELECT
@@ -272,11 +274,10 @@ class StockAdjustmentModel
                     p.product_name,
                     pb.batch_id,
                     pb.batch_no,
-                    pb.pts
+                    pb.sale_rate
                 FROM product_batches pb
                 INNER JOIN products p
                     ON p.p_id = pb.product_id
-                WHERE pb.state_id='$state_id'
                 ORDER BY p.product_code,pb.batch_no
             ";
 

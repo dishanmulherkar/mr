@@ -8,6 +8,37 @@ class PaymentApproval_mdl {
         $this->con = $con;
     }
 
+
+     public function getStates()
+    {
+        // Super Admin can see all states
+        if ($_SESSION['admin_role'] == 'Super Admin') {
+
+            return mysqli_query(
+                $this->con,
+                "SELECT *
+                FROM state
+                WHERE state_status = 1
+                ORDER BY state_name"
+            );
+        }
+
+        // Admin can see only assigned states
+        $admin_id = (int)$_SESSION['admin_id'];
+
+        return mysqli_query(
+            $this->con,
+            "SELECT
+                s.*
+            FROM state s
+            INNER JOIN admin_state ast
+                ON s.state_id = ast.state_id
+            WHERE ast.admin_id = '$admin_id'
+            AND s.state_status = 1
+            ORDER BY s.state_name"
+        );
+    }
+
     // Fetch payments for the admin list
     public function getPaymentsForAdmin($status = '') {
         $query = "

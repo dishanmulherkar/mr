@@ -28,6 +28,19 @@ class PurchaseEntryModel
         ");
     }
 
+    public function getBatchesByProduct($product_id)
+    {
+        $product_id = (int)$product_id;
+        return mysqli_query($this->con, "
+            SELECT DISTINCT 
+                batch_id, batch_no, mrp, purchase_rate, purchase_tax, 
+                sale_rate, sale_tax, expiry_date, status
+            FROM product_batches 
+            WHERE product_id = '$product_id' AND status = 'Active'
+            ORDER BY batch_no DESC
+        ");
+    }
+
     public function store($post)
     {
         // 1. Prepare Header Data
@@ -161,10 +174,10 @@ class PurchaseEntryModel
                         $insert_batch = "
                             INSERT INTO product_batches (
                                 product_id, batch_no, status, purchase_rate, purchase_tax, 
-                                sale_rate, sale_tax, expiry_date,disc
+                                sale_rate, sale_tax, expiry_date, mrp, disc
                             ) VALUES (
                                 '$product_id', '$batch', 'Active', '$rate', '$tax', 
-                                '$srate', '$stax', $expiry_date , $disc
+                                '$srate', '$stax', $expiry_date, $mrp, $disc
                             )
                         ";
                         if (!mysqli_query($this->con, $insert_batch)) {
@@ -200,10 +213,10 @@ class PurchaseEntryModel
                     $ledger_query = "
                         INSERT INTO stock_ledger (
                             reference_id, p_id, batch_id, trans_type, 
-                            qty_in, qty_out, amount, rate,trans_date,trans_datetime,admin_id,stockist_id,stockist_type
+                            qty_in, qty_out, amount, rate, trans_date, trans_datetime, admin_id, stockist_id, stockist_type
                         ) VALUES (
                             '$purchase_id', '$product_id', '$actual_batch_id', 'PURCHASE', 
-                            '$total_stock_qty', 0, '$amount', '$rate', '$purchase_date',NOW(),'$admin_id','$superstokist_id','Super-Stockist'
+                            '$total_stock_qty', 0, '$amount', '$rate', '$purchase_date', NOW(), '$admin_id', '$superstokist_id', 'Super-Stockist'
                         )
                     ";
 
@@ -451,10 +464,10 @@ class PurchaseEntryModel
                         $insert_batch = "
                             INSERT INTO product_batches (
                                 product_id, batch_no, status, purchase_rate, purchase_tax, 
-                                sale_rate, sale_tax, expiry_date,mrp,disc
+                                sale_rate, sale_tax, expiry_date, mrp, disc
                             ) VALUES (
                                 '$product_id', '$batch', 'Active', '$rate', '$tax', 
-                                '$srate', '$stax', $expiry_date , $mrp ,$disc
+                                '$srate', '$stax', $expiry_date, $mrp, $disc
                             )
                         ";
                         if (!mysqli_query($this->con, $insert_batch)) {

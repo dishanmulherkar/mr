@@ -15,7 +15,7 @@ class PaymentApproval_ctl {
             header('Location: index');
             exit;
         }
-
+         $states = $this->model->getStates();
         $current_page = 'PaymentApprovals';
         include 'view/payment/Approvel_list.php';
     }

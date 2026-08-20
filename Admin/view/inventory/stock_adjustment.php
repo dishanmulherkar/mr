@@ -113,12 +113,12 @@ include 'view/layout/header.php';
                                         <th width="30%">Product</th>
                                         <th width="20%">Batch</th>
                                         <th width="10%">Current</th>
-                                        <th width="20%">Adj Qty ( - )</th>
+                                        <th width="20%">Adj Qty (-)</th>
                                     </tr>
                                 </thead>
                                <tbody id="productTableBody">
 
-</tbody>
+                                </tbody>
                             </table>
                         </div>
 

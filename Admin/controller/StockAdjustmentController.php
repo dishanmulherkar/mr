@@ -73,7 +73,7 @@ class StockAdjustmentController
     {
         $state_id = intval($_POST['state_id']);
 
-        $products = $this->model->getProductsByState($state_id);
+        $products = $this->model->getProductsByState();
 
         include 'view/inventory/adj_product_rows.php';
     }

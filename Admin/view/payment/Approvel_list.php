@@ -17,6 +17,26 @@ include 'view/layout/header.php';
         <div class="card shadow-sm border-0 mb-3 border-bottom">
             <div class="card-body">
                 <div class="row g-3 align-items-end">
+
+                <div class="col-lg-3">
+                    <div class="form-group">
+                        <label>Select State</label>
+                        <select name="state" id="state_id" class="form-control select2">
+                            <option value="">-- Select State --</option>
+                            <?php while($srow = mysqli_fetch_assoc($states)): ?>
+                                <option value="<?= htmlspecialchars($srow['state_id']); ?>"><?= htmlspecialchars($srow['state_name']); ?></option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="form-group">
+                        <label>Head Quarter</label>
+                        <select name="hq" id="hq" class="form-control select2">
+                            <option value="">-- Select State First --</option>
+                        </select>
+                    </div>
+                </div>
                     
                     <!-- 1. Status Dropdown -->
                     <div class="col-md-3">

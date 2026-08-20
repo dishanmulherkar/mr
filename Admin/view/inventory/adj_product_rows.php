@@ -17,7 +17,7 @@ while ($row = mysqli_fetch_assoc($products)) {
     $data[$pid]['batches'][] = [
         'batch_id' => $row['batch_id'],
         'batch_no' => $row['batch_no'],
-        'pts'      => $row['pts']
+        'sale_rate'      => $row['sale_rate']
     ];
 }
 
@@ -44,7 +44,7 @@ foreach ($data as $product) {
                 <option value="<?= $batch['batch_id']; ?>"
                         data-batchno="<?= htmlspecialchars($batch['batch_no']); ?>">
                     <?= htmlspecialchars($batch['batch_no']); ?>
-                    (PTS: <?= number_format($batch['pts'],2); ?>)
+                    (PTS: <?= number_format($batch['sale_rate'],2); ?>)
                 </option>
 
             <?php } ?>

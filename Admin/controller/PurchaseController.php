@@ -65,6 +65,45 @@ class PurchaseController
         }
     }
 
+    public function getBatches()
+    {
+        if (!isset($_POST['product_id'])) {
+            die('Invalid request');
+        }
+
+        $product_id = (int)$_POST['product_id'];
+        $batches = $this->model->getBatchesByProduct($product_id);
+        
+        $html = '<option value="">Select Batch</option>';
+        $html .= '<option value="__new__" data-action="new"><strong>+ Add New Batch</strong></option>';
+
+        if (mysqli_num_rows($batches) > 0) {
+            while ($row = mysqli_fetch_assoc($batches)) {
+                // Format expiry for display
+                $expiry_display = '';
+                if (!empty($row['expiry_date']) && $row['expiry_date'] !== '0000-00-00') {
+                    $dt = DateTime::createFromFormat('Y-m-d', $row['expiry_date']);
+                    if ($dt) {
+                        $expiry_display = $dt->format('m/Y');
+                    }
+                }
+
+                $html .= '<option 
+                    value="' . $row['batch_no'] . '"
+                    data-batch-id="' . $row['batch_id'] . '"
+                    data-mrp="' . $row['mrp'] . '"
+                    data-prate="' . $row['purchase_rate'] . '"
+                    data-ptax="' . $row['purchase_tax'] . '"
+                    data-srate="' . $row['sale_rate'] . '"
+                    data-stax="' . $row['sale_tax'] . '"
+                    data-expiry="' . $expiry_display . '"
+                >' . $row['batch_no'] . ' (Exp: ' . $expiry_display . ')' . '</option>';
+            }
+        }
+
+        echo $html;
+    }
+
     public function list()
     {
         // Fetch the list of purchases from the model
