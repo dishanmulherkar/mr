@@ -337,3 +337,40 @@ CREATE TABLE commission_adjustments (
 );
 
 ALTER TABLE stock_inward ADD COLUMN commission_payout_id INT NULL;
+
+ALTER TABLE commission_payouts 
+ADD COLUMN status ENUM('Pending', 'Paid') DEFAULT 'Pending' AFTER total_payout;
+
+ALTER TABLE commission_payouts 
+ADD COLUMN commission_type ENUM('MR', 'DRC') DEFAULT 'MR' AFTER hq_id;
+-----------------------
+-- 21/8/26  -----------
+-----------------------
+ALTER TABLE `payment_ledgers`
+  ADD COLUMN `ledger_type` ENUM('debt', 'mrc_wallet', 'drc_wallet') NOT NULL DEFAULT 'debt' AFTER `stockist_id`,
+  ADD COLUMN `notes` TEXT DEFAULT NULL AFTER `balance_action`,
+  ADD KEY `idx_ledger_type` (`ledger_type`),
+  MODIFY COLUMN `transaction_type` ENUM(
+      'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 
+      'commission_earned', 'settled_to_bill', 'paid_to_bank'
+  ) NOT NULL;
+
+  -- Step 2A: Expand the ENUM to temporarily accept old and new values
+ALTER TABLE `payment_ledgers`
+  MODIFY COLUMN `balance_action` ENUM('increase_debt', 'decrease_debt', 'increase', 'decrease') NOT NULL;
+
+-- Step 2B: Convert the old data to the new terminology
+UPDATE `payment_ledgers` SET `balance_action` = 'increase' WHERE `balance_action` = 'increase_debt';
+UPDATE `payment_ledgers` SET `balance_action` = 'decrease' WHERE `balance_action` = 'decrease_debt';
+
+-- Step 2C: Lock the ENUM to strictly use the new values moving forward
+ALTER TABLE `payment_ledgers`
+  MODIFY COLUMN `balance_action` ENUM('increase', 'decrease') NOT NULL;
+
+  ALTER TABLE `payment_details`
+ADD COLUMN `commission_type` ENUM('none', 'mrc', 'drc') DEFAULT 'none' AFTER `payment_method`;
+
+-----------------------
+-- 22/8/26  -----------
+-----------------------
+ALTER TABLE payment_details MODIFY COLUMN approval_status ENUM('pending', 'approved', 'rejected', 'reversed') DEFAULT 'pending';

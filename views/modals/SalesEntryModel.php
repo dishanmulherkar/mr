@@ -369,14 +369,14 @@ class SalesModel
                     (
                         trans_date, trans_datetime, stockist_type, stockist_id, admin_id, 
                         p_id, batch_id, trans_type, qty_out, qty, rate, 
-                        reference_table, reference_id, remarks
+                        reference_table, reference_id, remarks , amount
                     )
-                    VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'sales_entries', ?, '')
+                    VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'sales_entries', ?, '',?)
                 ");
 
                 // Updated type string to "ssiiiidddi" (10 parameters)
                 $ledger->bind_param(
-                    "ssiiiidddi",
+                    "ssiiiidddid",
                     $sale_date,
                     $trans_datetime,
                     $stockist_id,
@@ -386,7 +386,8 @@ class SalesModel
                     $alloc['alloc_qty'], // Assigned to qty_out
                     $alloc['alloc_qty'], // Assigned to qty
                     $alloc['rate'],
-                    $entry_id
+                    $entry_id,
+                    $alloc['amount']
                 );
 
                 if (!$ledger->execute()) {

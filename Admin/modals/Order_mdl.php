@@ -41,7 +41,6 @@ class OrderModel
 
     public function getHQ()
     {
-        // $state_id = mysqli_real_escape_string($this->con, $state_id);
         return mysqli_query(
             $this->con,
             "SELECT * FROM headquarter"
@@ -117,7 +116,7 @@ class OrderModel
         
         return $stmt->get_result();
     }
-    // Optional: Keep other helper getters if needed by your index view
+
     public function getProducts()
     {
         $result = $this->con->query("SELECT * FROM products ORDER BY product_name ASC");
@@ -150,12 +149,15 @@ class OrderModel
                 si.other_charges,
                 si.remarks,
                 s.transport AS stockist_transport,
-                s.dispatch_to AS stockist_dispatch_to
+                s.dispatch_to AS stockist_dispatch_to,
+                ss.state as super_stockist_state,
+                s.state as stockist_state
             FROM orders o
             LEFT JOIN mr_users m ON m.m_id = o.mr_id
             INNER JOIN headquarter h ON h.headquarter_id = m.hq_id
             LEFT JOIN stockists s ON s.stockist_id = o.stockist_id
             LEFT JOIN stock_inward si ON si.order_id = o.order_id
+            LEFT JOIN super_stockist ss ON ss.super_stockist_id = h.super_stockist_id 
             WHERE o.order_id = ?
         ");
         $stmt->bind_param("i", $order_id);
@@ -195,9 +197,7 @@ class OrderModel
         return $items;
     }
 
-  
-    
- public function getBatchesByStockistAndProduct($stockist_id, $product_id, $current_order_id = 0)
+    public function getBatchesByStockistAndProduct($stockist_id, $product_id, $current_order_id = 0)
     {
         // 1. Get inward_id for the current order to ignore its allocated stock
         $inward_id = 0;
@@ -242,11 +242,6 @@ class OrderModel
             ORDER BY pb.expiry_date ASC, pb.batch_id ASC
         ");
 
-        // Parameters mapping: 
-        // 1. ? for inward_id (in the IF condition)
-        // 2. ? for current_order_id (in the subquery adding back the reserved qty)
-        // 3. ? for stockist_id
-        // 4. ? for product_id
         $stmt->bind_param("iiii", $inward_id, $current_order_id, $stockist_id, $product_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -271,6 +266,7 @@ class OrderModel
 
         return $batches;
     }
+
     public function getProductsBySuperStockist($super_stockist_id)
     {
         $stmt = $this->con->prepare("
@@ -383,7 +379,7 @@ class OrderModel
             $admin_id = 1; 
             $fy_id = 1;    
 
-          $stmt2 = $this->con->prepare("
+            $stmt2 = $this->con->prepare("
                 INSERT INTO stock_inward (
                     inward_no, super_stockist_id, stockist_id, stockist_name, gst_no, mr_id, order_id, 
                     lr_no, eway_bill_no, vehicle_no, transport_name, credit_days, 
@@ -399,7 +395,6 @@ class OrderModel
                 )
             ");
             
-            // Fixed the string from 26 characters to exactly 25 characters
             $stmt2->bind_param(
                 "siissiissssiiidddddddddsd", 
                 $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
@@ -413,8 +408,10 @@ class OrderModel
             $inward_id = $this->con->insert_id;
             $stmt2->close();
 
-            // Payment Ledger Entry
-            $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ?");
+            // ==========================================
+            // FIX: Payment Ledger Entry (Updated for new schema)
+            // ==========================================
+            $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ? AND ledger_type = 'debt'");
             $check_ledger->bind_param("i", $inward_id);
             $check_ledger->execute();
             $res_ledger = $check_ledger->get_result();
@@ -426,7 +423,7 @@ class OrderModel
                 $upd_ledger->execute();
                 $upd_ledger->close();
             } else {
-                $ins_ledger = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, transaction_type, reference_id, amount, balance_action) VALUES (?, 'bill_added', ?, ?, 'increase_debt')");
+                $ins_ledger = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action) VALUES (?, 'debt', 'bill_added', ?, ?, 'increase')");
                 $ins_ledger->bind_param("iid", $stockist_id, $inward_id, $rounded_net_amount);
                 $ins_ledger->execute();
                 $ins_ledger->close();
@@ -441,8 +438,8 @@ class OrderModel
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, 'stock_inward', ?)");
+           $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
 
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -483,10 +480,11 @@ class OrderModel
                     $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    $stmt_ledger_out->bind_param("iiiidddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
+                    // BINDING FIX: Added $net_total as the amount for the ledger
+                    $stmt_ledger_out->bind_param("iiiiddddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_out->execute();
 
-                    $stmt_ledger_in->bind_param("iiiidddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
+                    $stmt_ledger_in->bind_param("iiiiddddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_in->execute();
                 }
             }
@@ -615,9 +613,11 @@ class OrderModel
             $stmt2->execute();
             $stmt2->close();
 
-            // Update Ledger Amount
+            // ==========================================
+            // FIX: Update Ledger Amount (Updated for new schema)
+            // ==========================================
             if ($inward_id > 0) {
-                $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ?");
+                $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ? AND ledger_type = 'debt'");
                 $check_ledger->bind_param("i", $inward_id);
                 $check_ledger->execute();
                 $res_ledger = $check_ledger->get_result();
@@ -629,7 +629,7 @@ class OrderModel
                     $upd_ledger->execute();
                     $upd_ledger->close();
                 } else {
-                    $ins_ledger = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, transaction_type, reference_id, amount, balance_action) VALUES (?, 'bill_added', ?, ?, 'increase_debt')");
+                    $ins_ledger = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action) VALUES (?, 'debt', 'bill_added', ?, ?, 'increase')");
                     $ins_ledger->bind_param("iid", $stockist_id, $inward_id, $rounded_net_amount);
                     $ins_ledger->execute();
                     $ins_ledger->close();
@@ -645,8 +645,8 @@ class OrderModel
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
 
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -686,10 +686,11 @@ class OrderModel
                     $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    $stmt_ledger_out->bind_param("iiiidddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
+                    // BINDING FIX: Added $net_total as the amount for the ledger
+                    $stmt_ledger_out->bind_param("iiiiddddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_out->execute();
 
-                    $stmt_ledger_in->bind_param("iiiidddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $inward_id);
+                    $stmt_ledger_in->bind_param("iiiiddddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_in->execute();
                 }
             }
@@ -728,5 +729,17 @@ class OrderModel
             return ['success' => true];
         }
         return ['success' => false, 'msg' => 'Failed to reject the order.'];
+    }
+
+    public function getgst($ss_state,$s_state){
+        $gst = "";
+        if($ss_state == $s_state){
+            $gst = "CGST_SGST";
+        }elseif($ss_state == $s_state AND $ss_state = "Nepal" ){
+            $gst = "VAT";
+        }else{
+            $gst = "IGST";
+        }
+        return $gst;
     }
 }

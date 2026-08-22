@@ -175,6 +175,19 @@ switch($page)
 
         exit;
 
+    case 'commission':
+
+        include 'controller/commission/commission_ctl.php';
+
+        $controller = new commission_ctl($con);
+
+            if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+        exit;
+
 
     case 'dashboard':
     default:

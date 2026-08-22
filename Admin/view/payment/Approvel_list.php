@@ -262,5 +262,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initial load
     loadPayments();
+
+
+     // Load Headquarter Function
+    function loadHeadquarters(state_id, hq_id = '') {
+        $('#hq').html('<option value="">Loading...</option>'); // Show loading status
+
+        $.ajax({
+            url: '<?= BASE_URL ?>headquarter/getHqByStateAjax',
+            type: 'POST',
+            data: {
+                state_id: state_id,
+                selected_hq: hq_id
+            },
+            success: function(response) {
+                $('#hq').html(response);
+                if ($('#hq').hasClass('select2-hidden-accessible')) {
+                    $('#hq').select2('destroy'); 
+                }
+                $('#hq').select2({ width: '100%' }); 
+            }
+        });
+    }
+
+    // 1. ON PAGE LOAD: Check if state was already selected via URL parameters
+    let selectedStateId = "<?= $_GET['state_id'] ?? '' ?>";
+    let selectedHqId = "<?= $_GET['hq_id'] ?? '' ?>";
+    
+    if (selectedStateId) {
+        // Automatically trigger AJAX to populate the HQ dropdown and retain the selection
+        loadHeadquarters(selectedStateId, selectedHqId);
+    }
+
+    // 2. ON CHANGE: When user manually changes the state
+    $('#state_id').change(function() {
+        let stateId = $(this).val();
+        if (stateId) {
+            loadHeadquarters(stateId, '');
+        } else {
+            $('#hq').html('<option value="">Select State First</option>');
+        }
+    });
+
 });
 </script>

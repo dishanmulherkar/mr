@@ -337,7 +337,7 @@ include 'view/layout/header.php';
                             <span class="summary-label">CD Deduction</span>
                             <span class="summary-value" id="show_cd">₹0.00</span>
                         </div>
-                        <?php if ($ROW['gst_type'] === 'CGST_SGST') { ?>
+                        <?php if ($gst === 'CGST_SGST') { ?>
                         <div class="summary-row" id="row_cgst">
                             <span class="summary-label">CGST (Half Tax)</span>
                             <span class="summary-value" id="show_cgst">₹0.00</span>
@@ -346,13 +346,12 @@ include 'view/layout/header.php';
                             <span class="summary-label">SGST (Half Tax)</span>
                             <span class="summary-value" id="show_sgst">₹0.00</span>
                         </div>
-                        <?php } elseif ($ROW['gst_type'] == 'IGST') { ?>
-                        
+                        <?php } elseif ($gst == 'IGST') { ?>
                         <div class="summary-row" id="row_igst" style="display:none;">
                             <span class="summary-label">IGST</span>
                             <span class="summary-value" id="show_igst">₹0.00</span>
                         </div>
-                        <?php } elseif ($ROW['gst_type'] === 'VAT') { ?>
+                        <?php } elseif ($gst === 'VAT') { ?>
                         <div class="summary-row" id="row_vat" style="display:none;">
                             <span class="summary-label">VAT</span>
                             <span class="summary-value" id="show_vat">₹0.00</span>
@@ -382,7 +381,7 @@ include 'view/layout/header.php';
             <!-- Hidden Fields for Database Sync -->
             <input type="hidden" name="total_qty" id="total_qty" value="0">
             <input type="hidden" name="grand_total" id="grand_total" value="0">
-            <input type="hidden" name="gsttype" id="gst_type_input" value="<?= $ROW['gst_type'] ?? ''; ?>">
+            <input type="hidden" name="gsttype" id="gst_type_input" value="<?= $gst ?? ''; ?>">
             <input type="hidden" name="gst_amt" id="input_gst_amt" value="0">
             <input type="hidden" name="cgst" id="input_cgst" value="0">
             <input type="hidden" name="sgst" id="input_sgst" value="0">

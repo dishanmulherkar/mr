@@ -1,13 +1,13 @@
 <?php 
-$pageTitle = $isEditMode ? "Edit Commission" : "MR Commissions";
+$pageTitle = $isEditMode ? "Edit Dr Commission" : "Dr Commissions";
 include 'view/layout/header.php'; 
 ?>
 
 <div id="container">
     <div class="detail d-flex justify-content-between align-items-center mb-2 mt-2">
-        <h3><?= $isEditMode ? "Edit Commission (Payout #$payout_id)" : "Manage MR Commissions" ?></h3>
+        <h3><?= $isEditMode ? "Edit Dr Commission (Payout #$payout_id)" : "Manage Dr Commissions" ?></h3>
         <div>
-            <a href="<?= BASE_URL ?>commision/mrc_history" class="btn btn-secondary btn-sm"><i class="fa fa-arrow-left"></i> Back to List</a>
+            <a href="<?= BASE_URL ?>drccommision/drc_history" class="btn btn-secondary btn-sm"><i class="fa fa-arrow-left"></i> Back to List</a>
         </div>
     </div>
     <hr style="margin-top:0px; margin-bottom:10px; border-top:1px solid #333;">
@@ -54,7 +54,7 @@ include 'view/layout/header.php';
 
     <!-- ================== DATA TABLE ================== -->
     <div class="commission-container">
-        <h5 class="text-primary mb-3">Eligible Bills for Commission</h5>
+        <h5 class="text-primary mb-3">Eligible Bills for Dr Commission</h5>
         <table class="table table-bordered">
             <thead class="table-light">
                 <tr>
@@ -89,7 +89,7 @@ include 'view/layout/header.php';
 
         <!-- ================== DYNAMIC ADJUSTMENTS ================== -->
         <div id="adjustmentsContainer" class="mt-4 mb-5" style="padding-bottom: 80px;">
-            <h5 class="mb-3 text-primary">ADDITIONS/DIDUCTIONS</h5>
+            <h5 class="mb-3 text-primary">ADDITIONS/DEDUCTIONS</h5>
             <div id="adjustmentsList">
                 <?php if ($isEditMode && !empty($editData['adjustments'])): ?>
                     <?php foreach ($editData['adjustments'] as $adj): ?>
@@ -168,7 +168,7 @@ $(document).ready(function() {
             $('#commissionTableBody').html('<tr><td colspan="7" class="text-center"><i class="fa fa-spinner fa-spin"></i> Loading...</td></tr>');
             resetMath();
 
-            $.get('<?= BASE_URL ?>commision/fetch_mr_bills', { hqId: hqId, month: $('#filter_month').val() }, function(res) {
+            $.get('<?= BASE_URL ?>drccommision/fetch_mr_bills', { hqId: hqId, month: $('#filter_month').val() }, function(res) {
                 if(res.success && res.data.length > 0) {
                     let rows = res.data.map(bill => `
                         <tr>
@@ -269,10 +269,10 @@ $(document).ready(function() {
         
         if (isEditMode) payloadData.payout_id = editPayoutId;
 
-        $.post(isEditMode ? '<?= BASE_URL ?>commision/update_mrc' : '<?= BASE_URL ?>commision/claim_mrc', payloadData, function(res) {
+        $.post(isEditMode ? '<?= BASE_URL ?>drccommision/update_drc' : '<?= BASE_URL ?>drccommision/claim_drc', payloadData, function(res) {
             if(res.success) {
                 alert(res.msg || 'Success!');
-                if (isEditMode) window.location.href = '<?= BASE_URL ?>commision/mrc_history';
+                if (isEditMode) window.location.href = '<?= BASE_URL ?>drccommision/drc_history';
                 else { $('#adjustmentsList').empty(); appendEmptyAdjustmentRow(); $('#btnFetchBills').trigger('click'); }
             } else {
                 alert('Error: ' + res.msg);

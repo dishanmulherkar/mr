@@ -1,11 +1,11 @@
 <?php
-include 'modals/commision/Commission_mdl.php'; 
+include 'modals/commision/drc_mdl.php'; 
 
-class CommissionController {
+class drc_ctl {
     private $commissionModel;
 
     public function __construct() {
-        $this->commissionModel = new Commission_mdl();
+        $this->commissionModel = new drc_mdl();
     }
 
     // ==========================================
@@ -20,7 +20,7 @@ class CommissionController {
         $states = $this->commissionModel->getStates();
         $isEditMode = false;
         
-        include 'view/commission/mr_com.php'; // Update path if needed
+        include 'view/commission/drc_entry.php'; // Update path if needed
     }
 
     // ==========================================
@@ -52,14 +52,13 @@ class CommissionController {
         
         $states = $this->commissionModel->getStates(); 
         
-        include 'view/commission/mr_com.php';
+        include 'view/commission/drc_entry.php';
     }
 
     // ==========================================
     // 3. AJAX: Fetch Bills (Used in Create Mode)
     // ==========================================
-    public function fetch_mr_bills() 
-    {
+    public function fetch_mr_bills() {
         header('Content-Type: application/json');
         if (!isset($_SESSION['admin_id'])) exit;
 
@@ -86,8 +85,7 @@ class CommissionController {
     // ==========================================
     // 4. AJAX: Save New Payout
     // ==========================================
-    public function claim_mrc() 
-    {
+    public function claim_drc() {
         header('Content-Type: application/json');
         if (!isset($_SESSION['admin_id'])) exit;
 
@@ -106,7 +104,7 @@ class CommissionController {
     // ==========================================
     // 5. AJAX: Update Existing Payout
     // ==========================================
-    public function update_mrc() {
+    public function update_drc() {
         header('Content-Type: application/json');
         if (!isset($_SESSION['admin_id'])) exit;
 
@@ -126,7 +124,7 @@ class CommissionController {
     // ==========================================
     // 6. AJAX: Delete Payout (NEW)
     // ==========================================
-    public function delete_mrc() {
+    public function delete_drc() {
         header('Content-Type: application/json');
         if (!isset($_SESSION['admin_id'])) exit;
 
@@ -144,20 +142,20 @@ class CommissionController {
     // ==========================================
     // 7. HISTORY VIEWS (Datatable)
     // ==========================================
-    public function mrc_history() {
+    public function drc_history() {
         if (!isset($_SESSION['admin_id'])) { header('Location: index'); exit; }
         $states = $this->commissionModel->getStates();
-        include 'view/commission/mr_com_list.php'; // Update path if needed
+        include 'view/commission/drc_list.php'; // Update path if needed
     }
 
-    public function get_mrc_history() {
+    public function get_drc_history() {
         header('Content-Type: application/json');
         if (!isset($_SESSION['admin_id'])) exit;
 
         $hq_id = isset($_GET['hqId']) ? (int)$_GET['hqId'] : 0;
         $month = isset($_GET['month']) ? trim($_GET['month']) : '';
 
-        $data = $this->commissionModel->getMrCommissionHistory($hq_id, $month);
+        $data = $this->commissionModel->getDrCommissionHistory($hq_id, $month);
         if ($data) {
             echo json_encode(['success' => true, 'data' => $data]);
         } else {
@@ -167,23 +165,22 @@ class CommissionController {
 
     public function save_filters_session() 
     {
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-            }
-            
-            // Note: Using 'mrc_' prefix so it doesn't conflict with the 'drc' page filters
-            if (isset($_POST['state_id'])) {
-                $_SESSION['mrc_filter_state'] = $_POST['state_id'];
-            }
-            if (isset($_POST['hq_id'])) {
-                $_SESSION['mrc_filter_hq'] = $_POST['hq_id'];
-            }
-            if (isset($_POST['month'])) {
-                $_SESSION['mrc_filter_month'] = $_POST['month'];
-            }
-            
-            echo json_encode(['status' => 'success']);
-            exit;
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        if (isset($_POST['state_id'])) {
+            $_SESSION['filter_state'] = $_POST['state_id'];
+        }
+        if (isset($_POST['hq_id'])) {
+            $_SESSION['filter_hq'] = $_POST['hq_id'];
+        }
+        if (isset($_POST['month'])) {
+            $_SESSION['filter_month'] = $_POST['month'];
+        }
+        
+        echo json_encode(['status' => 'success']);
+        exit;
     }
 }
 ?>

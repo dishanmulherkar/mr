@@ -41,6 +41,7 @@ class OrderController
         $Products = $this->model->getProductsBySuperStockist($ROW['super_stockist_id']);
         // Fetch order line items pre-populated
         $ROW_DETAILS = $this->model->getOrderDetails($order_id);
+        $gst = $this->model->getgst($ROW['super_stockist_state'],$ROW['stockist_state']);
 
         include 'view/Order/approve.php';
     }

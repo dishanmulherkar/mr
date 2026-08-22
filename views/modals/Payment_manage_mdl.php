@@ -88,14 +88,10 @@ class Payment_model {
 
             $bank_details = trim($data['bank_details'] ?? '');
             $approval_status = 'pending';
-
             $screenshot_path = null;
 
             // Upload payment proof
-            if (
-                isset($file['screenshot']) &&
-                $file['screenshot']['error'] === UPLOAD_ERR_OK
-            ) {
+            if (isset($file['screenshot']) && $file['screenshot']['error'] === UPLOAD_ERR_OK) {
 
                 $physical_upload_dir = '../uploads/payments/';
 
@@ -103,11 +99,7 @@ class Payment_model {
                     mkdir($physical_upload_dir, 0777, true);
                 }
 
-                $file_extension = strtolower(
-                    pathinfo($file['screenshot']['name'], PATHINFO_EXTENSION)
-                );
-
-                // Allowed file types
+                $file_extension = strtolower(pathinfo($file['screenshot']['name'], PATHINFO_EXTENSION));
                 $allowed_extensions = ['jpg', 'jpeg', 'png', 'pdf'];
 
                 if (!in_array($file_extension, $allowed_extensions)) {
@@ -120,22 +112,16 @@ class Payment_model {
                 }
 
                 $new_filename = 'pay_' . time() . '_' . rand(1000, 9999) . '.' . $file_extension;
-
                 $target_file = $physical_upload_dir . $new_filename;
 
-                if (move_uploaded_file(
-                    $file['screenshot']['tmp_name'],
-                    $target_file
-                )) {
-
+                if (move_uploaded_file($file['screenshot']['tmp_name'], $target_file)) {
                     $screenshot_path = 'uploads/payments/' . $new_filename;
-
                 } else {
                     throw new Exception("Failed to upload the payment proof.");
                 }
             }
 
-            // Insert payment
+            // Insert payment (Note: commission_type defaults to 'none' in the DB schema for standard MR cash payments)
             $stmt = $this->con->prepare("
                 INSERT INTO payment_details 
                 (
@@ -164,21 +150,16 @@ class Payment_model {
             );
 
             if ($stmt->execute()) {
-
                 $stmt->close();
-
                 return [
                     'success' => true,
                     'msg' => 'Payment entry submitted successfully. Pending approval.'
                 ];
-
             } else {
-
                 throw new Exception($stmt->error);
             }
 
         } catch (Exception $e) {
-
             return [
                 'success' => false,
                 'msg' => 'Database error: ' . $e->getMessage()
@@ -186,8 +167,6 @@ class Payment_model {
         }
     }
 
-    // Action: Fetch filtered payments and ledger history from the database (SECURED TO HQ)
-    // Action: Fetch filtered payments and ledger history from the database (SECURED TO HQ)
     public function getFilteredPayments($mr_id, $stockist_id, $from_date) {
         $mr_id = (int)$mr_id;
         $stockist_id = (int)$stockist_id;
@@ -207,8 +186,6 @@ class Payment_model {
             $cond .= " AND DATE(si.created_at) = '$safe_date'";
         }
 
-        // FIX: Added ROUND() to grand_total and paid_amt. 
-        // Used GREATEST(0, ...) so pending amount never shows negative fractional values.
         $query = "
             SELECT 
                 si.inward_id AS record_id,
@@ -246,18 +223,19 @@ class Payment_model {
         return $processed_rows;
     }
 
+  
 
     public function getOutstandingBalance($stockist_id) 
     {
         $stockist_id = (int)$stockist_id;
         
-        // FIX: Added ROUND() around the SUM functions to ensure the final outstanding balance is clean
+        // FIX: Added ROUND() around the SUM functions, included settlement types, and restricted to the 'debt' ledger
         $stmt = $this->con->prepare("
             SELECT 
-                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) = 'increase_debt' OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
-                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) = 'decrease_debt' OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment') THEN amount ELSE 0 END), 0)) AS total_outstanding
+                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
+                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0)) AS total_outstanding
             FROM payment_ledgers 
-            WHERE stockist_id = ?
+            WHERE stockist_id = ? AND ledger_type = 'debt'
         ");
         
         $stmt->bind_param("i", $stockist_id);
@@ -273,29 +251,26 @@ class Payment_model {
         return $outstanding;
     }
 
+
     public function getSubmittedPayments($mr_id, $stockist_id, $from_date) {
         $mr_id = (int)$mr_id;
         $stockist_id = (int)$stockist_id;
         
         $cond = "1=1";
         
-        // Filter by specific stockist if selected
         if ($stockist_id > 0) {
             $cond .= " AND p.stockist_id = $stockist_id";
         }
 
-        // Filter to only show stockists assigned to this MR (Security)
         if ($mr_id > 0) {
             $cond .= " AND s.hq_id IN (SELECT hq_id FROM mr_users WHERE m_id = $mr_id)";
         }
 
-        // Filter by Date if selected
         if (!empty($from_date)) {
             $safe_date = mysqli_real_escape_string($this->con, $from_date);
             $cond .= " AND DATE(p.created_at) = '$safe_date'";
         }
 
-        // We alias the columns to match exactly what the JavaScript expects
         $query = "
             SELECT 
                 p.id as reference_no,
@@ -317,7 +292,6 @@ class Payment_model {
         
         if ($result) {
             while ($row = $result->fetch_assoc()) {
-                // Keep the status exactly as it is in the DB enum (lowercase)
                 $row['status'] = strtolower($row['status']); 
                 $payments[] = $row;
             }

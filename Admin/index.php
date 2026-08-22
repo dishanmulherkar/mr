@@ -192,13 +192,18 @@ switch($page)
         break;
     
     case 'payment':
-        include 'controller/Payment_ctl.php';
+        include 'controller/payment/Payment_ctl.php';
         $controller = new PaymentApproval_ctl($con);
         break;  
     
     case 'commision':
     include 'controller/commision/Commission_ctl.php';
     $controller = new CommissionController($con);
+    break;  
+    
+    case 'drccommision':
+    include 'controller/commision/drc_ctl.php';
+    $controller = new drc_ctl($con);
     break;  
 
     case 'dashboard':

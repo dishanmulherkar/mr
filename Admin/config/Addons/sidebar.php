@@ -205,7 +205,17 @@
                     <ul class="nav flex-column ms-4 mt-1">
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>payment" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage Payments
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Approvel Payments
+                            </a>
+                        </li>
+                         <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Payments Entry
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment/payment_list" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Payments entry History
                             </a>
                         </li>
                     </ul>
@@ -226,12 +236,12 @@
                     <ul class="nav flex-column ms-4 mt-1">
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>commision/mrc_history" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage MR Commision
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> MR Commision
                             </a>
                         </li>
                         <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>commision" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manage Dr Commision
+                            <a href="<?= BASE_URL ?>drccommision/drc_history" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Dr Commision
                             </a>
                         </li>
                     </ul>

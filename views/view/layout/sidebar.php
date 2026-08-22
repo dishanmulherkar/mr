@@ -10,6 +10,16 @@
 
   <?php
 $current_page = strtolower(explode('/', trim($_GET['url'] ?? 'dashboard', '/'))[0]);
+
+
+// Get all segments of the URL
+$url_segments = explode('/', trim($_GET['url'] ?? 'dashboard', '/'));
+
+// First part (e.g., 'commission')
+$current_controller = strtolower($url_segments[0]);
+
+// Second part (e.g., 'dr_commision'). Defaults to empty string if it doesn't exist.
+$current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
 ?>
 
 <div class="nav-section">Main</div>
@@ -55,6 +65,30 @@ $current_page = strtolower(explode('/', trim($_GET['url'] ?? 'dashboard', '/'))[
             <line x1="1" y1="10" x2="23" y2="10"></line>
         </svg>
     Manage Payment
+</a>
+
+<!-- Mr Commission -->
+<a href="<?= BASE_URL ?>commission"
+  class="nav-item <?= ($current_controller == 'commission' && ($current_action == '' || $current_action == 'index')) ? 'active' : ''; ?>">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"></circle>
+    <line x1="9" y1="15" x2="15" y2="9"></line>
+    <circle cx="9.5" cy="9.5" r="1" fill="currentColor"></circle>
+    <circle cx="14.5" cy="14.5" r="1" fill="currentColor"></circle>
+    </svg>
+    Mr Commission
+</a>
+
+<!-- Dr Commission -->
+<a href="<?= BASE_URL ?>commission/dr_commision"
+  class="nav-item <?= ($current_controller == 'commission' && $current_action == 'dr_commision') ? 'active' : ''; ?>">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="9" y1="15" x2="15" y2="9"></line>
+        <circle cx="9.5" cy="9.5" r="1" fill="currentColor"></circle>
+        <circle cx="14.5" cy="14.5" r="1" fill="currentColor"></circle>
+    </svg>
+    Dr Commission
 </a>
 
 <div class="nav-section">Reports</div>

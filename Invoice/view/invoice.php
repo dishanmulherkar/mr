@@ -33,17 +33,26 @@ $companyAddress = trim(implode(', ', array_filter([
     $invoice['company_state'] ?? null,
     $invoice['company_pincode'] ?? null
 ])));
-
+IF ($stateName == $invoice['company_state']) {
+    $gstType =  'CGST_SGST';
+}elseif($stateName == 'NEPAL'){
+    $gstType =  'VAT';
+}else{
+    $gstType =  'IGST';
+}
 $items = $invoice['items'] ?? [];
-$gstType = strtoupper($invoice['gst_type'] ?? 'CGST_SGST'); // Expected: CGST_SGST, IGST, or VAT
+// $gstType = strtoupper($invoice['gst_type'] ?? 'CGST_SGST');  Expected: CGST_SGST, IGST, or VAT
 
 // Totals
 $dbTotalQty = (float)($invoice['total_qty'] ?? 0);
 $dbSubTotal = (float)($invoice['sub_total'] ?? 0);
 $dbSgst = (float)($invoice['sgst_amount'] ?? 0);
 $dbCgst = (float)($invoice['cgst_amount'] ?? 0);
-$dbIgst = (float)($invoice['igst_amount'] ?? 0);
+$Igst = (float)($invoice['igst_amount'] ?? 0);
 $dbVat = (float)($invoice['vat_amount'] ?? ($invoice['gst_amount'] ?? 0));
+$dbgst = ($dbSgst + $dbCgst + $Igst);
+$dbIgst = (float)($dbgst);
+
 $dbOther = (float)($invoice['other_charges'] ?? 0);
 $dbGrandTotal = (float)($invoice['grand_total'] ?? 0);
 

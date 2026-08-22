@@ -1,27 +1,27 @@
 <?php 
-// Ensure session is started
+// Ensure session is started (if not already handled globally)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$pageTitle = "MR Commission List";
+$pageTitle = "DR Commission List";
 include 'view/layout/header.php'; 
 
-// Fetch existing session values for MRC
-$sess_state = $_SESSION['mrc_filter_state'] ?? '';
-$sess_hq    = $_SESSION['mrc_filter_hq'] ?? '';
-$sess_month = $_SESSION['mrc_filter_month'] ?? '';
+// Fetch existing session values
+$sess_state = $_SESSION['filter_state'] ?? '';
+$sess_hq    = $_SESSION['filter_hq'] ?? '';
+$sess_month = $_SESSION['filter_month'] ?? '';
 ?>
 
 <div id="container">
     <div class="detail">
-        <a href="<?= BASE_URL ?>commision">
-            <button type="button" class="btn btn-secondary btn-sm">Add Commission</button>
+        <a href="<?= BASE_URL ?>drccommision">
+            <button type="button" class="btn btn-secondary btn-sm">Add Dr Commission</button>
         </a>
     </div>
     <hr style="margin-top:10px; margin-bottom:10px; border-top:1px solid #333;">
 
-    <h3>MR Commission List</h3>
+    <h3>DR Commission List</h3>
 
     <!-- ================== SEARCH FILTERS ================== -->
     <div class="container border px-3 py-3 mb-4">
@@ -32,7 +32,7 @@ $sess_month = $_SESSION['mrc_filter_month'] ?? '';
                     <select name="state" id="state_id" class="form-control select2">
                         <option value="">-- Select State --</option>
                         <?php while($srow = mysqli_fetch_assoc($states)): ?>
-                            <option value="<?= htmlspecialchars($srow['state_id']); ?>"
+                            <option value="<?= htmlspecialchars($srow['state_id']); ?>" 
                                 <?= ($sess_state == $srow['state_id']) ? 'selected' : ''; ?>>
                                 <?= htmlspecialchars($srow['state_name']); ?>
                             </option>
@@ -104,7 +104,7 @@ $(document).ready(function() {
         let currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
         $('#filter_month').val(`${currentYear}-${currentMonth}`);
     }
-
+    
     // Handle State Change to load HQs
     $('#state_id').change(function() {
         let stateId = $(this).val();
@@ -120,7 +120,7 @@ $(document).ready(function() {
             data: { state_id: stateId },
             success: function(response) {
                 $('#hq').html(response);
-                
+
                 // Auto-select HQ if restoring from session on page load
                 if (isInitialLoad && sessHq) {
                     $('#hq').val(sessHq);
@@ -154,7 +154,7 @@ $(document).ready(function() {
         }
 
         // 1. Save current filters to session via AJAX
-        $.post('<?= BASE_URL ?>commision/save_filters_session', {
+        $.post('<?= BASE_URL ?>drccommision/save_filters_session', {
             state_id: stateId,
             hq_id: hqId,
             month: filterMonth
@@ -165,14 +165,14 @@ $(document).ready(function() {
         tbody.html('<tr><td colspan="6" class="text-center"><i class="fa fa-spinner fa-spin"></i> Loading...</td></tr>');
 
         $.ajax({
-            url: '<?= BASE_URL ?>commision/get_mrc_history',
+            url: '<?= BASE_URL ?>drccommision/get_drc_history',
             type: 'GET',
             data: { hqId: hqId, month: filterMonth },
             success: function(res) {
                 if(res.success && res.data.length > 0) {
                     let rows = '';
                     res.data.forEach(payout => {
-                        let editUrl = `<?= BASE_URL ?>commision/edit/${payout.payout_id}`;
+                        let editUrl = `<?= BASE_URL ?>drccommision/edit/${payout.payout_id}`;
                         let statusBadge = payout.status === 'Paid' 
                             ? '<span class="badge bg-success">Paid</span>' 
                             : '<span class="badge bg-warning text-dark">Pending</span>';
@@ -214,7 +214,7 @@ $(document).ready(function() {
             let btn = $(this);
             btn.html('<i class="fa fa-spinner fa-spin"></i>').prop('disabled', true);
             
-            $.post('<?= BASE_URL ?>commision/delete_mrc', { payout_id: payoutId }, function(res) {
+            $.post('<?= BASE_URL ?>drccommision/delete_drc', { payout_id: payoutId }, function(res) {
                 if(res.success) {
                     alert('Commission deleted successfully.');
                     $('#btnFetchHistory').trigger('click'); // Reload the table

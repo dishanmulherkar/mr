@@ -1,5 +1,5 @@
 <?php
-class Commission_mdl {
+class drc_mdl {
     private $con;
 
     public function __construct() {
@@ -7,7 +7,7 @@ class Commission_mdl {
         $this->con = $con;
     }
 
-     public function getStates()
+    public function getStates()
     {
         // Super Admin can see all states
         if ($_SESSION['admin_role'] == 'Super Admin') {
@@ -72,7 +72,7 @@ class Commission_mdl {
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE s.hq_id = $hq_id 
-            AND si.mrc = 0 
+            AND si.drc = 0 
             $month_sql
             ORDER BY si.created_at ASC
         ";
@@ -104,8 +104,8 @@ class Commission_mdl {
 
             $this->con->begin_transaction();
 
-            // 1. Insert the Master Payout Record
-            $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, status) VALUES (?, 'MR', ?, ?)");
+            // 1. Insert the Master Payout Record WITH DRC STATUS
+            $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, status) VALUES (?, 'DRC', ?, ?)");
             $stmt_payout->bind_param("ids", $hq_id, $final_payout, $status);
             
             if (!$stmt_payout->execute()) {
@@ -119,10 +119,10 @@ class Commission_mdl {
             $update_query = "
                 UPDATE stock_inward si
                 INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-                SET si.mrc = 1, si.commission_payout_id = $payout_id
+                SET si.drc = 1, si.commission_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
                 AND s.hq_id = $hq_id
-                AND si.mrc = 0
+                AND si.drc = 0
             ";
 
             if (!$this->con->query($update_query)) {
@@ -139,6 +139,7 @@ class Commission_mdl {
                     $amt  = (float)$adj['amount'];
                     
                     $stmt_adj->bind_param("issd", $payout_id, $desc, $type, $amt);
+                    
                     if (!$stmt_adj->execute()) {
                         throw new Exception("Failed to save adjustments.");
                     }
@@ -146,10 +147,10 @@ class Commission_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split commission fairly among the stockists involved
+            // 4. LEDGER UPDATE: Split DRC commission fairly among the stockists involved
             if ($status === 'Paid') {
                 
-                // Get the MR's commission rate for calculation
+                // Get the commission rate for calculation
                 $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
                 $stmt_mr->bind_param("i", $hq_id);
                 $stmt_mr->execute();
@@ -168,10 +169,11 @@ class Commission_mdl {
                 $stmt_dist->execute();
                 $dist_res = $stmt_dist->get_result();
                 
+                // Note the ledger_type is 'drc_wallet'
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, 'increase', ?)
+                    VALUES (?, 'drc_wallet', 'commission_earned', ?, ?, 'increase', ?)
                 ");
 
                 while ($stk_row = $dist_res->fetch_assoc()) {
@@ -179,7 +181,7 @@ class Commission_mdl {
                     $stk_comm = (float)$stk_row['total_stk_comm'];
                     
                     if ($stk_comm > 0) {
-                        $notes = "MR Commission Earned (Payout #$payout_id)";
+                        $notes = "DRC Commission Earned (Payout #$payout_id)";
                         $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $stk_comm, $notes);
                         if (!$stmt_ledger->execute()) {
                             throw new Exception("Failed to update ledger for stockist $stockist_id");
@@ -191,7 +193,8 @@ class Commission_mdl {
             }
 
             $this->con->commit();
-            return ['success' => true, 'msg' => 'Commission claimed successfully.'];
+
+            return ['success' => true, 'msg' => 'Commission and adjustments claimed successfully.'];
 
         } catch (Exception $e) {
             $this->con->rollback();
@@ -199,8 +202,8 @@ class Commission_mdl {
         }
     }
 
-    public function getMrCommissionHistory($hq_id, $month) {
-        // ADDED: AND cp.commission_type = 'MR'
+    public function getDrCommissionHistory($hq_id, $month) 
+    {
         $sql = "
             SELECT 
                 cp.payout_id, 
@@ -209,7 +212,7 @@ class Commission_mdl {
                 DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') AS date_paid,
                 (SELECT hq_name FROM headquarter WHERE hq_id = cp.hq_id LIMIT 1) AS hq_name 
             FROM commission_payouts cp
-            WHERE cp.hq_id = ? AND cp.commission_type = 'MR'
+            WHERE cp.hq_id = ? AND cp.commission_type = 'DRC'
         ";
         
         $params = [$hq_id];
@@ -241,7 +244,8 @@ class Commission_mdl {
         return $data;
     }
 
-    public function getPayoutDetails($payout_id) {
+    public function getPayoutDetails($payout_id) 
+    {
         $details = ['bills' => [], 'adjustments' => []];
 
         $sql1 = "
@@ -278,11 +282,11 @@ class Commission_mdl {
         return $details;
     }
 
-    public function getEditData($payout_id) {
+    public function getEditData($payout_id) 
+    {
         $data = ['bills' => [], 'adjustments' => [], 'hq_id' => 0];
 
-        // ADDED: AND commission_type = 'MR'
-        $stmt_hq = $this->con->prepare("SELECT hq_id FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
+        $stmt_hq = $this->con->prepare("SELECT hq_id FROM commission_payouts WHERE payout_id = ? AND commission_type = 'DRC'");
         $stmt_hq->bind_param("i", $payout_id);
         $stmt_hq->execute();
         $hq_result = $stmt_hq->get_result()->fetch_assoc();
@@ -316,7 +320,7 @@ class Commission_mdl {
                 si.commission_payout_id
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-            WHERE (s.hq_id = ? AND si.mrc = 0) 
+            WHERE (s.hq_id = ? AND si.drc = 0) 
                OR (si.commission_payout_id = ?)
             ORDER BY si.created_at DESC
         ";
@@ -345,20 +349,23 @@ class Commission_mdl {
         return $data;
     }
 
-    public function updateMrCommission($payout_id, $hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') {
+    public function updateMrCommission($payout_id, $hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
+    {
         try {
-            $stmt_check = $this->con->prepare("SELECT status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
+            // --- SECURITY GUARDRAIL --- 
+            $stmt_check = $this->con->prepare("SELECT status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'DRC'");
             $stmt_check->bind_param("i", $payout_id);
             $stmt_check->execute();
             $payout_status = $stmt_check->get_result()->fetch_assoc();
             $stmt_check->close();
             
             if (!$payout_status) {
-                throw new Exception("MR Payout not found.");
+                throw new Exception("DRC Payout not found.");
             }
             if ($payout_status['status'] === 'Paid') {
                 throw new Exception("This payout has already been marked as Paid and cannot be edited.");
             }
+            // --------------------------
 
             $bill_ids = json_decode($bill_ids_json, true);
             $adjustments = json_decode($adjustments_json, true);
@@ -372,7 +379,7 @@ class Commission_mdl {
 
             $this->con->begin_transaction();
 
-            $reset_bills = "UPDATE stock_inward SET mrc = 0, commission_payout_id = NULL WHERE commission_payout_id = ?";
+            $reset_bills = "UPDATE stock_inward SET drc = 0, commission_payout_id = NULL WHERE commission_payout_id = ?";
             $stmt_reset = $this->con->prepare($reset_bills);
             $stmt_reset->bind_param("i", $payout_id);
             $stmt_reset->execute();
@@ -384,7 +391,8 @@ class Commission_mdl {
             $stmt_del->execute();
             $stmt_del->close();
 
-            $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ? WHERE payout_id = ? AND commission_type = 'MR'";
+            // UPDATE MASTER PAYOUT RECORD
+            $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ? WHERE payout_id = ? AND commission_type = 'DRC'";
             $stmt_payout = $this->con->prepare($update_payout);
             $stmt_payout->bind_param("dsi", $final_payout, $status, $payout_id);
             if (!$stmt_payout->execute()) {
@@ -395,7 +403,7 @@ class Commission_mdl {
             $update_query = "
                 UPDATE stock_inward si
                 INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-                SET si.mrc = 1, si.commission_payout_id = $payout_id
+                SET si.drc = 1, si.commission_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
                 AND s.hq_id = $hq_id
             ";
@@ -418,10 +426,10 @@ class Commission_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split commission fairly among the stockists involved
+            // 4. LEDGER UPDATE: Split DRC commission fairly among the stockists involved
             if ($status === 'Paid') {
                 
-                // Get the MR's commission rate for calculation
+                // Get the commission rate for calculation
                 $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
                 $stmt_mr->bind_param("i", $hq_id);
                 $stmt_mr->execute();
@@ -440,10 +448,11 @@ class Commission_mdl {
                 $stmt_dist->execute();
                 $dist_res = $stmt_dist->get_result();
                 
+                // Note the ledger_type is 'drc_wallet'
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, 'increase', ?)
+                    VALUES (?, 'drc_wallet', 'commission_earned', ?, ?, 'increase', ?)
                 ");
 
                 while ($stk_row = $dist_res->fetch_assoc()) {
@@ -451,7 +460,7 @@ class Commission_mdl {
                     $stk_comm = (float)$stk_row['total_stk_comm'];
                     
                     if ($stk_comm > 0) {
-                        $notes = "MR Commission Earned (Payout #$payout_id)";
+                        $notes = "DRC Commission Earned (Payout #$payout_id)";
                         $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $stk_comm, $notes);
                         if (!$stmt_ledger->execute()) {
                             throw new Exception("Failed to update ledger for stockist $stockist_id");
@@ -463,6 +472,7 @@ class Commission_mdl {
             }
 
             $this->con->commit();
+
             return ['success' => true, 'msg' => 'Payout updated successfully.'];
 
         } catch (Exception $e) {
@@ -471,113 +481,37 @@ class Commission_mdl {
         }
     }
 
-   // ==========================================================
-    // NEW METHOD: Flip the status between Pending and Paid (WITH STRICT ERROR CHECKING)
-    // ==========================================================
-    public function updatePayoutStatus($payout_id, $status = 'Paid') {
+    public function updatePayoutStatus($payout_id, $status = 'Paid') 
+    {
         try {
-            $this->con->begin_transaction();
-
-            // 1. Get current payout data before updating
-            $stmt_info = $this->con->prepare("SELECT total_payout, status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR' FOR UPDATE");
-            $stmt_info->bind_param("i", $payout_id);
-            $stmt_info->execute();
-            $payout_data = $stmt_info->get_result()->fetch_assoc();
-            $stmt_info->close();
-
-            if (!$payout_data) {
-                throw new Exception("MR Payout not found.");
-            }
-
-            $current_status = trim($payout_data['status']);
-            $total_payout = (float)$payout_data['total_payout'];
-
-            // 2. Update the payout status
-            $stmt = $this->con->prepare("UPDATE commission_payouts SET status = ? WHERE payout_id = ? AND commission_type = 'MR'");
+            $stmt = $this->con->prepare("UPDATE commission_payouts SET status = ? WHERE payout_id = ? AND commission_type = 'DRC'");
             $stmt->bind_param("si", $status, $payout_id);
             
             if (!$stmt->execute()) {
-                throw new Exception("Failed to update payout status: " . $stmt->error);
+                throw new Exception("Database update failed.");
             }
             $stmt->close();
-
-            // 3. Update the payment_ledgers based on status change
-            if ($status === 'Paid' && $current_status !== 'Paid') {
-                
-                // Fetch the stockist associated with this MR payout
-                $stmt_stockist = $this->con->prepare("SELECT stockist_id FROM stock_inward WHERE commission_payout_id = ? LIMIT 1");
-                $stmt_stockist->bind_param("i", $payout_id);
-                $stmt_stockist->execute();
-                $stockist_res = $stmt_stockist->get_result()->fetch_assoc();
-                $stmt_stockist->close();
-
-                // STRICT CHECK: Ensure stockist exists
-                if (!$stockist_res || empty($stockist_res['stockist_id'])) {
-                    throw new Exception("Could not find a Stockist linked to this payout's bills.");
-                }
-
-                $stockist_id = $stockist_res['stockist_id'];
-                $notes = "MR Commission Earned (Payout #$payout_id)";
-
-                // Prepare the ledger insert
-                $stmt_ledger = $this->con->prepare("
-                    INSERT INTO payment_ledgers 
-                    (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, 'increase', ?)
-                ");
-                
-                // STRICT CHECK: Catch missing columns or ENUM errors from ALTER TABLE
-                if (!$stmt_ledger) {
-                    throw new Exception("SQL Error in payment_ledgers: " . $this->con->error);
-                }
-
-                $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $total_payout, $notes);
-                
-                // STRICT CHECK: Catch execution errors
-                if (!$stmt_ledger->execute()) {
-                    throw new Exception("Failed to add amount to MR commission ledger: " . $stmt_ledger->error);
-                }
-                $stmt_ledger->close();
-
-            } elseif ($status !== 'Paid' && $current_status === 'Paid') {
-                // If it was reverted to Pending/Rejected, remove the wallet credit
-                $stmt_rev = $this->con->prepare("
-                    DELETE FROM payment_ledgers 
-                    WHERE ledger_type = 'mrc_wallet' 
-                    AND transaction_type = 'commission_earned' 
-                    AND reference_id = ?
-                ");
-                $stmt_rev->bind_param("i", $payout_id);
-                $stmt_rev->execute();
-                $stmt_rev->close();
-            }
-
-            $this->con->commit();
+            
             return ['success' => true, 'msg' => 'Status updated to ' . $status];
-
         } catch (Exception $e) {
-            $this->con->rollback();
             return ['success' => false, 'msg' => $e->getMessage()];
         }
     }
 
-    // ==========================================================
-    // DELETE MR COMMISSION (Updated to handle ledger)
-    // ==========================================================
     public function deleteMrCommission($payout_id)
     {
         try {
             $payout_id = (int)$payout_id;
             $this->con->begin_transaction();
 
-            // 1. Remove ledger entry if it was marked as paid
-            $stmt_ledger = $this->con->prepare("DELETE FROM payment_ledgers WHERE ledger_type = 'mrc_wallet' AND transaction_type = 'commission_earned' AND reference_id = ?");
+            // 1. Remove ledger entry if it was marked as paid (Clean up drc_wallet)
+            $stmt_ledger = $this->con->prepare("DELETE FROM payment_ledgers WHERE ledger_type = 'drc_wallet' AND transaction_type = 'commission_earned' AND reference_id = ?");
             $stmt_ledger->bind_param("i", $payout_id);
             $stmt_ledger->execute();
             $stmt_ledger->close();
 
-            // 2. Unlink all bills (reset mrc to 0)
-            $stmt_reset = $this->con->prepare("UPDATE stock_inward SET mrc = 0, commission_payout_id = NULL WHERE commission_payout_id = ?");
+            // 2. Unlink all bills (reset drc to 0)
+            $stmt_reset = $this->con->prepare("UPDATE stock_inward SET drc = 0, commission_payout_id = NULL WHERE commission_payout_id = ?");
             $stmt_reset->bind_param("i", $payout_id);
             $stmt_reset->execute();
             $stmt_reset->close();
@@ -588,8 +522,8 @@ class Commission_mdl {
             $stmt_adj->execute();
             $stmt_adj->close();
 
-            // 4. Delete the payout record itself
-            $stmt_payout = $this->con->prepare("DELETE FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
+            // 4. Delete the payout record itself (Making sure it's DRC)
+            $stmt_payout = $this->con->prepare("DELETE FROM commission_payouts WHERE payout_id = ? AND commission_type = 'DRC'");
             $stmt_payout->bind_param("i", $payout_id);
             
             if (!$stmt_payout->execute()) {
