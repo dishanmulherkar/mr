@@ -67,7 +67,7 @@ class HeadquarterController
             $districts = $this->model->getDistrictsByState($ROW['state_id']);
         }
 
-        include 'view/headquarter/index.php';
+        include 'view/Headquarter/index.php';
     }
     // Handle update operation
     public function update($id)

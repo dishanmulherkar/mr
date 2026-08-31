@@ -26,7 +26,6 @@ class StockistModel
                 ORDER BY stockists.stockist_id DESC
             ");
         }
-// 
         $admin_id = (int)$_SESSION['admin_id'];
 
         return mysqli_query($this->con, "
@@ -84,7 +83,7 @@ class StockistModel
     public function getStates()
     {
         // Super Admin can see all states
-        // if ($_SESSION['admin_role'] == 'Super Admin') {
+        if ($_SESSION['admin_role'] == 'Super Admin') {
 
             return mysqli_query(
                 $this->con,
@@ -93,10 +92,22 @@ class StockistModel
                 WHERE state_status = 1
                 ORDER BY state_name"
             );
-        // }
+        }
 
         // Admin can see only assigned states
         $admin_id = (int)$_SESSION['admin_id'];
+
+        return mysqli_query(
+            $this->con,
+            "SELECT
+                s.*
+            FROM state s
+            INNER JOIN admin_state ast
+                ON s.state_id = ast.state_id
+            WHERE ast.admin_id = '$admin_id'
+            AND s.state_status = 1
+            ORDER BY s.state_name"
+        );
     }
 
          public function getDistrictsByState($state_id)

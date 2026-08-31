@@ -12,6 +12,8 @@ class HeadquarterModel
     // Fetch all headquarters with joined state and district names for the table list
     public function getAllHeadquarters()
     {
+
+     if ($_SESSION['admin_role'] == 'Super Admin') {
         return mysqli_query($this->con, "
             SELECT 
                 h.headquarter_id, 
@@ -23,6 +25,25 @@ class HeadquarterModel
             LEFT JOIN state s ON h.state_id = s.state_id
             ORDER BY h.headquarter_id DESC
         ");
+        }
+
+        $admin_id = (int)$_SESSION['admin_id'];
+
+         return mysqli_query($this->con, "
+            SELECT 
+                h.headquarter_id, 
+                h.hq_name, 
+                s.state_name, 
+                h.district,
+                h.state_id
+            FROM headquarter h
+             INNER JOIN admin_state ast
+                ON h.state_id = ast.state_id
+            LEFT JOIN state s ON h.state_id = s.state_id
+            WHERE ast.admin_id = $admin_id
+            ORDER BY h.headquarter_id DESC
+        ");
+
     }
 
     // Fetch single headquarter by ID for editing
@@ -45,9 +66,33 @@ class HeadquarterModel
     // Fetch all states for dropdown
     public function getStates()
     {
-        return mysqli_query($this->con, "SELECT state_id, state_name FROM state  WHERE state_status = 1 ORDER BY state_name ASC");
-    }
+        // Super Admin can see all states
+        if ($_SESSION['admin_role'] == 'Super Admin') {
 
+            return mysqli_query(
+                $this->con,
+                "SELECT *
+                FROM state
+                WHERE state_status = 1
+                ORDER BY state_name"
+            );
+        }
+
+        // Admin can see only assigned states
+        $admin_id = (int)$_SESSION['admin_id'];
+
+        return mysqli_query(
+            $this->con,
+            "SELECT
+                s.*
+            FROM state s
+            INNER JOIN admin_state ast
+                ON s.state_id = ast.state_id
+            WHERE ast.admin_id = '$admin_id'
+            AND s.state_status = 1
+            ORDER BY s.state_name"
+        );
+    }
     // Store new headquarter
     public function store($post)
     {
@@ -137,9 +182,23 @@ class HeadquarterModel
 
     public function getSuperStockist()
     {
+         if ($_SESSION['admin_role'] == 'Super Admin') {
+            return mysqli_query($this->con, "
+                SELECT ss.super_stockist_id, ss.ss_name, s.state_name
+                FROM super_stockist ss 
+                INNER JOIN state s ON ss.state = s.state_id
+                ORDER BY ss_name ASC
+            ");
+        }
+        
+        $admin_id = (int)$_SESSION['admin_id'];
+
         return mysqli_query($this->con, "
-            SELECT *
-            FROM super_stockist
+            SELECT ss.super_stockist_id, ss.ss_name, s.state_name
+            FROM super_stockist ss 
+            INNER JOIN state s ON ss.state = s.state_id
+            INNER JOIN admins a ON ss.super_stockist_id = a.stockist_id
+            WHERE a.admin_id = '$admin_id'
             ORDER BY ss_name ASC
         ");
     }

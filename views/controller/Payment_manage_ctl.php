@@ -108,37 +108,30 @@ class payment_manage_ctl {
         }
     }
 
-    public function get_outstanding() 
-    {
-        // 1. Clear any HTML output
-        if (ob_get_length()) ob_clean(); 
+   public function get_outstanding() {
+        // Ensure clean JSON output without any PHP warnings breaking it
+        ob_clean(); 
         header('Content-Type: application/json');
         
-        // 2. Extract the ID based on your router's logic ($parts[2])
-        $url = trim($_GET['url'] ?? '', '/');
-        $parts = explode('/', $url);
-        $stockist_id = isset($parts[2]) ? (int)$parts[2] : 0;
+        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
         
         if ($stockist_id > 0) {
-            // NOTE: Make sure your controller has access to the model here!
-            // Example: $outstanding = $this->paymentModel->getOutstandingBalance($stockist_id);
+            // Fetch the comprehensive data from the model
+            $data = $this->model->getStockistOutstandingWithCD($stockist_id);
             
-            // Assuming your controller automatically loads its model as $this->model:
-            $outstanding = $this->model->getOutstandingBalance($stockist_id);
-            
+            // Encode and send all required keys to the frontend
             echo json_encode([
-                'success' => true,
-                'outstanding' => $outstanding
+                'success'           => true, 
+                'outstanding'       => $data['total_outstanding'],
+                'eligible_cd'       => $data['eligible_cd'],      // Required by JS
+                'total_penalty'     => $data['total_penalty'],    // Required by JS (The CD Revocation)
+                'net_payable'       => $data['net_payable'],
+                'bills'             => $data['bill_details']      // The array of bills
             ]);
         } else {
-            echo json_encode([
-                'success' => false,
-                'msg' => 'Invalid Stockist ID'
-            ]);
+            echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
         }
-        
-        // 3. Stop the script so no footer/header HTML loads
-        exit; 
+        exit;
     }
 }
 ?>

@@ -210,12 +210,12 @@
                         </li>
                          <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Payments Entry
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Entry
                             </a>
                         </li>
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>payment/payment_list" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Payments entry History
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission entry History
                             </a>
                         </li>
                     </ul>
@@ -309,6 +309,21 @@
                                 <i class="fa-solid fa-file-arrow-down" style="width: 20px;"></i> Inward Report
                             </a>
                         </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment_ledger" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-file-arrow-down" style="width: 20px;"></i> PAYMENT LEDGER
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment_ledger/mrc_ledger" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-file-arrow-down" style="width: 20px;"></i> Mr Commision LEDGER
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment_ledger/drc_ledger" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-file-arrow-down" style="width: 20px;"></i> DRC LEDGER
+                            </a>
+                        </li>
                         <?php if($admin_role == 'Super Admin'){ ?>
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>State_wise_report" class="nav-link text-light py-1">
@@ -366,6 +381,11 @@
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>financial" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-calendar-days" style="width: 20px;"></i> Financial
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>cd_rules" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-calendar-days" style="width: 20px;"></i> CD Rules
                             </a>
                         </li>
                     </ul>

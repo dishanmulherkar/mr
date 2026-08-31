@@ -286,7 +286,7 @@ class OrderModel
     }
 
 
-    public function processOrderApproval($data)
+   public function processOrderApproval($data)
     {
         try {
             // 1. Start Transaction
@@ -299,6 +299,7 @@ class OrderModel
             
             $exact_grand_total = (float)$data['grand_total']; 
             $rounded_net_amount = round($exact_grand_total);
+            $round_off = (float)($data['round_off'] ?? 0); // <-- Added Round Off variable
             
             // Map form array names to variables
             $approved_qtys = $data['approved_qty'] ?? [];
@@ -368,9 +369,9 @@ class OrderModel
             }
             $st_query->close();
 
-            // Update Orders Table
-            $stmt1 = $this->con->prepare("UPDATE orders SET status = 'Approved', total_amt = ? WHERE order_id = ?");
-            $stmt1->bind_param("di", $exact_grand_total, $order_id);
+            // <-- UPDATED: Store rounded net amount and round off difference -->
+            $stmt1 = $this->con->prepare("UPDATE orders SET status = 'Approved', total_amt = ?, round_off = ? WHERE order_id = ?");
+            $stmt1->bind_param("ddi", $rounded_net_amount, $round_off, $order_id);
             $stmt1->execute();
             $stmt1->close();
 
@@ -379,28 +380,30 @@ class OrderModel
             $admin_id = 1; 
             $fy_id = 1;    
 
+            // <-- UPDATED: Added round_off to query and values -->
             $stmt2 = $this->con->prepare("
                 INSERT INTO stock_inward (
                     inward_no, super_stockist_id, stockist_id, stockist_name, gst_no, mr_id, order_id, 
                     lr_no, eway_bill_no, vehicle_no, transport_name, credit_days, 
                     admin_id, fy_id, inward_date, 
-                    total_qty, sub_total, discount, gst_amount, other_charges, grand_total, 
+                    total_qty, sub_total, discount, gst_amount, other_charges, grand_total, round_off, 
                     cgst_amount, sgst_amount, igst_amount, remarks, cd_percent
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, 
                     ?, ?, ?, ?, ?, 
                     ?, ?, CURDATE(), 
-                    ?, ?, ?, ?, ?, ?, 
+                    ?, ?, ?, ?, ?, ?, ?, 
                     ?, ?, ?, ?, ?
                 )
             ");
             
+            // <-- UPDATED: adjusted bindings string length and variables (added $round_off) -->
             $stmt2->bind_param(
-                "siissiissssiiidddddddddsd", 
+                "siissiissssiiiddddddddddsd", 
                 $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $admin_id, $fy_id, 
-                $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $exact_grand_total,
+                $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $rounded_net_amount, $round_off,
                 $cgst, $sgst, $igst, $remarks, $cd_percent
             );
 
@@ -409,7 +412,7 @@ class OrderModel
             $stmt2->close();
 
             // ==========================================
-            // FIX: Payment Ledger Entry (Updated for new schema)
+            // FIX: Payment Ledger Entry
             // ==========================================
             $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ? AND ledger_type = 'debt'");
             $check_ledger->bind_param("i", $inward_id);
@@ -456,16 +459,14 @@ class OrderModel
                     $discount_percent = (float)($discs[$key] ?? 0.00);
                     $gst_percent      = (float)($taxes[$key] ?? 0.00);
 
-                    // Compound Calculation: Base -> Item Discount -> CD Percent
                     $base_amount      = $qty * $rate;
                     $disc_amount      = $base_amount * ($discount_percent / 100);
                     $after_first_disc = $base_amount - $disc_amount;
                     
-                    // CD % applied directly to taxable base
                     $cd_disc_amount   = $after_first_disc * ($cd_percent / 100);
-                    $amt              = $after_first_disc - $cd_disc_amount; // Final product-wise taxable amount including CD
+                    $amt              = $after_first_disc - $cd_disc_amount;
                     
-                    $gst_amount_item  = $amt * ($gst_percent / 100); // Product-wise GST calculated accurately on CD-included taxable value
+                    $gst_amount_item  = $amt * ($gst_percent / 100); 
                     $net_total        = $amt + $gst_amount_item;
                     $qty_float        = (float)$qty; 
 
@@ -480,7 +481,6 @@ class OrderModel
                     $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    // BINDING FIX: Added $net_total as the amount for the ledger
                     $stmt_ledger_out->bind_param("iiiiddddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_out->execute();
 
@@ -515,6 +515,7 @@ class OrderModel
             
             $exact_grand_total = (float)$data['grand_total'];
             $rounded_net_amount = round($exact_grand_total); 
+            $round_off = (float)($data['round_off'] ?? 0); // <-- Added Round Off variable
             $admin_id = 1;
 
             $approved_qtys = $data['approved_qty'] ?? [];
@@ -589,32 +590,33 @@ class OrderModel
                 }
             }
 
-            // Update Orders Master
-            $stmt1 = $this->con->prepare("UPDATE orders SET total_amt = ? WHERE order_id = ?");
-            $stmt1->bind_param("di", $exact_grand_total, $order_id);
+            // <-- UPDATED: Save rounded net amount and round off to Orders -->
+            $stmt1 = $this->con->prepare("UPDATE orders SET total_amt = ?, round_off = ? WHERE order_id = ?");
+            $stmt1->bind_param("ddi", $rounded_net_amount, $round_off, $order_id);
             $stmt1->execute();
             $stmt1->close();
 
-            // Update Stock Inward Master
+            // <-- UPDATED: Save rounded net amount and round off to Stock Inwards -->
             $stmt2 = $this->con->prepare("
                 UPDATE stock_inward SET 
                 lr_no=?, eway_bill_no=?, vehicle_no=?, transport_name=?, credit_days=?, 
                 total_qty=?, sub_total=?, discount=?, gst_amount=?, other_charges=?, 
-                grand_total=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?
+                grand_total=?, round_off=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?
                 WHERE order_id=?
             ");
             
-            $stmt2->bind_param("ssssidddddddddsii", 
+            // <-- UPDATED: adjusted bindings string length and variables -->
+            $stmt2->bind_param("ssssiddddddddddsdi", 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, 
-                $exact_grand_total, $cgst_amount, $sgst_amount, $igst_amount, $remarks, $cd_percent,
+                $rounded_net_amount, $round_off, $cgst_amount, $sgst_amount, $igst_amount, $remarks, $cd_percent,
                 $order_id
             );
             $stmt2->execute();
             $stmt2->close();
 
             // ==========================================
-            // FIX: Update Ledger Amount (Updated for new schema)
+            // FIX: Update Ledger Amount
             // ==========================================
             if ($inward_id > 0) {
                 $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ? AND ledger_type = 'debt'");
@@ -663,7 +665,6 @@ class OrderModel
                     $discount_percent = (float)($discs[$key] ?? 0.00);
                     $gst_percent      = (float)($taxes[$key] ?? 0.00);
 
-                    // Compound Calculation: Base -> Item Discount -> CD Percent
                     $base_amount      = $qty * $rate;
                     $disc_amount      = $base_amount * ($discount_percent / 100);
                     $after_first_disc = $base_amount - $disc_amount;
@@ -686,7 +687,6 @@ class OrderModel
                     $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    // BINDING FIX: Added $net_total as the amount for the ledger
                     $stmt_ledger_out->bind_param("iiiiddddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_out->execute();
 

@@ -391,65 +391,118 @@ class orderentry_mdl
         }
     }
 
-    public function getOrdersByMr($mr_id, $stockist_id = 0, $from_date = '', $to_date = '')
-    {
-        $sql = "
+public function getOrdersByMr($mr_id, $stockist_id = 0, $from_date = '', $to_date = '')
+{
+    $sql = "
+        SELECT 
+            o.order_id,
+            o.order_date,
+            o.total_amt,
+            o.status,
+            s.stockist_name,
+
+            COALESCE(od.total_qty, 0) AS total_qty,
+
+            CASE 
+                WHEN o.status = 'approved' 
+                    THEN COALESCE(si.grand_total, o.total_amt)
+                ELSE o.total_amt
+            END AS display_total
+
+        FROM orders o
+
+        INNER JOIN stockists s 
+            ON s.stockist_id = o.stockist_id
+
+        LEFT JOIN (
             SELECT 
-                o.order_id,
-                o.order_date,
-                o.total_amt,
-                o.status,
-                s.stockist_name,
-                COALESCE(SUM(od.qty), 0) AS total_qty
-            FROM orders o
-            INNER JOIN stockists s ON s.stockist_id = o.stockist_id
-            LEFT JOIN order_details od ON od.order_id = o.order_id
-            WHERE o.mr_id = ?
-        ";
+                order_id,
+                SUM(qty) AS total_qty
+            FROM order_details
+            GROUP BY order_id
+        ) od 
+            ON od.order_id = o.order_id
 
-        $types  = "i";
-        $params = [$mr_id];
+        LEFT JOIN (
+            SELECT 
+                order_id,
+                MAX(grand_total) AS grand_total
+            FROM stock_inward
+            GROUP BY order_id
+        ) si 
+            ON si.order_id = o.order_id
 
-        if (!empty($stockist_id)) {
-            $sql .= " AND o.stockist_id = ? ";
-            $types .= "i";
-            $params[] = $stockist_id;
-        }
-        if (!empty($from_date)) {
-            $sql .= " AND o.order_date >= ? ";
-            $types .= "s";
-            $params[] = $from_date;
-        }
-        if (!empty($to_date)) {
-            $sql .= " AND o.order_date <= ? ";
-            $types .= "s";
-            $params[] = $to_date;
-        }
+        WHERE o.mr_id = ?
+    ";
 
-        $sql .= " GROUP BY o.order_id ORDER BY o.order_date DESC, o.order_id DESC ";
+    $types = "i";
+    $params = [$mr_id];
 
-        $stmt = $this->con->prepare($sql);
-        if (!$stmt) return [];
-
-        $stmt->bind_param($types, ...$params);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        $orders = [];
-        while ($row = $result->fetch_assoc()) {
-            $orders[] = [
-                'order_id'      => (int)$row['order_id'],
-                'order_no'      => 'ORD' . str_pad($row['order_id'], 4, '0', STR_PAD_LEFT),
-                'order_date'    => date('d-m', strtotime($row['order_date'])),
-                'stockist_name' => $row['stockist_name'],
-                'total_qty'     => (int)$row['total_qty'],
-                'total_amt'     => (float)$row['total_amt'],
-                'status'        => $row['status'] ?? 'Pending',
-            ];
-        }
-        $stmt->close();
-        return $orders;
+    if (!empty($stockist_id)) {
+        $sql .= " AND o.stockist_id = ? ";
+        $types .= "i";
+        $params[] = $stockist_id;
     }
 
+    if (!empty($from_date)) {
+        $sql .= " AND o.order_date >= ? ";
+        $types .= "s";
+        $params[] = $from_date;
+    }
+
+    if (!empty($to_date)) {
+        $sql .= " AND o.order_date <= ? ";
+        $types .= "s";
+        $params[] = $to_date;
+    }
+
+    $sql .= "
+        ORDER BY o.order_date DESC, o.order_id DESC
+    ";
+
+    $stmt = $this->con->prepare($sql);
+
+    if (!$stmt) {
+        return [];
+    }
+
+    $stmt->bind_param($types, ...$params);
+
+    $stmt->execute();
+
+    $result = $stmt->get_result();
+
+    $orders = [];
+
+    while ($row = $result->fetch_assoc()) {
+
+        $orders[] = [
+            'order_id'      => (int)$row['order_id'],
+
+           'order_no' => 'O' . str_pad($row['order_id'], 3, '0', STR_PAD_LEFT),
+            'order_date'    => date(
+                'd-m',
+                strtotime($row['order_date'])
+            ),
+
+            'stockist_name' => $row['stockist_name'],
+
+            'total_qty'     => (int)$row['total_qty'],
+
+            'total_amt'     => (float)$row['total_amt'],
+
+            // Final amount:
+            // Pending  -> orders.total_amt
+            // Approved -> stock_inward.grand_total
+            'grand_total'  => (float)$row['display_total'],
+
+            'status'        => $row['status'] ?? 'Pending',
+        ];
+    }
+
+    $stmt->close();
+
+    return $orders;
+}
 
 }

@@ -46,7 +46,7 @@ class OrderController
         include 'view/Order/approve.php';
     }
 
-    public function Approved()
+public function Approved()
     {
         $order_id          = $_POST['order_id'] ?? null;
         $stockist_id       = $_POST['stockist_id'] ?? null;
@@ -92,8 +92,8 @@ class OrderController
             'igst'              => (float)($_POST['igst'] ?? 0),
             'other_charges'     => $other_charges,
             'grand_total'       => (float)($_POST['grand_total'] ?? 0),
+            'round_off'         => (float)($_POST['round_off'] ?? 0), // <-- Added Round Off here
             'cd_percent'        => (float)($_POST['cd_percent'] ?? 0)
-
         ];
 
         // ===============================================

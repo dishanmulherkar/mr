@@ -87,7 +87,7 @@ class drc_mdl {
         return $bills;
     }
 
-    public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
+public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
     {
         try {
             $hq_id = (int)$hq_id; 
@@ -147,7 +147,7 @@ class drc_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split DRC commission fairly among the stockists involved
+            // 4. LEDGER UPDATE: Split DRC commission and INCLUDE ADJUSTMENTS
             if ($status === 'Paid') {
                 
                 // Get the commission rate for calculation
@@ -169,25 +169,49 @@ class drc_mdl {
                 $stmt_dist->execute();
                 $dist_res = $stmt_dist->get_result();
                 
-                // Note the ledger_type is 'drc_wallet'
+                // Note: Added a dynamic balance_action parameter (?) to handle deductions
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'drc_wallet', 'commission_earned', ?, ?, 'increase', ?)
+                    VALUES (?, 'drc_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
+                $calculated_bill_total = 0;
+                $last_stockist_id = 0;
+
+                // A. Insert base commission per stockist
                 while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = $stk_row['stockist_id'];
+                    $stockist_id = (int)$stk_row['stockist_id'];
                     $stk_comm = (float)$stk_row['total_stk_comm'];
                     
                     if ($stk_comm > 0) {
+                        $last_stockist_id = $stockist_id;
+                        $calculated_bill_total += $stk_comm;
+                        
                         $notes = "DRC Commission Earned (Payout #$payout_id)";
-                        $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $stk_comm, $notes);
+                        $action = 'increase';
+                        
+                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
                         if (!$stmt_ledger->execute()) {
                             throw new Exception("Failed to update ledger for stockist $stockist_id");
                         }
                     }
                 }
+                
+                // B. Insert difference (Adjustments/Deductions) to balance the final payout
+                $net_adjustment = round((float)$final_payout - $calculated_bill_total, 2);
+                
+                if ($net_adjustment != 0 && $last_stockist_id > 0) {
+                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
+                    $adj_amount = abs($net_adjustment);
+                    $adj_notes = "DRC Commission Adjustment (Payout #$payout_id)";
+                    
+                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
+                    if (!$stmt_ledger->execute()) {
+                        throw new Exception("Failed to apply commission adjustments to ledger.");
+                    }
+                }
+
                 $stmt_ledger->close();
                 $stmt_dist->close();
             }
@@ -426,7 +450,7 @@ class drc_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split DRC commission fairly among the stockists involved
+            // 4. LEDGER UPDATE: Split DRC commission and INCLUDE ADJUSTMENTS
             if ($status === 'Paid') {
                 
                 // Get the commission rate for calculation
@@ -448,25 +472,49 @@ class drc_mdl {
                 $stmt_dist->execute();
                 $dist_res = $stmt_dist->get_result();
                 
-                // Note the ledger_type is 'drc_wallet'
+                // Note: Added a dynamic balance_action parameter (?) to handle deductions
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'drc_wallet', 'commission_earned', ?, ?, 'increase', ?)
+                    VALUES (?, 'drc_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
+                $calculated_bill_total = 0;
+                $last_stockist_id = 0;
+
+                // A. Insert base commission per stockist
                 while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = $stk_row['stockist_id'];
+                    $stockist_id = (int)$stk_row['stockist_id'];
                     $stk_comm = (float)$stk_row['total_stk_comm'];
                     
                     if ($stk_comm > 0) {
+                        $last_stockist_id = $stockist_id;
+                        $calculated_bill_total += $stk_comm;
+                        
                         $notes = "DRC Commission Earned (Payout #$payout_id)";
-                        $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $stk_comm, $notes);
+                        $action = 'increase';
+                        
+                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
                         if (!$stmt_ledger->execute()) {
                             throw new Exception("Failed to update ledger for stockist $stockist_id");
                         }
                     }
                 }
+                
+                // B. Insert difference (Adjustments/Deductions) to balance the final payout
+                $net_adjustment = round((float)$final_payout - $calculated_bill_total, 2);
+                
+                if ($net_adjustment != 0 && $last_stockist_id > 0) {
+                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
+                    $adj_amount = abs($net_adjustment);
+                    $adj_notes = "DRC Commission Adjustment (Payout #$payout_id)";
+                    
+                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
+                    if (!$stmt_ledger->execute()) {
+                        throw new Exception("Failed to apply commission adjustments to ledger.");
+                    }
+                }
+
                 $stmt_ledger->close();
                 $stmt_dist->close();
             }

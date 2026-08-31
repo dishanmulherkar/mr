@@ -188,6 +188,19 @@ switch($page)
         }
         exit;
 
+    case 'payment_ledger':
+
+        include 'controller/payment_ledger/payment_ledger_ctl.php';
+
+        $controller = new payment_ledger_ctl($con);
+
+            if (method_exists($controller, $action)) {
+            $controller->$action($id);
+        } else {
+            $controller->index();
+        }
+        exit;
+
 
     case 'dashboard':
     default:

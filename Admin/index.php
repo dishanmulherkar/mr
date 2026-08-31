@@ -122,7 +122,7 @@ switch($page)
         break;
 
     case 'stock_and_sales_report':
-        include 'controller/StockandSalesRepController.php';
+        include 'controller/report/StockandSalesRepController.php';
         $controller = new StockandSalesRepController($con);
         break;  
         
@@ -137,7 +137,7 @@ switch($page)
         break;   
         
     case 'State_wise_report':
-        include 'controller/StateWiseReportController.php';
+        include 'controller/report/StateWiseReportController.php';
         $controller = new StateWiseReportController($con);
         break;  
 
@@ -205,6 +205,16 @@ switch($page)
     include 'controller/commision/drc_ctl.php';
     $controller = new drc_ctl($con);
     break;  
+
+    case 'cd_rules':
+    include 'controller/rules/cd_rules_ctl.php';
+    $controller = new cdrules_ctl($con);
+    break;
+
+    case 'payment_ledger' :
+    include 'controller/report/payment_ledger_ctl.php';
+    $controller = new payment_ledger_ctl($con);
+    break;
 
     case 'dashboard':
     default:

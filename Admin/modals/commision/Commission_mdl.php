@@ -146,10 +146,9 @@ class Commission_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split commission fairly among the stockists involved
+            // 4. LEDGER UPDATE: Split commission and include adjustments
             if ($status === 'Paid') {
                 
-                // Get the MR's commission rate for calculation
                 $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
                 $stmt_mr->bind_param("i", $hq_id);
                 $stmt_mr->execute();
@@ -157,7 +156,6 @@ class Commission_mdl {
                 $stmt_mr->close();
                 $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0;
 
-                // Group bills by stockist and sum their exact commission portion
                 $stmt_dist = $this->con->prepare("
                     SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
                     FROM stock_inward 
@@ -168,24 +166,49 @@ class Commission_mdl {
                 $stmt_dist->execute();
                 $dist_res = $stmt_dist->get_result();
                 
+                // Note: Added a dynamic balance_action parameter (?) to handle deductions
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, 'increase', ?)
+                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
+                $calculated_bill_total = 0;
+                $last_stockist_id = 0;
+
+                // A. Insert base commission per stockist
                 while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = $stk_row['stockist_id'];
+                    $stockist_id = (int)$stk_row['stockist_id'];
                     $stk_comm = (float)$stk_row['total_stk_comm'];
                     
                     if ($stk_comm > 0) {
+                        $last_stockist_id = $stockist_id;
+                        $calculated_bill_total += $stk_comm;
+                        
                         $notes = "MR Commission Earned (Payout #$payout_id)";
-                        $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $stk_comm, $notes);
+                        $action = 'increase';
+                        
+                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
                         if (!$stmt_ledger->execute()) {
                             throw new Exception("Failed to update ledger for stockist $stockist_id");
                         }
                     }
                 }
+                
+                // B. Insert difference (Adjustments/Deductions) to balance the final payout
+                $net_adjustment = round((float)$final_payout - $calculated_bill_total, 2);
+                
+                if ($net_adjustment != 0 && $last_stockist_id > 0) {
+                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
+                    $adj_amount = abs($net_adjustment);
+                    $adj_notes = "MR Commission Adjustment (Payout #$payout_id)";
+                    
+                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
+                    if (!$stmt_ledger->execute()) {
+                        throw new Exception("Failed to apply commission adjustments to ledger.");
+                    }
+                }
+
                 $stmt_ledger->close();
                 $stmt_dist->close();
             }
@@ -345,7 +368,8 @@ class Commission_mdl {
         return $data;
     }
 
-    public function updateMrCommission($payout_id, $hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') {
+    public function updateMrCommission($payout_id, $hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
+    {
         try {
             $stmt_check = $this->con->prepare("SELECT status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
             $stmt_check->bind_param("i", $payout_id);
@@ -418,10 +442,9 @@ class Commission_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split commission fairly among the stockists involved
+            // 4. LEDGER UPDATE: Split commission and include adjustments
             if ($status === 'Paid') {
                 
-                // Get the MR's commission rate for calculation
                 $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
                 $stmt_mr->bind_param("i", $hq_id);
                 $stmt_mr->execute();
@@ -429,7 +452,6 @@ class Commission_mdl {
                 $stmt_mr->close();
                 $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0;
 
-                // Group bills by stockist and sum their exact commission portion
                 $stmt_dist = $this->con->prepare("
                     SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
                     FROM stock_inward 
@@ -440,24 +462,49 @@ class Commission_mdl {
                 $stmt_dist->execute();
                 $dist_res = $stmt_dist->get_result();
                 
+                // Note: Added a dynamic balance_action parameter (?) to handle deductions
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, 'increase', ?)
+                    VALUES (?, 'mrc_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
+                $calculated_bill_total = 0;
+                $last_stockist_id = 0;
+
+                // A. Insert base commission per stockist
                 while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = $stk_row['stockist_id'];
+                    $stockist_id = (int)$stk_row['stockist_id'];
                     $stk_comm = (float)$stk_row['total_stk_comm'];
                     
                     if ($stk_comm > 0) {
+                        $last_stockist_id = $stockist_id;
+                        $calculated_bill_total += $stk_comm;
+                        
                         $notes = "MR Commission Earned (Payout #$payout_id)";
-                        $stmt_ledger->bind_param("iids", $stockist_id, $payout_id, $stk_comm, $notes);
+                        $action = 'increase';
+                        
+                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
                         if (!$stmt_ledger->execute()) {
                             throw new Exception("Failed to update ledger for stockist $stockist_id");
                         }
                     }
                 }
+                
+                // B. Insert difference (Adjustments/Deductions) to balance the final payout
+                $net_adjustment = round((float)$final_payout - $calculated_bill_total, 2);
+                
+                if ($net_adjustment != 0 && $last_stockist_id > 0) {
+                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
+                    $adj_amount = abs($net_adjustment);
+                    $adj_notes = "MR Commission Adjustment (Payout #$payout_id)";
+                    
+                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
+                    if (!$stmt_ledger->execute()) {
+                        throw new Exception("Failed to apply commission adjustments to ledger.");
+                    }
+                }
+
                 $stmt_ledger->close();
                 $stmt_dist->close();
             }

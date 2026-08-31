@@ -20,10 +20,23 @@ class PurchaseEntryModel
 
     public function getStockist()
     {
+        if ($_SESSION['admin_role'] == 'Super Admin') {
+            return mysqli_query($this->con, "
+                SELECT ss.super_stockist_id, ss.ss_name, s.state_name
+                FROM super_stockist ss 
+                INNER JOIN state s ON ss.state = s.state_id
+                ORDER BY ss_name ASC
+            ");
+        }
+        
+        $admin_id = (int)$_SESSION['admin_id'];
+
         return mysqli_query($this->con, "
             SELECT ss.super_stockist_id, ss.ss_name, s.state_name
             FROM super_stockist ss 
             INNER JOIN state s ON ss.state = s.state_id
+            INNER JOIN admins a ON ss.super_stockist_id = a.stockist_id
+            WHERE a.admin_id = '$admin_id'
             ORDER BY ss_name ASC
         ");
     }

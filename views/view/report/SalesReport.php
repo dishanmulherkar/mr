@@ -152,7 +152,4 @@ include 'view/layout/footer.php';
 <script>
 const mr_id = <?= $mr_id ?>;   </script>
 
-
-<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/3.2.5/js/buttons.html5.min.js"></script> -->
 <script src="<?= BASE_URL ?>config/config/sales-report.js"></script>

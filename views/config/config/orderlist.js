@@ -104,9 +104,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     orderTableBody.innerHTML = res.data.map(o => `
                         <tr>
-                            
+                            <td>${o.order_no}<?td>
                             <td>${o.order_date}</td>
-                            <td>₹${Number(o.total_amt).toFixed(2)}</td>
+                            <td>₹${Math.round(Number(o.grand_total)).toLocaleString('en-IN')}</td>
                             <td><span class="badge ${statusClass(o.status)}">${statusText(o.status)}</span></td>
                             <td class="text-center">${actionIcons(o)}</td>
                         </tr>

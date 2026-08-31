@@ -166,18 +166,18 @@ class PaymentApproval_ctl {
     // ==========================================
     // NEW: AJAX Endpoint to fetch Stockist Outstanding Bills
     // ==========================================
-    public function get_outstanding() {
-        header('Content-Type: application/json');
-        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+    // public function get_outstanding() {
+    //     header('Content-Type: application/json');
+    //     $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
         
-        if ($stockist_id > 0) {
-            $outstanding = $this->model->getStockistOutstanding($stockist_id);
-            echo json_encode(['success' => true, 'outstanding' => $outstanding]);
-        } else {
-            echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
-        }
-        exit;
-    }
+    //     if ($stockist_id > 0) {
+    //         $outstanding = $this->model->getStockistOutstanding($stockist_id);
+    //         echo json_encode(['success' => true, 'outstanding' => $outstanding]);
+    //     } else {
+    //         echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
+    //     }
+    //     exit;
+    // }
 
 
 
@@ -218,6 +218,32 @@ class PaymentApproval_ctl {
         }
         
         echo json_encode(['success' => true, 'data' => $payments]);
+        exit;
+    }
+
+       public function get_outstanding() {
+        // Ensure clean JSON output without any PHP warnings breaking it
+        ob_clean(); 
+        header('Content-Type: application/json');
+        
+        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+        
+        if ($stockist_id > 0) {
+            // Fetch the comprehensive data from the model
+            $data = $this->model->getStockistOutstandingWithCD($stockist_id);
+            
+            // Encode and send all required keys to the frontend
+            echo json_encode([
+                'success'           => true, 
+                'outstanding'       => $data['total_outstanding'],
+                'eligible_cd'       => $data['eligible_cd'],      // Required by JS
+                'total_penalty'     => $data['total_penalty'],    // Required by JS (The CD Revocation)
+                'net_payable'       => $data['net_payable'],
+                'bills'             => $data['bill_details']      // The array of bills
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
+        }
         exit;
     }
 }

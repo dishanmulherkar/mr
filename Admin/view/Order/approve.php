@@ -370,6 +370,10 @@ include 'view/layout/header.php';
                             <span class="summary-label">Other Charges</span>
                             <span class="summary-value" id="show_other">₹0.00</span>
                         </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Round Off</span>
+                            <span class="summary-value" id="show_round_off">₹0.00</span>
+                        </div>
                         <div class="summary-row" style="font-size: 16px; font-weight: 800; border-top: 2px solid rgba(255,255,255,0.5); padding-top: 12px; margin-top: 12px;">
                             <span class="summary-label">Grand Total</span>
                             <span class="summary-value" id="show_grand_total">₹0.00</span>
@@ -381,6 +385,7 @@ include 'view/layout/header.php';
             <!-- Hidden Fields for Database Sync -->
             <input type="hidden" name="total_qty" id="total_qty" value="0">
             <input type="hidden" name="grand_total" id="grand_total" value="0">
+            <input type="hidden" name="round_off" id="round_off" value="0">
             <input type="hidden" name="gsttype" id="gst_type_input" value="<?= $gst ?? ''; ?>">
             <input type="hidden" name="gst_amt" id="input_gst_amt" value="0">
             <input type="hidden" name="cgst" id="input_cgst" value="0">
@@ -856,7 +861,14 @@ $(document).ready(function(){
         let otherChargesSign = $('#other_charges_sign').val() === '-' ? -1 : 1;
         let otherChargesSigned = otherCharges * otherChargesSign;
 
-        let grandTotal = netTaxable + netTax - headerDiscount + otherChargesSigned;
+        // 1. Calculate Exact Total
+        let exactTotal = netTaxable + netTax - headerDiscount + otherChargesSigned;
+        
+        // 2. Round off the Grand Total
+        let grandTotal = Math.round(exactTotal);
+        
+        // 3. Calculate the difference for transparency
+        let roundOff = grandTotal - exactTotal;
 
         $('#show_total_qty').text(totalQty);
         $('#show_taxable').text('₹' + netTaxable.toFixed(2));
@@ -864,10 +876,17 @@ $(document).ready(function(){
         $('#show_discount').text('₹' + headerDiscount.toFixed(2));
         $('#show_cd').text('₹' + cdAmount.toFixed(2));
         $('#show_other').text('₹' + (otherChargesSign < 0 ? '-' : '') + otherCharges.toFixed(2));
+        
+        // Display round off and rounded grand total
+        $('#show_round_off').text((roundOff < 0 ? '- ₹' : '+ ₹') + Math.abs(roundOff).toFixed(2));
         $('#show_grand_total').text('₹' + grandTotal.toFixed(2));
 
         $('#total_qty').val(totalQty);
-        $('#grand_total').val(grandTotal.toFixed(2));
+        
+        // Update hidden inputs for DB Insertion
+        $('#grand_total').val(grandTotal.toFixed(2)); 
+        $('#round_off').val(roundOff.toFixed(2));
+        
         $('#gst_type_input').val(gst_type);
         
         $('#input_gst_amt').val(netTax.toFixed(2));

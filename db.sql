@@ -374,3 +374,26 @@ ADD COLUMN `commission_type` ENUM('none', 'mrc', 'drc') DEFAULT 'none' AFTER `pa
 -- 22/8/26  -----------
 -----------------------
 ALTER TABLE payment_details MODIFY COLUMN approval_status ENUM('pending', 'approved', 'rejected', 'reversed') DEFAULT 'pending';
+
+-- 25/8/26 -----
+----------------
+CREATE TABLE super_stockist_cd_rules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    super_stockist_id INT NOT NULL UNIQUE,
+    cd_4_percent_days INT NOT NULL DEFAULT 10,
+    cd_2_percent_days INT NOT NULL DEFAULT 30,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+ALTER TABLE `stock_inward` CHANGE `drc` `drc` BIGINT NULL DEFAULT '0';
+
+
+----31-08-26 
+-- Add round_off to the Orders table
+ALTER TABLE `orders` 
+ADD `round_off` DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER `total_amt`;
+
+
+ALTER TABLE `stock_inward` 
+ADD `round_off` DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER `other_charges`;
