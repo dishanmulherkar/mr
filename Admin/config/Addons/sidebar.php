@@ -388,6 +388,11 @@
                                 <i class="fa-solid fa-calendar-days" style="width: 20px;"></i> CD Rules
                             </a>
                         </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>bank" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-calendar-days" style="width: 20px;"></i> Add Banks
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </li>

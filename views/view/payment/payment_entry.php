@@ -119,6 +119,28 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
                 </select>
             </div>
 
+            <div class="form-group">
+                <label for="payment_to">Payment To *</label>
+                <select name="bank_id" id="bank_id" class="form-control" required>
+                    <option value="">Select Bank</option>
+                    <?php 
+                    if (!empty($data['LinkedBanks'])): 
+                        foreach($data['LinkedBanks'] as $bank): 
+                            // Optional: Retain selected bank if editing
+                            $isSelected = (isset($ROW['bank_id']) && $ROW['bank_id'] == $bank['bank_id']) ? 'selected' : '';
+                    ?>
+                        <option value="<?= $bank['bank_id']; ?>" <?= $isSelected; ?>>
+                            <?= htmlspecialchars($bank['bank_name']); ?>
+                        </option>
+                    <?php 
+                        endforeach; 
+                    else: 
+                    ?>
+                        <option value="" disabled>No banks assigned to this Super Stockist</option>
+                    <?php endif; ?>
+                </select>
+            </div>
+
             <div class="form-group" id="other_method_wrapper" style="display: none;">
                 <label for="other_payment_method">Other Payment Method *</label>
                 <input type="text" name="other_payment_method" id="other_payment_method" class="form-control" placeholder="Enter payment method...">
@@ -151,16 +173,30 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
 <script>
 $(document).ready(function() {
     
-    // 1. Show/hide Other Payment Method field
-    $('#payment_method').on('change', function() {
-        if ($(this).val() === 'Other') {
-            $('#other_method_wrapper').slideDown();
-            $('#other_payment_method').prop('required', true);
-        } else {
-            $('#other_method_wrapper').slideUp();
-            $('#other_payment_method').prop('required', false).val('');
-        }
-    });
+ $('#payment_method').on('change', function() {
+    let method = $(this).val();
+
+    // 1. Handle "Other" payment method
+    if (method === 'Other') {
+        $('#other_method_wrapper').slideDown();
+        $('#other_payment_method').prop('required', true);
+    } else {
+        $('#other_method_wrapper').slideUp();
+        $('#other_payment_method').prop('required', false).val('');
+    }
+
+    // 2. Handle "Cash" payment method (Hide Bank Dropdown & Label)
+    if (method === 'Cash') {
+        $('#bank_id').closest('.form-group').slideUp(); // Hides the whole wrapper including label
+        $('#bank_id').prop('required', false).val('');  // Removes required attribute and clears selection
+    } else {
+        $('#bank_id').closest('.form-group').slideDown();
+        $('#bank_id').prop('required', true);
+    }
+});
+
+// Optional: Trigger the change event on page load to handle edit pages correctly
+$('#payment_method').trigger('change');
 
     // 2. Fetch Outstanding Bills cleanly
     $('#stockist_id').change(function() {

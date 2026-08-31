@@ -15,6 +15,8 @@ class SupplierController
         $ROW  = null;
         $list = $this->model->getAll();
         $states = $this->model->getStates();
+        $data['Banks'] = $this->model->getAllBanks();
+        $data['SelectedBanks'] = [];
         include 'view/superstockist/superstockist.php';
     }
 
@@ -24,6 +26,12 @@ class SupplierController
         $list = $this->model->getAll();
         $states = $this->model->getStates();
          $districts = null;
+        $data['Banks'] = $this->model->getAllBanks();
+        $data['SelectedBanks'] = [];
+        // If you are editing an existing record, fetch the already selected banks
+        
+            $data['SelectedBanks'] = $this->model->getSuperStockistBanks($id);
+        
         if (isset($ROW['state']) && !empty($ROW['state'])) {
             $districts = $this->model->getDistrictsByState($ROW['state']);
         }

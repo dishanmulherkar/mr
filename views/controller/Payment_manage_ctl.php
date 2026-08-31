@@ -41,6 +41,9 @@ class payment_manage_ctl {
         $mr_id = $_SESSION['mr_id'];
         $payments = $this->model->getAllPayments();
         $stockists = $this->model->getStockists($mr_id);
+        $superstockistid = $this->model->getSuperStockistIdByMr($mr_id);
+
+        $data['LinkedBanks'] = $this->model->getBanksBySuperStockist($superstockistid);
         
         // Define active menu
         $current_page = 'payment_entry';

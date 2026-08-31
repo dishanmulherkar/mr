@@ -170,6 +170,32 @@ include 'view/layout/header.php';
                                     </div>
                                 </div>
 
+                                <div class="col-lg-4">
+                                    <div class="form-group">
+                                        <label>Banks</label>
+                                        <select name="bank_ids[]" class="form-control select2" multiple="multiple" required>
+                                            <?php 
+                                            $selected_banks = $data['SelectedBanks'] ?? []; 
+                                            
+                                            if (!empty($data['Banks'])): 
+                                                foreach($data['Banks'] as $bank): 
+                                                    $isSelected = in_array($bank['bank_id'], $selected_banks) ? 'selected' : '';
+                                            ?>
+                                                <option value="<?= $bank['bank_id']; ?>" <?= $isSelected; ?>>
+                                                    <?= htmlspecialchars($bank['bank_name']); ?>
+                                                </option>
+                                            <?php 
+                                                endforeach; 
+                                            else:
+                                            ?>
+                                                <option disabled>No banks found in database</option>
+                                            <?php
+                                            endif; 
+                                            ?>
+                                        </select>
+                                    </div>
+                                </div>
+
                                   <!-- Address -->
                                 <div class="col-lg-12">
                                     <div class="form-group">
@@ -331,6 +357,12 @@ include 'view/layout/footer.php';
             .catch(error => {
                 console.error('There was a problem initializing the editor.', error);
             });
+    });
+
+    $('.select2').select2({
+        placeholder: "Select banks",
+        allowClear: true,
+        width: '100%'
     });
 </script>
 

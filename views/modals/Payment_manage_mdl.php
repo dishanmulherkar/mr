@@ -75,6 +75,7 @@ class Payment_model {
             $amount_paid = (float)($data['amount_paid'] ?? 0);
 
             $payment_method = trim($data['payment_method'] ?? '');
+            $bank_id = (int)($data['bank_id'] ?? 0);
 
             // If "Other" is selected, use the custom payment method
             if ($payment_method === 'Other') {
@@ -131,9 +132,10 @@ class Payment_model {
                     payment_method,
                     bank_details,
                     screenshot_path,
-                    approval_status
+                    approval_status,
+                    bank_id
                 ) 
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?,?)
             ");
 
             if (!$stmt) {
@@ -141,13 +143,14 @@ class Payment_model {
             }
 
             $stmt->bind_param(
-                "idssss",
+                "idssssi",
                 $stockist_id,
                 $amount_paid,
                 $payment_method,
                 $bank_details,
                 $screenshot_path,
-                $approval_status
+                $approval_status,
+                $bank_id
             );
 
             if ($stmt->execute()) {
@@ -464,6 +467,53 @@ public function getStockistOutstandingWithCD($stockist_id)
             'net_payable'       => round($net_payable, 2),
             'bill_details'      => $bills
         ];
+    }
+
+     public function getSuperStockistIdByMr($mr_id)
+    {
+        $mr_id = (int)$mr_id;
+        $stmt = $this->con->prepare("
+            SELECT h.super_stockist_id 
+            FROM mr_users u
+            INNER JOIN headquarter h ON u.hq_id = h.headquarter_id
+            WHERE u.m_id = ?
+            LIMIT 1
+        ");
+        $stmt->bind_param("i", $mr_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $stmt->close();
+            return (int)($row['super_stockist_id'] ?? 0);
+        }
+        $stmt->close();
+        return 0;
+    }
+
+    public function getBanksBySuperStockist($super_stockist_id)
+    {
+        $super_stockist_id = (int)$super_stockist_id;
+        
+        $sql = "SELECT b.bank_id, b.bank_name 
+                FROM banks b
+                INNER JOIN super_stockist_banks ssb ON b.bank_id = ssb.bank_id
+                WHERE ssb.super_stockist_id = ? AND b.is_active = 1
+                ORDER BY b.bank_name ASC";
+        
+        $stmt = $this->con->prepare($sql);
+        $stmt->bind_param("i", $super_stockist_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $banks = [];
+        if ($result && $result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
+                $banks[] = $row;
+            }
+        }
+        $stmt->close();
+        
+        return $banks;
     }
 }
 ?>

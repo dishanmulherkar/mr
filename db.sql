@@ -397,3 +397,32 @@ ADD `round_off` DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER `total_amt`;
 
 ALTER TABLE `stock_inward` 
 ADD `round_off` DECIMAL(10,2) NOT NULL DEFAULT '0.00' AFTER `other_charges`;
+
+
+---- 31-08-26
+
+CREATE TABLE banks (
+    bank_id INT AUTO_INCREMENT PRIMARY KEY,
+    bank_name VARCHAR(150) NOT NULL,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert some default Indian banks to get you started
+INSERT INTO banks (bank_name) VALUES 
+('State Bank of India (SBI)'), ('HDFC Bank'), ('ICICI Bank'), 
+('Axis Bank'), ('Kotak Mahindra Bank'), ('Bank of Baroda'), 
+('Punjab National Bank (PNB)'), ('Canara Bank'), ('Union Bank of India'), ('IDFC First Bank');
+
+
+CREATE TABLE super_stockist_banks (
+    super_stockist_id INT NOT NULL,
+    bank_id INT NOT NULL,
+    
+    -- Composite primary key prevents assigning the exact same bank twice to the same person
+    PRIMARY KEY (super_stockist_id, bank_id)
+);
+
+
+ALTER TABLE payment_details 
+ADD bank_id INT NULL COMMENT 'Links to banks master table' AFTER payment_method;

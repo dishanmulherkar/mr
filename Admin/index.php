@@ -216,6 +216,11 @@ switch($page)
     $controller = new payment_ledger_ctl($con);
     break;
 
+     case 'bank' :
+    include 'controller/bank/bank_ctl.php';
+    $controller = new bank_ctl($con);
+    break;
+
     case 'dashboard':
     default:
         include 'controller/DashboardController.php'; 
