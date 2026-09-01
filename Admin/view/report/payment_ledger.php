@@ -116,7 +116,7 @@ include 'view/layout/header.php';
                                 <td></td><td></td>
                                 <td class='text-end'><strong>".number_format($opening_balance, 2)."</strong></td>
                                 <td class='text-end'></td>
-                              </tr>";
+                            </tr>";
                     } elseif (isset($opening_balance) && $opening_balance < 0) {
                         $total_credit += abs($opening_balance);
                         echo "<tr>
@@ -125,7 +125,7 @@ include 'view/layout/header.php';
                                 <td></td><td></td>
                                 <td class='text-end'></td>
                                 <td class='text-end'><strong>".number_format(abs($opening_balance), 2)."</strong></td>
-                              </tr>";
+                            </tr>";
                     }
 
                     // Process Rows
@@ -145,14 +145,36 @@ include 'view/layout/header.php';
                             } else {
                                 // 2. Credits (Payments & Commission Settlements)
                                 $vch_no = htmlspecialchars($row['pay_id'] ?? '');
-                                $particulars = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "By Receipt";
+                                
+                                // Fetch variables for Particulars processing
+                                $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "By Receipt";
+                                $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
+                                $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
+                                
+                                // Apply Particulars Logic (Regex for CD, Fallbacks for Banks)
+                                if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
+                                    if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z]+-\d+)/i', $raw_notes, $matches)) {
+                                        $particulars = $matches[1] . " on " . $matches[2];
+                                    } else {
+                                        $particulars = explode(':', $raw_notes)[0]; 
+                                    }
+                                } else {
+                                    if (!empty($payment_method) && !empty($bank_name)) {
+                                        $particulars = "{$payment_method} - {$bank_name}";
+                                    } elseif (!empty($payment_method)) {
+                                        $particulars = $payment_method;
+                                    } else {
+                                        $particulars = $raw_notes;
+                                    }
+                                }
+
                                 $raw_amount = (float)$row['amount'];
                                 $debit = 0;
                                 
                                 // ==============================================
                                 // FIX: ROUND OFF CD AMOUNTS TO NEAREST INTEGER
                                 // ==============================================
-                                if (stripos($particulars, 'CD on Invoice') !== false || stripos($particulars, 'CD Applied') !== false) {
+                                if (stripos($raw_notes, 'CD') !== false) {
                                     $credit = round($raw_amount); // Rounds 177.23 -> 177.00
                                 } else {
                                     $credit = round($raw_amount, 2);

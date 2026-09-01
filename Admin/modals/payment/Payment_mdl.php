@@ -316,9 +316,11 @@ class PaymentApproval_mdl {
     public function submitManualEntry($data, $admin_id) 
     {
         try {
-            $commission_type = $data['commission_type']; // 'MRC' or 'DRC'
-            $payment_type = $data['payment_type']; // 'account' or 'old_bill'
             $stockist_id = isset($data['stockist_id']) ? (int)$data['stockist_id'] : 0;
+            $mr_id = isset($data['mr_id']) ? (int)$data['mr_id'] : 0;
+
+            $commission_type = $data['commission_type']; 
+            $payment_type = $data['payment_type']; 
             $amount = (float)$data['amount'];
             $notes = isset($data['notes']) ? trim($data['notes']) : '';
 
@@ -328,40 +330,39 @@ class PaymentApproval_mdl {
 
             $this->con->begin_transaction();
 
-            // 1. Create receipt record in payment_details
-            $payment_method = ($payment_type === 'account') ? 'Bank Transfer' : 'Commission Adjustment';
-            $stmt_pd = $this->con->prepare("INSERT INTO payment_details (stockist_id, amount_paid, payment_method, bank_details, approval_status, approved_by, approved_at, commission_type) VALUES (?, ?, ?, ?, 'approved', ?, NOW(), ?)");
-            $stmt_pd->bind_param("idssis", $stockist_id, $amount, $payment_method, $notes, $admin_id, $comm_short);
+            // 1. Create receipt record in payment_details (NOW INCLUDES mr_id)
+            $payment_method = ($payment_type === 'account') ? ($data['payment_method'] ?? 'Bank Transfer') : 'Commission Adjustment';
+            
+            $stmt_pd = $this->con->prepare("INSERT INTO payment_details (stockist_id, mr_id, amount_paid, payment_method, bank_details, approval_status, approved_by, approved_at, commission_type) VALUES (?, ?, ?, ?, ?, 'approved', ?, NOW(), ?)");
+            
+            // bind_param updated to "iidssis" (int, int, double, string, string, int, string)
+            $stmt_pd->bind_param("iidssis", $stockist_id, $mr_id, $amount, $payment_method, $notes, $admin_id, $comm_short);
             
             if (!$stmt_pd->execute()) {
-                throw new Exception("Failed to record payment details.");
+                throw new Exception("Failed to record payment details: " . $stmt_pd->error);
             }
             $payment_id = $this->con->insert_id;
             $stmt_pd->close();
 
             // 2. Perform actions based on payment type
             if ($payment_type === 'old_bill') {
+                if ($stockist_id <= 0) throw new Exception("Stockist ID is required to settle an old bill.");
                 
                 // Deduct from wallet
                 $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'settled_to_bill', ?, ?, 'decrease', ?)");
                 $stmt_w->bind_param("isids", $stockist_id, $ledger_wallet_type, $payment_id, $amount, $notes);
-                $stmt_w->execute();
-                $stmt_w->close();
+                $stmt_w->execute(); $stmt_w->close();
 
-                // Decrease debt (FIXED: Changed 'decrease_debt' to 'decrease')
+                // Decrease debt 
                 $stmt_d = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, 'debt', ?, ?, ?, 'decrease', ?)");
                 $stmt_d->bind_param("isids", $stockist_id, $settlement_type, $payment_id, $amount, $notes);
-                $stmt_d->execute();
-                $ledger_id = $this->con->insert_id;
-                $stmt_d->close();
+                $stmt_d->execute(); $ledger_id = $this->con->insert_id; $stmt_d->close();
 
                 // Allocate to unpaid bills
                 $remaining_payment = $amount;
                 $stmt_bills = $this->con->prepare("SELECT inward_id, grand_total, paid_amt FROM stock_inward WHERE stockist_id = ? AND pay_status != 'paid' ORDER BY inward_id ASC");
-                $stmt_bills->bind_param("i", $stockist_id);
-                $stmt_bills->execute();
-                $unpaid_bills = $stmt_bills->get_result();
-                $stmt_bills->close();
+                $stmt_bills->bind_param("i", $stockist_id); $stmt_bills->execute();
+                $unpaid_bills = $stmt_bills->get_result(); $stmt_bills->close();
 
                 if ($unpaid_bills->num_rows > 0) {
                     $stmt_alloc = $this->con->prepare("INSERT INTO payment_allocations (ledger_id, inward_id, amount_allocated) VALUES (?, ?, ?)");
@@ -369,36 +370,24 @@ class PaymentApproval_mdl {
 
                     while ($bill = $unpaid_bills->fetch_assoc()) {
                         if ($remaining_payment <= 0) break; 
-
                         $bill_balance = (float)$bill['grand_total'] - (float)$bill['paid_amt'];
                         $allocate_amount = min($remaining_payment, $bill_balance);
-                        
-                        $stmt_alloc->bind_param("iid", $ledger_id, $bill['inward_id'], $allocate_amount);
-                        $stmt_alloc->execute();
-
+                        $stmt_alloc->bind_param("iid", $ledger_id, $bill['inward_id'], $allocate_amount); $stmt_alloc->execute();
                         $new_paid_amt = (float)$bill['paid_amt'] + $allocate_amount;
-                        $rounded_grand_total = round((float)$bill['grand_total']);
-                        $rounded_paid_amt = round($new_paid_amt);
-                        $new_status = ($rounded_paid_amt >= $rounded_grand_total) ? 'paid' : 'partial';
-
-                        $stmt_update->bind_param("dsi", $new_paid_amt, $new_status, $bill['inward_id']);
-                        $stmt_update->execute();
-
+                        $new_status = (round($new_paid_amt) >= round((float)$bill['grand_total'])) ? 'paid' : 'partial';
+                        $stmt_update->bind_param("dsi", $new_paid_amt, $new_status, $bill['inward_id']); $stmt_update->execute();
                         $remaining_payment -= $allocate_amount;
                     }
-                    $stmt_alloc->close();
-                    $stmt_update->close();
+                    $stmt_alloc->close(); $stmt_update->close();
                 }
             } else {
-                // Bank Account Payment (Wallet payout only)
-                $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'paid_to_bank', ?, ?, 'decrease', ?)");
-                $stmt_w->bind_param("isids", $stockist_id, $ledger_wallet_type, $payment_id, $amount, $notes);
-                $stmt_w->execute();
-                $stmt_w->close();
+                $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, ?, ?, ?, 'decrease', ?)");
+                $stmt_w->bind_param("issids", $stockist_id, $ledger_wallet_type, $settlement_type, $payment_id, $amount, $notes);
+                $stmt_w->execute(); $stmt_w->close();
             }
 
             $this->con->commit();
-            return ['success' => true, 'msg' => 'Entry and adjustments processed successfully.'];
+            return ['success' => true, 'msg' => 'Entry processed successfully.'];
 
         } catch (Exception $e) {
             $this->con->rollback();
@@ -409,16 +398,26 @@ class PaymentApproval_mdl {
     // ==========================================
     // NEW: Calculate total available balance for an HQ
     // ==========================================
-    public function getAvailableBalance($hq_id, $type) {
+   public function getAvailableBalance($hq_id, $type) {
         $ledger_type = ($type === 'MRC') ? 'mrc_wallet' : 'drc_wallet';
         
-        // Sum up the wallets of all stockists assigned to this HQ
+        // Sum up the wallets, ensuring we include Bank Payouts where stockist_id = 0
         $stmt = $this->con->prepare("
-            SELECT SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
+            SELECT 
+                SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
             FROM payment_ledgers pl
-            INNER JOIN stockists s ON pl.stockist_id = s.stockist_id
-            WHERE s.hq_id = ? AND pl.ledger_type = ?
+            
+            -- Changed to LEFT JOIN to prevent dropping Bank Payouts (stockist_id = 0)
+            LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
+            
+            -- Trace Bank Payouts to the MR/HQ via payment_details
+            LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
+            LEFT JOIN mr_users m ON pd.mr_id = m.m_id
+            
+            -- Match HQ from either the Stockist OR the MR User
+            WHERE COALESCE(s.hq_id, m.hq_id) = ? AND pl.ledger_type = ?
         ");
+        
         $stmt->bind_param("is", $hq_id, $ledger_type);
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
@@ -515,21 +514,29 @@ class PaymentApproval_mdl {
     // ==========================================
     // NEW: Get Payment Details for Edit Page
     // ==========================================
-    public function getPaymentById($id) {
+public function getPaymentById($id) {
         $stmt = $this->con->prepare("
-            SELECT p.*, s.hq_id, hq.state_id 
+            SELECT 
+                p.*, 
+                -- If stockist exists, use its hq_id. Otherwise, use mr_users hq_id.
+                COALESCE(s.hq_id, m.hq_id, '') AS hq_id, 
+                -- Trace the state_id from the dynamically found headquarter, fallback to mr_users.state
+                COALESCE(hq.state_id, m.state, '') AS state_id 
             FROM payment_details p
             LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-            LEFT JOIN headquarter hq ON s.hq_id = hq.headquarter_id
+            -- Join mr_users using m_id based on your schema
+            LEFT JOIN mr_users m ON p.mr_id = m.m_id
+            LEFT JOIN headquarter hq ON COALESCE(s.hq_id, m.hq_id) = hq.headquarter_id
             WHERE p.id = ?
         ");
+        
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result()->fetch_assoc();
         $stmt->close();
-        return $result;
+        
+        return $result ? $result : [];
     }
-
     // ==========================================
     // NEW: Reverse Manual Payment Entry Safely
     // ==========================================

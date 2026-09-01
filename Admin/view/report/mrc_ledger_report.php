@@ -127,7 +127,7 @@ include 'view/layout/header.php';
                                 // UPDATE: Use the transaction_type from your database directly
                                 if ($row['transaction_type'] === 'settled_to_bill' || !empty($row['settled_bill_no'])) {
                                     $bill_badge = !empty($row['settled_bill_no']) ? "<span class='badge bg-info text-dark ms-1'>" . $row['settled_bill_no'] . "</span>" : "";
-                                    $particulars = "To Bill Settlement " . $bill_badge;
+                                    $particulars =  $row['stockist_name'];
                                     $vch_type = "Adjustment";
                                 } else {
                                     $particulars = "To Bank Transfer";

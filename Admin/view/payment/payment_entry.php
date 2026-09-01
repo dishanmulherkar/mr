@@ -182,7 +182,7 @@ $(document).ready(function() {
             $.get(BASE_URL + 'payment/get_mrs_by_hq', { hq_id: hqId }, function(res) {
                 if (res.success) {
                     let mrOptions = '<option value="">-- Select MR --</option>';
-                    res.data.forEach(mr => { mrOptions += `<option value="${mr.mr_id}">${mr.mr_name}</option>`; });
+                    res.data.forEach(mr => { mrOptions += `<option value="${mr.m_id}">${mr.mr_name}</option>`; });
                     $('#mr_id').html(mrOptions);
                 } else {
                     $('#mr_id').html('<option value="">No MR found</option>');
@@ -321,18 +321,27 @@ $(document).ready(function() {
         let paymentAction = editData.payment_method === 'Commission Adjustment' ? 'old_bill' : 'account';
         $('#payment_type').val(paymentAction).prop('disabled', true).trigger('change');
 
-        // Cascade selections automatically with delays to allow AJAX to load dropdown values
-        if (editData.state_id) {
-            $('#state_id').val(editData.state_id).trigger('change').prop('disabled', true);
+        // FIX: Always disable these so the form is strictly read-only, even if there is no stockist attached.
+        $('#state_id, #hq_id, #mr_id, #stockist_id').prop('disabled', true);
+
+       // Cascade selections automatically with delays to allow AJAX to load dropdown values
+        if (editData.state_id && editData.state_id !== '') {
+            $('#state_id').val(editData.state_id).trigger('change');
             
             setTimeout(() => {
-                $('#hq_id').val(editData.hq_id).trigger('change').prop('disabled', true);
+                $('#hq_id').val(editData.hq_id).trigger('change');
                 
                 setTimeout(() => {
-                    if (editData.stockist_id) {
-                        $('#stockist_id').val(editData.stockist_id).trigger('change').prop('disabled', true);
+                    // FIX: Added the missing MR ID selection
+                    if (editData.mr_id && editData.mr_id != 0) {
+                        $('#mr_id').val(editData.mr_id).trigger('change');
                     }
-                }, 800);
+
+                    // Stockist selection
+                    if (editData.stockist_id && editData.stockist_id != 0) {
+                        $('#stockist_id').val(editData.stockist_id).trigger('change');
+                    }
+                }, 800); // 800ms allows the get_mrs_by_hq AJAX to finish before setting the value
             }, 800);
         }
 

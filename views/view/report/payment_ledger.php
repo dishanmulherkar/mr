@@ -180,62 +180,74 @@ include 'view/layout/header.php';
                               </tr>";
                     }
 
-                    // Process Rows
-                    while($row = mysqli_fetch_assoc($query)) {
-                        $date = date('d-M', strtotime($row['created_at']));
-                        
-                        if ($row['transaction_type'] == 'bill_added') {
-                            // 1. Bill Added (Debit)
-                            $particulars = "Sales Bill";
-                            $vch_type = "Tax Invoice";
-                            $vch_no = htmlspecialchars($row['inward_no'] ?? '');
-                            $debit = round((float)$row['amount'], 2);
-                            $credit = 0;
-                            $total_debit += $debit;
-                            
-                        } else {
-                            // 2. Credits (Payments & Commission Settlements)
-                            $vch_no = htmlspecialchars($row['pay_id'] ?? '');
-                            $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "By Receipt";
-                            
-                            // ==============================================
-                            // SIMPLIFY CD PARTICULARS FOR MR VIEW
-                            // ==============================================
-                            if (stripos($raw_notes, '4% CD') !== false) {
-                                $particulars = "4% CD";
-                            } elseif (stripos($raw_notes, '2% CD') !== false) {
-                                $particulars = "2% CD";
-                            } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
-                                $particulars = "CD Applied";
-                            } elseif(in_array($row['transaction_type'], ['mrc_settlement'])) {
-                               $particulars = "MR Commision Settlement";
-                            }elseif(in_array($row['transaction_type'], [ 'drc_settlement'])){
-                                $particulars = "DRC Settlement";
-                            }else{
-                                 $particulars = $raw_notes;
-                            }
+                   while($row = mysqli_fetch_assoc($query)) {
+    $date = date('d-M', strtotime($row['created_at']));
+    
+    if ($row['transaction_type'] == 'bill_added') {
+        // 1. Bill Added (Debit)
+        $particulars = "Sales Bill";
+        $vch_type = "Tax Invoice";
+        $vch_no = htmlspecialchars($row['inward_no'] ?? '');
+        $debit = round((float)$row['amount'], 2);
+        $credit = 0;
+        $total_debit += $debit;
+        
+    } else {
+        // 2. Credits (Payments & Commission Settlements)
+        $vch_no = htmlspecialchars($row['pay_id'] ?? '');
+        $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "By Receipt";
+        $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
+        $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
+        
+        $stockist_name = htmlspecialchars($row['stockist_name'] ?? 'Unknown');
+        $stockist_badge = "<br><button type='button' class='btn btn-sm btn-light' style='font-size: 10px; padding: 2px 6px; margin-top: 3px; border: 1px solid #dee2e6;'><i class='fa fa-user text-primary'></i> {$stockist_name}</button>";
+        
+        // Particulars Logic
+        if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
+   
+    if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z]+-\d+)/i', $raw_notes, $matches)) {
+        $particulars = $matches[1] . " on " . $matches[2];
+    } else {
+        $particulars = explode(':', $raw_notes)[0]; 
+    }
+    } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
+            $particulars = "CD Applied";
+        } elseif ($row['transaction_type'] === 'mrc_settlement') {
+            $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
+        } elseif ($row['transaction_type'] === 'drc_settlement') {
+            $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+        } elseif ($row['transaction_type'] === 'settled_to_bill') {
+            $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
+        } else {
+            // FIX APPLIED HERE: Clean formatting and proper fallback
+            if (!empty($payment_method) && !empty($bank_name)) {
+                $particulars = "{$payment_method} - {$bank_name}";
+            } elseif (!empty($payment_method)) {
+                $particulars = $payment_method;
+            } else {
+                $particulars = $raw_notes;
+            }
+        }
 
-                             // Differentiate Voucher Type based on the transaction flag
-                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill'])) {
-                                $vch_type = "Adjustment"; 
-                            } else {
-                                $vch_type = "Receipt";    
-                            }
+        // Differentiate Voucher Type
+        if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill'])) {
+            $vch_type = "Adjustment"; 
+        } else {
+            $vch_type = "Receipt";    
+        }
 
-                            $raw_amount = (float)$row['amount'];
-                            $debit = 0;
-                            
-                            // ROUND OFF CD AMOUNTS TO NEAREST INTEGER
-                            if (stripos($raw_notes, 'CD') !== false) {
-                                $credit = round($raw_amount); // Rounds 177.23 -> 177.00
-                            } else {
-                                $credit = round($raw_amount, 2);
-                            }
-                            
-                            $total_credit += $credit;
-
-                           
-                        }
+        $raw_amount = (float)$row['amount'];
+        $debit = 0;
+        
+        // ROUND OFF CD AMOUNTS
+        if (stripos($raw_notes, 'CD') !== false) {
+            $credit = round($raw_amount); 
+        } else {
+            $credit = round($raw_amount, 2);
+        }
+        
+        $total_credit += $credit;
+    }
                 ?>
                         <tr>
                             <td><?= $date ?></td>

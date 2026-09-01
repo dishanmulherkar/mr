@@ -157,7 +157,7 @@ include 'view/layout/header.php';
                         // Define short names for long transaction types
                         $short_types = [
                             'commission_earned' => 'Commission',
-                            'mrc_settlement'    => 'Settlement',
+                            'mrc_settlement'    => 'Bank Transfer',
                             'settled_to_bill'   => 'Bill Adjusted'
                         ];
 
@@ -165,7 +165,7 @@ include 'view/layout/header.php';
                         $raw_type = strtolower($row['transaction_type']);
                         $vch_type = $short_types[$raw_type] ?? ucwords(str_replace('_', ' ', $raw_type));
                         $vch_no = htmlspecialchars($row['settled_bill_no'] ?? $row['reference_id'] ?? '-');
-
+                        $vch_id = preg_replace('/[^0-9]/', '', $vch_no);
                         $earned = 0;
                         $settled = 0;
 
@@ -181,23 +181,30 @@ include 'view/layout/header.php';
                         <tr>
                             <td style="white-space: nowrap;"><?= $date ?></td>
                             <td>
-                                <?php if ($vch_type == 'Commission'){  ?>
-                                <a href="<?= BASE_URL ?>commission/view/<?= $vch_no ?>" 
-                                   style="color: #0d6efd; text-decoration: none; font-weight: 600;"
-                                   onmouseover="this.style.textDecoration='underline'" 
-                                   onmouseout="this.style.textDecoration='none'">
-                                    <?= $vch_type ?> 
+                                <?php if ($vch_type === 'Commission'): ?>
+                                    <!-- Commission Link -->
+                                    <a href="<?= BASE_URL ?>commission/view/<?= $vch_id ?>" 
+                                       style="color: #0d6efd; text-decoration: none; font-weight: 600;"
+                                       onmouseover="this.style.textDecoration='underline'" 
+                                       onmouseout="this.style.textDecoration='none'">
+                                        <?= $vch_type ?> 
+                                        <?= $vch_no !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
+                                    </a>
+                                
+                                <?php elseif ($vch_type === 'Bill Adjusted'): ?>
+                                    <!-- Bill Adjusted with Stockist Name -->
+                                    <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
+                                    <?= $vch_no !== '-' ? '<small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
+                                    <br>
+                                    <button type="button" class="btn btn-sm btn-light" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; border: 1px solid #dee2e6;">
+                                        <i class="fa fa-user text-primary"></i> <?= htmlspecialchars($row['stockist_name']); ?>
+                                    </button>
+                                
+                                <?php else: ?>
+                                    <!-- Other Settlement Types -->
+                                    <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
                                     <?= $vch_no !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
-                                </a>
-                               <? } else {?>
-                               <!-- <a 
-                                   style="color: #0d6efd; text-decoration: none; font-weight: 600;"
-                                   onmouseover="this.style.textDecoration='underline'" 
-                                   onmouseout="this.style.textDecoration='none'">
-                                    <?= $vch_type ?> 
-                                    <?= $vch_no !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
-                                </a> -->
-                                <?php } ?>
+                                <?php endif; ?>
                             </td>
                             <td class="text-right" style="color: #5cb85c; font-weight: 500; white-space: nowrap;"><?= $earned > 0 ? number_format($earned, 2) : '' ?></td>
                             <td class="text-right" style="color: #d9534f; font-weight: 500; white-space: nowrap;"><?= $settled > 0 ? number_format($settled, 2) : '' ?></td>

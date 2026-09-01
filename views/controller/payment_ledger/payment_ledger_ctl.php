@@ -61,11 +61,7 @@ class payment_ledger_ctl
             $opening_balance = $this->model->getOpeningBalance($stockist_id, $from_date);
             
             // Get the actual ledger rows for the date range
-            $query = $this->model->getReport(
-                $stockist_id,
-                $from_date,
-                $to_date
-            );
+           $query = $this->model->getReport($stockist_id, $from_date, $to_date);
         }
 
         // Load the view
@@ -102,6 +98,38 @@ class payment_ledger_ctl
 
         // Load the view
         include 'view/report/mrc_ledger.php';
+    }
+
+    // ==========================================
+    // MR Commission (DRC) Ledger Controller
+    // ==========================================
+    public function drc_ledger()
+    {
+        // Start session if not already started
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $hq_id = $_SESSION['hq_id'] ?? 0;
+
+        // Get filter inputs
+        $start_date  = $_GET['start_date'] ?? '';
+        $end_date    = $_GET['end_date'] ?? '';
+
+        $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
+        $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
+
+        $opening_balance = 0;
+        $query = null;
+
+        // Fetch data if HQ ID exists
+        if ($hq_id > 0) {
+            $opening_balance = $this->model->getOpeningBalancedrc($hq_id, $from_date);
+            $query = $this->model->getReportdrc($hq_id, $from_date, $to_date);
+        }
+
+        // Load the view
+        include 'view/report/drc_ledger.php';
     }
 }
 ?>

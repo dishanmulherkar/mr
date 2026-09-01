@@ -238,7 +238,7 @@ class commission_mdl
    // ========================================================
     // Fetch Live Wallet Balances (Using Trusted Query Format)
     // ========================================================
-    public function getWalletBalances($mr_id)
+   public function getWalletBalances($mr_id)
     {
         $mr_id = (int)$mr_id;
         
@@ -255,12 +255,20 @@ class commission_mdl
         $drc_balance = 0.00;
         
         if ($hq_id > 0) {
-            // 2. Get MRC Balance using your exact query structure
+            // 2. Get MRC Balance (Updated to include Bank Payouts where stockist_id = 0)
             $stmt_mrc = $this->con->prepare("
                 SELECT SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
                 FROM payment_ledgers pl
-                INNER JOIN stockists s ON pl.stockist_id = s.stockist_id
-                WHERE s.hq_id = ? AND pl.ledger_type = 'mrc_wallet'
+                
+                -- Changed to LEFT JOIN to prevent dropping Bank Payouts (stockist_id = 0)
+                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
+                
+                -- Trace Bank Payouts to the MR/HQ via payment_details
+                LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
+                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
+                
+                -- Match HQ from either the Stockist OR the MR User
+                WHERE COALESCE(s.hq_id, m.hq_id) = ? AND pl.ledger_type = 'mrc_wallet'
             ");
             $stmt_mrc->bind_param("i", $hq_id);
             $stmt_mrc->execute();
@@ -268,12 +276,20 @@ class commission_mdl
             $mrc_balance = $res_mrc['total_balance'] ? (float)$res_mrc['total_balance'] : 0.00;
             $stmt_mrc->close();
             
-            // 3. Get DRC Balance using your exact query structure
+            // 3. Get DRC Balance (Updated to include Bank Payouts where stockist_id = 0)
             $stmt_drc = $this->con->prepare("
                 SELECT SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
                 FROM payment_ledgers pl
-                INNER JOIN stockists s ON pl.stockist_id = s.stockist_id
-                WHERE s.hq_id = ? AND pl.ledger_type = 'drc_wallet'
+                
+                -- Changed to LEFT JOIN to prevent dropping Bank Payouts (stockist_id = 0)
+                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
+                
+                -- Trace Bank Payouts to the MR/HQ via payment_details
+                LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
+                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
+                
+                -- Match HQ from either the Stockist OR the MR User
+                WHERE COALESCE(s.hq_id, m.hq_id) = ? AND pl.ledger_type = 'drc_wallet'
             ");
             $stmt_drc->bind_param("i", $hq_id);
             $stmt_drc->execute();

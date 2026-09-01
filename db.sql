@@ -426,3 +426,6 @@ CREATE TABLE super_stockist_banks (
 
 ALTER TABLE payment_details 
 ADD bank_id INT NULL COMMENT 'Links to banks master table' AFTER payment_method;
+
+ALTER TABLE payment_details 
+ADD mr_id INT NULL AFTER stockist_id;

@@ -55,10 +55,11 @@ class payment_ledger_mdl
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
     public function getReport($stockist_id, $from_date, $to_date)
     {
-        $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id 
+        $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id ,pd.payment_method ,b.bank_name
                 FROM payment_ledgers pl 
                 LEFT JOIN stock_inward si ON si.inward_id = pl.reference_id 
                 LEFT JOIN payment_details pd ON pd.id = pl.reference_id 
+                LEFT JOIN banks b ON b.bank_id = pd.bank_id
                 WHERE pl.stockist_id = '$stockist_id' 
                 AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
                 AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill')
@@ -92,14 +93,16 @@ class payment_ledger_mdl
     // ==========================================
     // MR Commission (MRC) Report
     // ==========================================
-    public function getReportmrc($hq_id, $from_date, $to_date)
+public function getReportmrc($hq_id, $from_date, $to_date)
     {
         // 1. Joins 'stockists' to get stockist name
-        // 2. Joins 'stock_inward' to fetch the Bill No if settled to a bill
-        // 3. Runs a subquery to calculate the live 'debt' outstanding for that stockist
+        // 2. Joins 'payment_details' & 'mr_users' to trace HQ for Bank Payouts (stockist_id = 0)
+        // 3. Joins 'stock_inward' to fetch the Bill No if settled to a bill
+        // 4. Runs a subquery to calculate the live 'debt' outstanding for that stockist
+        
         $sql = "SELECT 
                     p.*, 
-                    s.stockist_name,
+                    COALESCE(s.stockist_name, 'Bank Payout / General') AS stockist_name,
                     si.inward_no AS settled_bill_no,
                     
                     (
@@ -107,16 +110,24 @@ class payment_ledger_mdl
                             ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
                             ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0))
                         FROM payment_ledgers 
-                        WHERE stockist_id = p.stockist_id AND ledger_type = 'debt'
+                        -- Ensure we only calculate outstanding debt if it's a real stockist (> 0)
+                        WHERE stockist_id = p.stockist_id AND stockist_id > 0 AND ledger_type = 'debt'
                     ) AS stockist_outstanding
 
                 FROM payment_ledgers p
-                INNER JOIN stockists s ON p.stockist_id = s.stockist_id
+                
+                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
+                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+                
+                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
+                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
+                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
                 
                 -- Attempt to get the invoice number if reference_id matches an inward_id
                 LEFT JOIN stock_inward si ON p.reference_id = si.inward_id AND p.transaction_type IN ('mrc_settlement', 'settled_to_bill')
                 
-                WHERE s.hq_id = '$hq_id' 
+                -- Match HQ from either the Stockist OR the MR User
+                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
                 AND p.ledger_type = 'mrc_wallet'
                 AND DATE(p.created_at) >= '$from_date' 
                 AND DATE(p.created_at) <= '$to_date'
@@ -135,8 +146,16 @@ class payment_ledger_mdl
                     SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
                     SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
                 FROM payment_ledgers p
-                INNER JOIN stockists s ON p.stockist_id = s.stockist_id
-                WHERE s.hq_id = '$hq_id' 
+                
+                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
+                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+                
+                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
+                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
+                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
+                
+                -- Match HQ from either the Stockist OR the MR User
+                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
                 AND p.ledger_type = 'mrc_wallet'
                 AND DATE(p.created_at) < '$from_date'";
 
@@ -153,20 +172,19 @@ class payment_ledger_mdl
         return 0;
     }
 
-
-    // drc
-
-     // ==========================================
+    // ==========================================
     // DR Commission (DRC) Report
     // ==========================================
     public function getReportdrc($hq_id, $from_date, $to_date)
     {
-        // 1. Joins 'stockists' to get stockist name
-        // 2. Joins 'stock_inward' to fetch the Bill No if settled to a bill
-        // 3. Runs a subquery to calculate the live 'debt' outstanding for that stockist
+        // 1. Joins 'stockists' to get stockist name (LEFT JOIN)
+        // 2. Joins 'payment_details' & 'mr_users' to trace HQ for Bank Payouts (stockist_id = 0)
+        // 3. Joins 'stock_inward' to fetch the Bill No if settled to a bill
+        // 4. Runs a subquery to calculate the live 'debt' outstanding for that stockist
+        
         $sql = "SELECT 
                     p.*, 
-                    s.stockist_name,
+                    COALESCE(s.stockist_name, 'Bank Payout / General') AS stockist_name,
                     si.inward_no AS settled_bill_no,
                     
                     (
@@ -174,16 +192,24 @@ class payment_ledger_mdl
                             ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
                             ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0))
                         FROM payment_ledgers 
-                        WHERE stockist_id = p.stockist_id AND ledger_type = 'debt'
+                        -- Ensure we only calculate outstanding debt if it's a real stockist (> 0)
+                        WHERE stockist_id = p.stockist_id AND stockist_id > 0 AND ledger_type = 'debt'
                     ) AS stockist_outstanding
 
                 FROM payment_ledgers p
-                INNER JOIN stockists s ON p.stockist_id = s.stockist_id
+                
+                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
+                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+                
+                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
+                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
+                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
                 
                 -- Attempt to get the invoice number if reference_id matches an inward_id
                 LEFT JOIN stock_inward si ON p.reference_id = si.inward_id AND p.transaction_type IN ('drc_settlement', 'settled_to_bill')
                 
-                WHERE s.hq_id = '$hq_id' 
+                -- Match HQ from either the Stockist OR the MR User
+                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) >= '$from_date' 
                 AND DATE(p.created_at) <= '$to_date'
@@ -193,7 +219,7 @@ class payment_ledger_mdl
     }
 
     // ==========================================
-    // Opening balance calculation for MRC Wallet
+    // Opening balance calculation for DRC Wallet
     // ==========================================
     public function getOpeningBalancedrc($hq_id, $from_date)
     {
@@ -202,8 +228,16 @@ class payment_ledger_mdl
                     SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
                     SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
                 FROM payment_ledgers p
-                INNER JOIN stockists s ON p.stockist_id = s.stockist_id
-                WHERE s.hq_id = '$hq_id' 
+                
+                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
+                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+                
+                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
+                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
+                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
+                
+                -- Match HQ from either the Stockist OR the MR User
+                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) < '$from_date'";
 
