@@ -292,6 +292,10 @@ class OrderModel
             // 1. Start Transaction
             $this->con->begin_transaction();
 
+            // Get current datetime
+            $current_date = date('Y-m-d');
+            $current_datetime = date('Y-m-d H:i:s');
+            
             // Cast primary keys
             $order_id = (int)$data['order_id'];
             $stockist_id = (int)$data['stockist_id'];
@@ -391,18 +395,18 @@ class OrderModel
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, 
                     ?, ?, ?, ?, ?, 
-                    ?, ?, CURDATE(), 
+                    ?, ?, ?, 
                     ?, ?, ?, ?, ?, ?, ?, 
                     ?, ?, ?, ?, ?
                 )
             ");
             
-            // <-- UPDATED: adjusted bindings string length and variables (added $round_off) -->
+            // <-- FIX: Adjusted bindings string length to 27 params ("siissiissssiiisddddddddddsd") -->
             $stmt2->bind_param(
-                "siissiissssiiiddddddddddsd", 
+                "siissiissssiiisddddddddddsd", 
                 $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
-                $admin_id, $fy_id, 
+                $admin_id, $fy_id, $current_date,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $rounded_net_amount, $round_off,
                 $cgst, $sgst, $igst, $remarks, $cd_percent
             );
@@ -441,8 +445,10 @@ class OrderModel
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-           $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
+            
+            // <-- FIX: Replaced CURDATE() and NOW() with ? placeholders -->
+            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
 
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -474,17 +480,20 @@ class OrderModel
                         $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
                     } else {
-                        $stmt_insert_item->bind_param("iiiiiidd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
+                        // <-- FIX: Changed "iiiiiidd" to "iiiiiddd" because rate, amt, and net_total are 3 floats -->
+                        $stmt_insert_item->bind_param("iiiiiddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
                         $stmt_insert_item->execute();
                     }
 
                     $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    $stmt_ledger_out->bind_param("iiiiddddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
+                    // <-- FIX: Added $current_date, $current_datetime and updated param string to "ssiiiiddddi" -->
+                    $stmt_ledger_out->bind_param("ssiiiiddddi", $current_date, $current_datetime, $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_out->execute();
 
-                    $stmt_ledger_in->bind_param("iiiiddddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
+                    // <-- FIX: Added $current_date, $current_datetime and updated param string to "ssiiiiddddi" -->
+                    $stmt_ledger_in->bind_param("ssiiiiddddi", $current_date, $current_datetime, $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_in->execute();
                 }
             }
@@ -508,6 +517,10 @@ class OrderModel
     {
         try {
             $this->con->begin_transaction();
+
+            // Get current datetime
+            $current_date = date('Y-m-d');
+            $current_datetime = date('Y-m-d H:i:s');
 
             $order_id = (int)$data['order_id'];
             $stockist_id = (int)$data['stockist_id'];
@@ -605,7 +618,6 @@ class OrderModel
                 WHERE order_id=?
             ");
             
-            // <-- UPDATED: adjusted bindings string length and variables -->
             $stmt2->bind_param("ssssiddddddddddsdi", 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, 
@@ -647,8 +659,10 @@ class OrderModel
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (CURDATE(), NOW(), 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
+            
+            // <-- FIX: Replaced CURDATE() and NOW() with ? placeholders -->
+            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
 
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -680,17 +694,20 @@ class OrderModel
                         $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
                     } else {
-                        $stmt_insert_item->bind_param("iiiiiidd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
+                        // <-- FIX: Changed "iiiiiidd" to "iiiiiddd" -->
+                        $stmt_insert_item->bind_param("iiiiiddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
                         $stmt_insert_item->execute();
                     }
 
                     $stmt_inward_det->bind_param("iisdidddddd", $inward_id, $product_id, $batch_str, $mrp, $qty, $rate, $discount_percent, $amt, $gst_percent, $gst_amount_item, $net_total);
                     $stmt_inward_det->execute();
 
-                    $stmt_ledger_out->bind_param("iiiiddddi", $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
+                    // <-- FIX: Added $current_date, $current_datetime and updated param string to "ssiiiiddddi" -->
+                    $stmt_ledger_out->bind_param("ssiiiiddddi", $current_date, $current_datetime, $super_stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_out->execute();
 
-                    $stmt_ledger_in->bind_param("iiiiddddi", $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
+                    // <-- FIX: Added $current_date, $current_datetime and updated param string to "ssiiiiddddi" -->
+                    $stmt_ledger_in->bind_param("ssiiiiddddi", $current_date, $current_datetime, $stockist_id, $admin_id, $product_id, $batch_id, $qty_float, $qty_float, $rate, $net_total, $inward_id);
                     $stmt_ledger_in->execute();
                 }
             }

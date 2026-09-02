@@ -1,7 +1,7 @@
 <?php
 
 // ========== DATA EXTRACTION ==========
-$invoiceNo = $invoice['inward_no'] ?? ('T-' . ($invoice['order_id'] ?? ''));
+$invoiceNo = $invoice['inward_no'] ?? ('T-' . ($invoice['inward_no'] ?? ''));
 $invoiceDate = !empty($invoice['inward_date']) ? date('d/m/Y', strtotime($invoice['inward_date'])) : '';
 $orderNo = $invoice['order_no'] ?? '';
 $orderDate = !empty($invoice['order_date']) ? date('d/m/Y', strtotime($invoice['order_date'])) : '';
@@ -94,7 +94,7 @@ $totalCdDiscount = $trueCdDiscount;
 $totalAllDiscounts = $trueItemDiscount + $trueCdDiscount + $additionalDiscount;
 
 $netAmountRounded = round($dbGrandTotal);
-$roundOff = $netAmountRounded - $dbGrandTotal;
+$roundOff = ($invoice['round_off'] ?? 0);
 
 $taxPercentVal = !empty($items) && isset($items[0]['gst_percent']) ? $items[0]['gst_percent'] : '0';
 

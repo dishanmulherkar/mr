@@ -167,7 +167,7 @@ include 'view/layout/header.php';
                                 <td></td>
                                 <td class='text-right'><strong>".number_format($opening_balance, 2)."</strong></td>
                                 <td class='text-right'></td>
-                              </tr>";
+                            </tr>";
                     } elseif (isset($opening_balance) && $opening_balance < 0) {
                         $total_credit += abs($opening_balance);
                         echo "<tr>
@@ -177,78 +177,91 @@ include 'view/layout/header.php';
                                 <td></td>
                                 <td class='text-right'></td>
                                 <td class='text-right'><strong>".number_format(abs($opening_balance), 2)."</strong></td>
-                              </tr>";
+                            </tr>";
                     }
 
-                   while($row = mysqli_fetch_assoc($query)) {
-    $date = date('d-M', strtotime($row['created_at']));
-    
-    if ($row['transaction_type'] == 'bill_added') {
-        // 1. Bill Added (Debit)
-        $particulars = "Sales Bill";
-        $vch_type = "Tax Invoice";
-        $vch_no = htmlspecialchars($row['inward_no'] ?? '');
-        $debit = round((float)$row['amount'], 2);
-        $credit = 0;
-        $total_debit += $debit;
-        
-    } else {
-        // 2. Credits (Payments & Commission Settlements)
-        $vch_no = htmlspecialchars($row['pay_id'] ?? '');
-        $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "By Receipt";
-        $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
-        $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
-        
-        $stockist_name = htmlspecialchars($row['stockist_name'] ?? 'Unknown');
-        $stockist_badge = "<br><button type='button' class='btn btn-sm btn-light' style='font-size: 10px; padding: 2px 6px; margin-top: 3px; border: 1px solid #dee2e6;'><i class='fa fa-user text-primary'></i> {$stockist_name}</button>";
-        
-        // Particulars Logic
-        if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
-   
-    if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z]+-\d+)/i', $raw_notes, $matches)) {
-        $particulars = $matches[1] . " on " . $matches[2];
-    } else {
-        $particulars = explode(':', $raw_notes)[0]; 
-    }
-    } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
-            $particulars = "CD Applied";
-        } elseif ($row['transaction_type'] === 'mrc_settlement') {
-            $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
-        } elseif ($row['transaction_type'] === 'drc_settlement') {
-            $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
-        } elseif ($row['transaction_type'] === 'settled_to_bill') {
-            $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
-        } else {
-            // FIX APPLIED HERE: Clean formatting and proper fallback
-            if (!empty($payment_method) && !empty($bank_name)) {
-                $particulars = "{$payment_method} - {$bank_name}";
-            } elseif (!empty($payment_method)) {
-                $particulars = $payment_method;
-            } else {
-                $particulars = $raw_notes;
-            }
-        }
+                    while($row = mysqli_fetch_assoc($query)) {
+                        $date = date('d-M', strtotime($row['created_at']));
+                        
+                        // Fetch basic variables used by both blocks
+                        $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "";
+                        $vch_no = htmlspecialchars($row['inward_no'] ?? '');
+                        
+                        if ($row['transaction_type'] == 'bill_added') {
+                            // 1. Check if this is a CD Reversal saved as a bill
+                            if (stripos($raw_notes, 'CD Reversed') !== false) {
+                                $particulars = $raw_notes; // Shows "CD Reversed for T-127"
+                                $vch_type = "Adjustment";
+                            } else {
+                                // Normal Sales Bill
+                                $particulars = "Sales Bill";
+                                $vch_type = "Tax Invoice";
+                            }
+                            
+                            $debit = round((float)$row['amount'], 2);
+                            $credit = 0;
+                            $total_debit += $debit;
+                            
+                        } else {
+                            // 2. Credits (Payments & Commission Settlements)
+                            $vch_no = htmlspecialchars($row['pay_id'] ?? '');
+                            if (empty($raw_notes)) $raw_notes = "By Receipt";
+                            
+                            $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
+                            $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
+                            
+                            $stockist_name = htmlspecialchars($row['stockist_name'] ?? 'Unknown');
+                            $stockist_badge = "<br><button type='button' class='btn btn-sm btn-light' style='font-size: 10px; padding: 2px 6px; margin-top: 3px; border: 1px solid #dee2e6;'><i class='fa fa-user text-primary'></i> {$stockist_name}</button>";
+                            
+                            // Particulars Logic
+                            if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
+                                if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z]+-\d+)/i', $raw_notes, $matches)) {
+                                    $particulars = $matches[1] . " on " . $matches[2];
+                                } else {
+                                    $particulars = explode(':', $raw_notes)[0]; 
+                                }
+                            } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
+                                // Failsafe in case transaction_type was somehow set to something else
+                                $particulars = $raw_notes;
+                            } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
+                                $particulars = "CD Applied";
+                            } elseif ($row['transaction_type'] === 'mrc_settlement') {
+                                $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
+                            } elseif ($row['transaction_type'] === 'drc_settlement') {
+                                $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                            } elseif ($row['transaction_type'] === 'settled_to_bill') {
+                                $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
+                            } else {
+                                // Proper fallback for payments
+                                if (!empty($payment_method) && !empty($bank_name)) {
+                                    $particulars = "{$payment_method} - {$bank_name}";
+                                } elseif (!empty($payment_method)) {
+                                    $particulars = $payment_method;
+                                } else {
+                                    $particulars = $raw_notes;
+                                }
+                            }
 
-        // Differentiate Voucher Type
-        if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill'])) {
-            $vch_type = "Adjustment"; 
-        } else {
-            $vch_type = "Receipt";    
-        }
+                            // Differentiate Voucher Type
+                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill'])) {
+                                $vch_type = "Adjustment"; 
+                            } else {
+                                $vch_type = "Receipt";    
+                            }
 
-        $raw_amount = (float)$row['amount'];
-        $debit = 0;
-        
-        // ROUND OFF CD AMOUNTS
-        if (stripos($raw_notes, 'CD') !== false) {
-            $credit = round($raw_amount); 
-        } else {
-            $credit = round($raw_amount, 2);
-        }
-        
-        $total_credit += $credit;
-    }
-                ?>
+                            $raw_amount = (float)$row['amount'];
+                            $debit = 0;
+                            
+                            // ROUND OFF CD AMOUNTS
+                            if (stripos($raw_notes, 'CD') !== false) {
+                                $credit = round($raw_amount); 
+                            } else {
+                                $credit = round($raw_amount, 2);
+                            }
+                            
+                            $total_credit += $credit;
+                        }
+                    ?>
                         <tr>
                             <td><?= $date ?></td>
                             <td><?= $particulars ?></td>
@@ -257,10 +270,10 @@ include 'view/layout/header.php';
                             <td class="text-right"><?= $debit > 0 ? number_format($debit, 2) : '' ?></td>
                             <td class="text-right" style="color: #5cb85c;"><?= $credit > 0 ? number_format($credit, 2) : '' ?></td>
                         </tr>
-                <?php
+                    <?php
                     }
-                ?>
-                
+                    ?>
+                    
                 <?php elseif (isset($_GET['stockist_id']) && !empty($_GET['stockist_id'])): ?>
                     <tr>
                         <td colspan="6">
@@ -282,7 +295,6 @@ include 'view/layout/header.php';
                     </tr>
                 <?php endif; ?>
             </tbody>
-
             <!-- Balancing Footer -->
             <?php if (isset($query) && $query && mysqli_num_rows($query) > 0): ?>
             <?php

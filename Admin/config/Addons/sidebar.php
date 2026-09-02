@@ -79,7 +79,26 @@
                 </div>
             </li>
             <?php } ?>
-
+        <?php if($admin_role !== 'Super Admin'){ ?>
+            <li class="nav-item searchable-folder">
+                <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#employeeMenu" aria-expanded="false" href="#">
+                    <span>
+                        <i class="fa-solid fa-user-tie" style="width: 20px;"></i>
+                        <span class="ms-2">Employee</span>
+                    </span>
+                    <i class="fa-solid fa-angle-down toggle-icon"></i>
+                </a>
+                <div class="collapse" id="employeeMenu">
+                    <ul class="nav flex-column ms-4 mt-1">
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>admin" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-user-gear" style="width: 20px;"></i> Manage Employee
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </li>
+        <?php } ?>
             <!-- ================= SUPER STOCKIST ================= -->
             <li class="nav-item searchable-folder">
                 <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#superStockistMenu" aria-expanded="false" href="#">
@@ -208,16 +227,6 @@
                                 <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Approvel Payments
                             </a>
                         </li>
-                         <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Entry
-                            </a>
-                        </li>
-                        <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>payment/payment_list" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission entry History
-                            </a>
-                        </li>
                     </ul>
                 </div>
             </li>
@@ -242,6 +251,16 @@
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>drccommision/drc_history" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Dr Commision
+                            </a>
+                        </li>
+                         <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Sattlement Entry
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment/payment_list" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Sattlement History
                             </a>
                         </li>
                     </ul>

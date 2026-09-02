@@ -61,15 +61,18 @@ class PaymentApproval_ctl {
     }
 
     // AJAX Endpoint: Fetch the list of payments
-    public function fetch_list() {
-        header('Content-Type: application/json');
-        
-        $status_filter = $_GET['status'] ?? ''; 
-        $payments = $this->model->getPaymentsForAdmin($status_filter);
-        
-        echo json_encode(['success' => true, 'data' => $payments]);
-        exit;
-    }
+   public function fetch_list() {
+    header('Content-Type: application/json');
+    
+    $status = isset($_GET['status']) ? $_GET['status'] : '';
+    $state_id = isset($_GET['state_id']) ? $_GET['state_id'] : '';
+    $hq_id = isset($_GET['hq_id']) ? $_GET['hq_id'] : '';
+
+    $data = $this->model->getPaymentsForAdmin($status, $state_id, $hq_id);
+    
+    echo json_encode(['success' => true, 'data' => $data]);
+    exit;
+}
 
     // AJAX Endpoint: Handle Approve/Reject action
     public function process() {
@@ -163,24 +166,6 @@ class PaymentApproval_ctl {
         exit;
     }
 
-    // ==========================================
-    // NEW: AJAX Endpoint to fetch Stockist Outstanding Bills
-    // ==========================================
-    // public function get_outstanding() {
-    //     header('Content-Type: application/json');
-    //     $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
-        
-    //     if ($stockist_id > 0) {
-    //         $outstanding = $this->model->getStockistOutstanding($stockist_id);
-    //         echo json_encode(['success' => true, 'outstanding' => $outstanding]);
-    //     } else {
-    //         echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
-    //     }
-    //     exit;
-    // }
-
-
-
    // ==========================================
     // NEW: Load Manual Payment History Page
     // ==========================================
@@ -221,28 +206,45 @@ class PaymentApproval_ctl {
         exit;
     }
 
-       public function get_outstanding() {
-        // Ensure clean JSON output without any PHP warnings breaking it
-        ob_clean(); 
+      public function get_outstanding() {
+    // Ensure clean JSON output without any PHP warnings breaking it
+    ob_clean(); 
+    header('Content-Type: application/json');
+    
+    $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+    
+    // Capture the custom settlement date, default to today if missing
+    $settlement_date = isset($_GET['date']) && !empty($_GET['date']) ? $_GET['date'] : date('Y-m-d'); 
+    
+    if ($stockist_id > 0) {
+        // Pass BOTH stockist_id and settlement_date to the model
+        $data = $this->model->getStockistOutstandingWithCD($stockist_id, $settlement_date);
+        
+        // Encode and send all required keys to the frontend
+        echo json_encode([
+            'success'       => true, 
+            'outstanding'   => $data['total_outstanding'],
+            'eligible_cd'   => $data['eligible_cd'],      // Required by JS
+            'total_penalty' => $data['total_penalty'],    // Required by JS (The CD Revocation)
+            'net_payable'   => $data['net_payable'],
+            'bills'         => $data['bill_details']      // The array of bills
+        ]);
+    } else {
+        echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
+    }
+    exit;
+}
+
+public function get_payment_allocations() {
         header('Content-Type: application/json');
         
-        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+        $payment_id = isset($_GET['payment_id']) ? (int)$_GET['payment_id'] : 0;
         
-        if ($stockist_id > 0) {
-            // Fetch the comprehensive data from the model
-            $data = $this->model->getStockistOutstandingWithCD($stockist_id);
-            
-            // Encode and send all required keys to the frontend
-            echo json_encode([
-                'success'           => true, 
-                'outstanding'       => $data['total_outstanding'],
-                'eligible_cd'       => $data['eligible_cd'],      // Required by JS
-                'total_penalty'     => $data['total_penalty'],    // Required by JS (The CD Revocation)
-                'net_payable'       => $data['net_payable'],
-                'bills'             => $data['bill_details']      // The array of bills
-            ]);
+        if ($payment_id > 0) {
+            $data = $this->model->getPaymentAllocations($payment_id);
+            echo json_encode(['success' => true, 'data' => $data]);
         } else {
-            echo json_encode(['success' => false, 'msg' => 'Invalid Stockist ID']);
+            echo json_encode(['success' => false, 'msg' => 'Invalid Payment ID']);
         }
         exit;
     }

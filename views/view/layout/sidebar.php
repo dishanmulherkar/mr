@@ -107,7 +107,12 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
 <a href="<?= BASE_URL ?>payment_ledger/mrc_ledger"
    class="nav-item <?= ($current_controller == 'payment_ledger' && $current_action == 'mrc_ledger') ? 'active' : ''; ?>">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-   MR Commissions
+   Mr Commi Ledger
+</a>
+<a href="<?= BASE_URL ?>payment_ledger/drc_ledger"
+   class="nav-item <?= ($current_controller == 'payment_ledger' && $current_action == 'drc_ledger') ? 'active' : ''; ?>">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+   DRC Ledger
 </a>
 
 <div class="nav-section">Settings</div>

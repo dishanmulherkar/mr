@@ -155,6 +155,46 @@ include 'view/layout/header.php';
     </div>
 </div>
 
+
+<!-- ========================================== -->
+<!-- VIEW ALLOCATION MODAL (For Approved)       -->
+<!-- ========================================== -->
+<div class="modal fade" id="viewAllocationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fa fa-eye"></i> Payment Allocation Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between mb-3 border-bottom pb-2">
+                    <span class="fw-bold text-secondary">Stockist: <span id="viewStockistName" class="text-dark"></span></span>
+                    <span class="fw-bold text-secondary">Total Paid: <span id="viewTotalAmount" class="text-success fs-5"></span></span>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-striped">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>Invoice No</th>
+                                <th>Invoice Date</th>
+                                <th class="text-end">Cash Allocated</th>
+                                <th>CD / Penalties (Lifetime)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="viewBillsTable">
+                            <!-- Populated via AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     const BASE_URL = "<?= BASE_URL ?>";
 </script>
@@ -191,7 +231,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         approvalTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Loading records...</td></tr>';
 
-        const params = new URLSearchParams({ status: statusFilter.value });
+       const params = new URLSearchParams({ 
+        status: statusFilter.value,
+        state_id: $('#state_id').val() || '',
+        hq_id: $('#hq').val() || ''
+    });
 
         fetch(BASE_URL + 'payment/fetch_list?' + params.toString())
             .then(res => res.json())
@@ -206,6 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 approvalTableBody.innerHTML = res.data.map(p => {
                     let statusClass = 'bg-warning text-dark';
                     let displayStatus = 'Pending';
+                    
                     if (p.approval_status === 'approved') { statusClass = 'bg-success'; displayStatus = 'Approved'; }
                     if (p.approval_status === 'rejected') { statusClass = 'bg-danger'; displayStatus = 'Rejected'; }
 
@@ -213,7 +258,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 ? `<a href="${BASE_URL}../${p.screenshot_path}" target="_blank" class="btn btn-sm btn-info text-white"><i class="fa fa-image"></i> View</a>` 
                                 : '<span class="text-muted small">N/A</span>';
                     
-                    let actions = '<span class="text-muted small">Processed</span>';
+                    // NEW LOGIC: Dynamic Action Buttons based on status
+                    let actions = '';
                     if (p.approval_status === 'pending') {
                         actions = `
                             <div class="dropdown">
@@ -222,21 +268,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </button>
                                 <ul class="dropdown-menu shadow">
                                     <li>
-                                        <!-- Opens the Review Modal -->
                                         <a class="dropdown-item text-primary btn-review" href="#" 
-                                            data-id="${p.id}" 
-                                            data-stockist="${p.stockist_id}" 
-                                            data-name="${p.stockist_name}"
-                                            data-amount="${p.amount_paid}"
-                                            data-method="${p.payment_method}"
-                                            data-ref="${p.bank_details}"
+                                            data-id="${p.id}" data-stockist="${p.stockist_id}" 
+                                            data-name="${p.stockist_name}" data-amount="${p.amount_paid}"
+                                            data-method="${p.payment_method}" data-ref="${p.bank_details}"
                                             data-img="${p.screenshot_path}">
                                             <i class="fa fa-search me-2 pointer-events-none"></i> Review & Approve
                                         </a>
                                     </li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
-                                        <!-- Direct Reject Action -->
                                         <a class="dropdown-item text-danger action-btn" href="#" data-id="${p.id}" data-act="rejected">
                                             <i class="fa fa-times-circle me-2 pointer-events-none"></i> Reject
                                         </a>
@@ -244,6 +285,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </ul>
                             </div>
                         `;
+                    } else if (p.approval_status === 'approved') {
+                        // Show VIEW button for approved payments
+                        actions = `<button class="btn btn-info btn-sm text-white btn-view-allocation" data-id="${p.id}" data-stockist="${p.stockist_name}" data-amount="${p.amount_paid}"><i class="fa fa-eye"></i> View</button>`;
+                    } else {
+                        actions = '<span class="text-muted small fw-bold">Rejected</span>';
                     }
 
                     return `
@@ -274,6 +320,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 approvalTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Failed to load data.</td></tr>';
             });
     }
+
+    // ==========================================
+    // VIEW APPROVED PAYMENT ALLOCATIONS
+    // ==========================================
+    $(document).on('click', '.btn-view-allocation', function(e) {
+        e.preventDefault();
+        let btn = $(this);
+        let paymentId = btn.data('id');
+
+        $('#viewStockistName').text(btn.data('stockist') || 'Unknown');
+        $('#viewTotalAmount').text('₹' + parseFloat(btn.data('amount')).toFixed(2));
+
+        $('#viewAllocationModal').modal('show');
+        $('#viewBillsTable').html('<tr><td colspan="4" class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x text-info"></i><br>Fetching history...</td></tr>');
+
+        $.get(BASE_URL + 'payment/get_payment_allocations', { payment_id: paymentId }, function(res) {
+            if (res.success && res.data.length > 0) {
+                let html = '';
+                res.data.forEach(b => {
+                    let allocated = parseFloat(b.amount_allocated) || 0;
+                    let cdEarned = parseFloat(b.cd_earned) || 0;
+                    let cdRevoked = parseFloat(b.cd_revoked) || 0;
+
+                    let cdHtml = '';
+                    if(cdEarned > 0) cdHtml += `<span class="badge bg-success text-white mb-1"><i class="fa fa-arrow-down"></i> ₹${cdEarned.toFixed(2)} CD</span><br>`;
+                    if(cdRevoked > 0) cdHtml += `<span class="badge bg-danger text-white"><i class="fa fa-arrow-up"></i> ₹${cdRevoked.toFixed(2)} Penalty</span>`;
+                    if(cdHtml === '') cdHtml = '<span class="text-muted small">None</span>';
+
+                    html += `
+                        <tr>
+                            <td class="fw-bold text-center">${b.inward_no}</td>
+                            <td class="text-center">${b.inward_date}</td>
+                            <td class="text-end fw-bold text-success">₹${allocated.toFixed(2)}</td>
+                            <td class="text-center">${cdHtml}</td>
+                        </tr>
+                    `;
+                });
+                $('#viewBillsTable').html(html);
+            } else {
+                $('#viewBillsTable').html('<tr><td colspan="4" class="text-center text-muted py-3">No specific bill allocations found. (Likely an advance payment)</td></tr>');
+            }
+        }, 'json').fail(function() {
+            $('#viewBillsTable').html('<tr><td colspan="4" class="text-center text-danger">Failed to load allocation details.</td></tr>');
+        });
+    });
 
     // ==========================================
     // 1. OPEN REVIEW MODAL & FETCH BILLS

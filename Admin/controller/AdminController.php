@@ -48,7 +48,8 @@ class AdminController
                 'password'   => $_POST['password'],
                 'role'       => $_POST['role'],
                 'status'     => $_POST['status'],
-                'super_stockist_id' => $_POST['super_stockist_id'] ?? null
+                'super_stockist_id' => $_POST['super_stockist_id'] ?? null,
+                'commission_rate' => $_POST['commission_rate'] ?? null
             ];
 
             // First insert admin
@@ -74,7 +75,8 @@ class AdminController
             'password'   => $_POST['password'],
             'role'       => $_POST['role'],
             'status'     => $_POST['status'],
-            'super_stockist_id' => $_POST['super_stockist_id'] ?? null
+            'super_stockist_id' => $_POST['super_stockist_id'] ?? null,
+            'commission_rate' => $_POST['commission_rate'] ?? null
 
         ];
 

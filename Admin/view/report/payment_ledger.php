@@ -133,10 +133,20 @@ include 'view/layout/header.php';
                         while($row = mysqli_fetch_assoc($query)) {
                             $date = date('d-M-y', strtotime($row['created_at']));
                             
+                            // 1. Fetch notes at the top so both blocks can use it
+                            $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "";
+                            
                             if ($row['transaction_type'] == 'bill_added') {
-                                // 1. Bill Added (Debit)
-                                $particulars = "To Sales Bill";
-                                $vch_type = "Tax Invoice";
+                                
+                                // FIX: Check if this is a CD Reversal or a Normal Bill
+                                if (stripos($raw_notes, 'CD Reversed') !== false) {
+                                    $particulars = "To " . $raw_notes; // Outputs: To CD Reversed for T-127
+                                    $vch_type = "Adjustment";
+                                } else {
+                                    $particulars = "To Sales Bill";
+                                    $vch_type = "Tax Invoice";
+                                }
+                                
                                 $vch_no = htmlspecialchars($row['inward_no'] ?? '');
                                 $debit = round((float)$row['amount'], 2);
                                 $credit = 0;
@@ -146,8 +156,10 @@ include 'view/layout/header.php';
                                 // 2. Credits (Payments & Commission Settlements)
                                 $vch_no = htmlspecialchars($row['pay_id'] ?? '');
                                 
-                                // Fetch variables for Particulars processing
-                                $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "By Receipt";
+                                if (empty($raw_notes)) {
+                                    $raw_notes = "By Receipt";
+                                }
+                                
                                 $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
                                 $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
                                 
@@ -158,6 +170,16 @@ include 'view/layout/header.php';
                                     } else {
                                         $particulars = explode(':', $raw_notes)[0]; 
                                     }
+                                } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
+                                    $particulars = $raw_notes;
+                                } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
+                                    $particulars = "CD Applied";
+                                } elseif ($row['transaction_type'] === 'mrc_settlement') {
+                                    $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
+                                } elseif ($row['transaction_type'] === 'drc_settlement') {
+                                    $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                                } elseif ($row['transaction_type'] === 'settled_to_bill') {
+                                    $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
                                 } else {
                                     if (!empty($payment_method) && !empty($bank_name)) {
                                         $particulars = "{$payment_method} - {$bank_name}";

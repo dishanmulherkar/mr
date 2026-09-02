@@ -16,29 +16,42 @@ class AdminModel
         ");
     }
 
-        public function getAll()
+       public function getAll()
         {
-            return mysqli_query(
-                $this->con,
-                "SELECT
-                    a.admin_id,
-                    a.admin_name,
-                    a.username,
-                    a.email,
-                    a.mobile,
-                    a.role,
-                    a.status,
-                    a.created_at,
-                    a.last_login,
-                    GROUP_CONCAT(s.state_name ORDER BY s.state_name SEPARATOR ', ') AS state_names
-                FROM admins a
-                LEFT JOIN admin_state ast
-                    ON a.admin_id = ast.admin_id
-                LEFT JOIN state s
-                    ON ast.state_id = s.state_id
-                GROUP BY a.admin_id
-                ORDER BY a.created_at DESC"
-            );
+            // Start session if not already started to access the role
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
+            
+            $admin_role = $_SESSION['admin_role'] ?? 'Admin';
+            
+            // Default: No filter (Super Admin sees everyone)
+            $whereClause = "";
+            
+            // If the logged-in user is NOT a Super Admin, hide Super Admins and Admins from the list
+            if ($admin_role !== 'Super Admin') {
+                $whereClause = "WHERE a.role NOT IN ('Super Admin', 'Admin')";
+            }
+
+            $sql = "SELECT
+                        a.admin_id,
+                        a.admin_name,
+                        a.username,
+                        a.email,
+                        a.mobile,
+                        a.role,
+                        a.status,
+                        a.created_at,
+                        a.last_login,
+                        GROUP_CONCAT(s.state_name ORDER BY s.state_name SEPARATOR ', ') AS state_names
+                    FROM admins a
+                    LEFT JOIN admin_state ast ON a.admin_id = ast.admin_id
+                    LEFT JOIN state s ON ast.state_id = s.state_id
+                    $whereClause
+                    GROUP BY a.admin_id
+                    ORDER BY a.created_at DESC";
+
+            return mysqli_query($this->con, $sql);
         }
         public function getStates()
         {
@@ -86,12 +99,13 @@ class AdminModel
         {
             $stmt = $this->con->prepare("
                 INSERT INTO admins
-                (admin_name, username, email, mobile, password, role, status, stockist_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (admin_name, username, email, mobile, password, role, status, stockist_id, commission_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
+            // Corrected to 9 characters to match the 9 variables
             $stmt->bind_param(
-                "sssssssi",
+                "sssssssid",
                 $data['admin_name'],
                 $data['user_name'],
                 $data['email'],
@@ -99,7 +113,8 @@ class AdminModel
                 $data['password'],
                 $data['role'],
                 $data['status'],
-                $data['super_stockist_id']
+                $data['super_stockist_id'],
+                $data['commission_rate']
             );
 
             if ($stmt->execute()) {
@@ -125,7 +140,7 @@ class AdminModel
             }
         }
 
-        public function updateAdmin($id,$data)
+       public function updateAdmin($id, $data)
         {
             $stmt = $this->con->prepare("
                 UPDATE admins
@@ -137,12 +152,14 @@ class AdminModel
                     password=?,
                     role=?,
                     status=?,
-                    stockist_id=?
+                    stockist_id=?,
+                    commission_rate=?
                 WHERE admin_id=?
             ");
 
+            // Corrected to 10 characters to match the 10 variables
             $stmt->bind_param(
-                "sssssssii",
+                "sssssssidi",
                 $data['admin_name'],
                 $data['user_name'],
                 $data['email'],
@@ -151,6 +168,7 @@ class AdminModel
                 $data['role'],
                 $data['status'],
                 $data['super_stockist_id'],
+                $data['commission_rate'],
                 $id
             );
 

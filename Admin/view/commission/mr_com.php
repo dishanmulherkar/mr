@@ -16,7 +16,7 @@ include 'view/layout/header.php';
     <input type="hidden" id="edit_payout_id" value="<?= $isEditMode ? $payout_id : 0 ?>">
     <input type="hidden" id="edit_hq_id" value="<?= $isEditMode ? $edit_hq_id : 0 ?>">
 
-    <!-- ================== SEARCH FILTERS (Hidden in Edit Mode) ================== -->
+    <!-- ================== SEARCH FILTERS ================== -->
     <?php if (!$isEditMode): ?>
     <div class="container border px-3 py-3 mb-4" id="searchFiltersBlock">
         <div class="row">
@@ -89,7 +89,7 @@ include 'view/layout/header.php';
 
         <!-- ================== DYNAMIC ADJUSTMENTS ================== -->
         <div id="adjustmentsContainer" class="mt-4 mb-5" style="padding-bottom: 80px;">
-            <h5 class="mb-3 text-primary">ADDITIONS/DIDUCTIONS</h5>
+            <h5 class="mb-3 text-primary">ADDITIONS/DEDUCTIONS</h5>
             <div id="adjustmentsList">
                 <?php if ($isEditMode && !empty($editData['adjustments'])): ?>
                     <?php foreach ($editData['adjustments'] as $adj): ?>
@@ -120,10 +120,15 @@ include 'view/layout/header.php';
             <?php endif; ?>
         </div>
 
-        <!-- ================== FOOTER (UPDATED WITH TWO BUTTONS) ================== -->
+        <!-- ================== FOOTER ================== -->
         <div class="commission-footer" style="position: sticky; bottom: 0; background: #f8f9fa; padding: 15px; border-top: 2px solid #ddd; display: flex; justify-content: space-between; align-items: center; z-index: 100;">
             <div><strong>Selected Bills: </strong> <span id="selectedCount">0</span></div>
-            <div><strong>Total Payout: </strong> <span style="font-size: 1.5em; color: #28a745;">₹<span id="totalCommission">0.00</span></span></div>
+            <div>
+                <strong>Total Payout: </strong> 
+                <span style="font-size: 1.5em; color: #28a745;">₹<span id="totalCommission">0.00</span></span>
+                <!-- Exact unrounded amount note -->
+                <small id="exactAmountNote" class="text-muted ms-2" style="font-size: 0.85em; font-weight: normal;"></small>
+            </div>
             <div>
                 <button id="btnSavePending" class="btn btn-warning text-dark fw-bold action-btn" data-status="Pending" disabled>
                     Save
@@ -223,13 +228,26 @@ $(document).ready(function() {
             let amt = parseFloat($(this).find('.adj-amt').val()) || 0;
             if (amt > 0) total = ($(this).find('.adj-type').val() === '+') ? (total + amt) : (total - amt);
         });
-        $('#totalCommission').text(total.toFixed(2));
+        
+        // --- FIX APPLIED HERE: ROUND OFF TOTAL ---
+        let roundedTotal = Math.round(total);
+        
+        $('#totalCommission').text(roundedTotal.toFixed(2));
+        
+        // Show exact unrounded amount if rounding changed the value
+        if (total !== roundedTotal && count > 0) {
+            $('#exactAmountNote').text(`(Exact: ₹${total.toFixed(2)})`);
+        } else {
+            $('#exactAmountNote').text('');
+        }
+        
         $('#selectedCount').text(count);
         $('.action-btn').prop('disabled', count === 0);
     }
     
     function resetMath() { 
         $('#totalCommission').text('0.00'); 
+        $('#exactAmountNote').text('');
         $('#selectedCount').text('0'); 
         $('#selectAll').prop('checked', false); 
         $('.action-btn').prop('disabled', true); 
@@ -247,7 +265,8 @@ $(document).ready(function() {
             if (amt > 0) extraAdjustments.push({ description: $(this).find('.adj-desc').val(), type: $(this).find('.adj-type').val(), amount: amt });
         });
 
-        let finalTotal = $('#totalCommission').text();
+        // This picks up the rounded value from the text display
+        let finalTotal = $('#totalCommission').text(); 
         
         let confirmMsg = selectedStatus === 'Paid' 
             ? `Mark this commission as PAID? Final payout: ₹${finalTotal}. (This action locks the commission).` 
@@ -263,8 +282,8 @@ $(document).ready(function() {
             hq_id: isEditMode ? editHqId : $('#hq').val(), 
             bill_ids: JSON.stringify(selectedBillIds), 
             adjustments: JSON.stringify(extraAdjustments), 
-            final_payout: finalTotal,
-            status: selectedStatus // Sent to backend to update the status column
+            final_payout: finalTotal, // ONLY the rounded total is sent
+            status: selectedStatus
         };
         
         if (isEditMode) payloadData.payout_id = editPayoutId;
@@ -276,7 +295,7 @@ $(document).ready(function() {
                 else { $('#adjustmentsList').empty(); appendEmptyAdjustmentRow(); $('#btnFetchBills').trigger('click'); }
             } else {
                 alert('Error: ' + res.msg);
-                calculateTotal(); // Re-enables buttons based on checkboxes
+                calculateTotal(); 
             }
         }).fail(function() { 
             alert('Server error occurred.'); 

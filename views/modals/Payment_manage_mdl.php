@@ -362,7 +362,7 @@ public function getStockistOutstandingWithCD($stockist_id)
         $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
 
         /*
-         * 3. Get unpaid bills and calculate Penalties / CD
+         * 3. Get unpaid bills and calculate Exact Penalties / CD
          */
         $stmt = $this->con->prepare("
             SELECT 
@@ -376,44 +376,41 @@ public function getStockistOutstandingWithCD($stockist_id)
                 (grand_total - paid_amt) AS pending_amount,
                 DATEDIFF(CURDATE(), inward_date) AS bill_age_days,
 
-                -- ALREADY GIVEN CD (Reverse calculate because sub_total is already discounted)
-                CASE 
-                    WHEN COALESCE(cd_percent, 0) = 4 THEN ROUND(sub_total * (4 / 96), 2) 
-                    ELSE 0 
-                END AS already_4_cd,
-                
-                CASE 
-                    WHEN COALESCE(cd_percent, 0) = 2 THEN ROUND(sub_total * (2 / 98), 2) 
-                    ELSE 0 
-                END AS already_2_cd,
-
-                -- NEW ELIGIBLE 4% CD (Direct calculate because sub_total is NOT discounted yet)
+                -- NEW ELIGIBLE 4% CD (Current Grand Total - Target 4% Grand Total)
                 CASE 
                     WHEN DATEDIFF(CURDATE(), inward_date) <= ? AND COALESCE(cd_percent, 0) = 0 
-                    THEN ROUND(sub_total * 0.04, 2) ELSE 0 
+                    THEN grand_total - ROUND((sub_total * 0.96) + (COALESCE(gst_amount, 0) * 0.96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) 
+                    ELSE 0 
                 END AS eligible_4_cd,
 
-                -- NEW ELIGIBLE 2% CD (Direct calculate because sub_total is NOT discounted yet)
+                -- NEW ELIGIBLE 2% CD (Current Grand Total - Target 2% Grand Total)
                 CASE 
                     WHEN DATEDIFF(CURDATE(), inward_date) > ? AND DATEDIFF(CURDATE(), inward_date) <= ? AND COALESCE(cd_percent, 0) = 0 
-                    THEN ROUND(sub_total * 0.02, 2) ELSE 0 
+                    THEN grand_total - ROUND((sub_total * 0.98) + (COALESCE(gst_amount, 0) * 0.98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) 
+                    ELSE 0 
                 END AS eligible_2_cd,
 
-                -- REVOKED PENALTY (Reverse calculating the exact amount they lose)
+                -- REVOKED PENALTY (Target Grand Total - Current Grand Total)
                 CASE
                     WHEN COALESCE(cd_percent, 0) = 4 THEN
                         CASE 
                             WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN 0 
-                            -- Downgrade from 4% to 2%. They lose 2%.
-                            WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN ROUND(sub_total * (2 / 96), 2) 
-                            -- Missed 30 days. Lose the full 4%.
-                            ELSE ROUND(sub_total * (4 / 96), 2) 
+                            
+                            -- Downgrade 4% to 2% (Scale base by 98/96)
+                            WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN 
+                                ROUND((sub_total * 98/96) + (COALESCE(gst_amount, 0) * 98/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
+                            
+                            -- Missed completely. Lose full 4% (Scale base by 100/96)
+                            ELSE 
+                                ROUND((sub_total * 100/96) + (COALESCE(gst_amount, 0) * 100/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
                         END
                     WHEN COALESCE(cd_percent, 0) = 2 THEN
                         CASE
                             WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN 0
-                            -- Missed 30 days. Lose the full 2%.
-                            ELSE ROUND(sub_total * (2 / 98), 2)
+                            
+                            -- Missed completely. Lose full 2% (Scale base by 100/98)
+                            ELSE 
+                                ROUND((sub_total * 100/98) + (COALESCE(gst_amount, 0) * 100/98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
                         END
                     ELSE 0
                 END AS penalty_amount
@@ -423,14 +420,14 @@ public function getStockistOutstandingWithCD($stockist_id)
             ORDER BY inward_date ASC
         ");
 
-        // Bind the 7 parameters required for the CASE statements above
+        // FIX APPLIED HERE: Changed "iiiiii" to "iiiiiii" (7 characters for 7 variables)
         $stmt->bind_param(
             "iiiiiii",
-            $cd_4_days,                  // For eligible_4_cd
-            $cd_4_days, $cd_2_days,      // For eligible_2_cd
-            $cd_4_days, $cd_2_days,      // For penalty_amount (4% logic)
-            $cd_2_days,                  // For penalty_amount (2% logic)
-            $stockist_id                 // For WHERE clause
+            $cd_4_days,                  // 1. For eligible_4_cd
+            $cd_4_days, $cd_2_days,      // 2, 3. For eligible_2_cd
+            $cd_4_days, $cd_2_days,      // 4, 5. For penalty_amount (4% logic)
+            $cd_2_days,                  // 6. For penalty_amount (2% logic)
+            $stockist_id                 // 7. For WHERE clause
         );
 
         $stmt->execute();
