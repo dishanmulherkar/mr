@@ -253,6 +253,11 @@
                                 <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Dr Commision
                             </a>
                         </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>asmcommision/asm_history" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> ASM Commision
+                            </a>
+                        </li>
                          <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Sattlement Entry

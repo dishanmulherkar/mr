@@ -221,6 +221,11 @@ switch($page)
     $controller = new bank_ctl($con);
     break;
 
+    case 'asmcommision':
+    include 'controller/commision/asm_ctl.php';
+    $controller = new asm_ctl($con);
+    break;
+
     case 'dashboard':
     default:
         include 'controller/DashboardController.php'; 

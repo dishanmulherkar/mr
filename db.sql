@@ -423,3 +423,20 @@ ALTER TABLE stock_inward ADD asm_com TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE stock_inward 
 ADD cd_penalty_amt DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER paid_amt,
 ADD cd_earned_amt DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER cd_penalty_amt;
+
+--- - - - - - - - - - - - - - - - - - - - - - - - -
+-- 02-09-26  --- - - - - - - - - - - - - - - - - - - - - - - - -
+ALTER TABLE orders 
+ADD COLUMN order_no VARCHAR(50) NULL AFTER order_id,
+ADD UNIQUE INDEX idx_order_no (order_no);
+
+ALTER TABLE `stock_inward` 
+  ADD COLUMN asm_com BIGINT NOT NULL;
+
+  -- 1. Modify commission_type in the commission payout table
+ALTER TABLE commission_payouts 
+MODIFY COLUMN commission_type ENUM('MRC', 'DRC', 'ASM') NOT NULL;
+
+-- 2. Modify ledger_type in the payment ledger table
+ALTER TABLE payment_ledgers 
+MODIFY COLUMN ledger_type ENUM('debt', 'mrc_wallet', 'drc_wallet', 'asm_wallet') NOT NULL;

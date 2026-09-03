@@ -55,7 +55,7 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
         <line x1="12" y1="11" x2="12" y2="17"></line>
         <line x1="9" y1="14" x2="15" y2="14"></line>
      </svg>
-   Manage Order
+   Order
 </a>
 
 <a href="<?= BASE_URL ?>payment"
@@ -64,7 +64,7 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
             <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
             <line x1="1" y1="10" x2="23" y2="10"></line>
         </svg>
-    Manage Payment
+   Payment
 </a>
 
 <!-- Mr Commission -->
