@@ -232,45 +232,83 @@
             </li>
 
 
-             <!-- ================= Commision ================= -->
+       <!-- ================= Commission ================= -->
             <li class="nav-item searchable-folder">
                 <a class="nav-link text-white d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#commisionMenu" aria-expanded="false" href="#">
                     <span>
                         <i class="fa-solid fa-boxes-stacked" style="width: 20px;"></i>
-                        <span class="ms-2">Commision</span>
+                        <span class="ms-2">Commission</span>
                     </span>
                     <i class="fa-solid fa-angle-down toggle-icon"></i>
                 </a>
+                
                 <div class="collapse" id="commisionMenu">
-                    <ul class="nav flex-column ms-4 mt-1">
-                        <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>commision/mrc_history" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> MR Commision
+                    <ul class="nav flex-column ms-3 mt-1">
+                        
+                        <!-- 1. MR COMMISSION -->
+                        <li class="nav-item">
+                            <!-- Added stopPropagation to prevent the outer menu from closing when clicking this -->
+                            <a class="nav-link text-light py-1 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#mrCommMenu" aria-expanded="false" href="#" onclick="event.stopPropagation();">
+                                <span><i class="fa-solid fa-user-tie" style="width: 20px;"></i> MR Commission</span>
+                                <i class="fa-solid fa-angle-down" style="font-size: 0.8rem;"></i>
                             </a>
+                            <div class="collapse" id="mrCommMenu">
+                                <ul class="nav flex-column ms-4 mt-1">
+                                    <li class="nav-item searchable-item">
+                                        <a href="<?= BASE_URL ?>commision/mrc_history" class="nav-link text-light py-1" style="font-size: 0.9rem;">
+                                            <i class="fa-solid fa-minus text-muted" style="width: 15px;"></i> MR Comm List
+                                        </a>
+                                    </li>
+                                    <li class="nav-item searchable-item">
+                                        <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1" style="font-size: 0.9rem;">
+                                            <i class="fa-solid fa-minus text-muted" style="width: 15px;"></i> Settlement Entry
+                                        </a>
+                                    </li>
+                                    <li class="nav-item searchable-item">
+                                        <a href="<?= BASE_URL ?>payment/payment_list" class="nav-link text-light py-1" style="font-size: 0.9rem;">
+                                            <i class="fa-solid fa-minus text-muted" style="width: 15px;"></i> Settlement History
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
                         </li>
-                        <li class="nav-item searchable-item">
+
+                        <!-- 2. ASM COMMISSION -->
+                        <li class="nav-item mt-1">
+                            <a class="nav-link text-light py-1 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#asmCommMenu" aria-expanded="false" href="#" onclick="event.stopPropagation();">
+                                <span><i class="fa-solid fa-user-shield" style="width: 20px;"></i> ASM Commission</span>
+                                <i class="fa-solid fa-angle-down" style="font-size: 0.8rem;"></i>
+                            </a>
+                            <div class="collapse" id="asmCommMenu">
+                                <ul class="nav flex-column ms-4 mt-1">
+                                    <li class="nav-item searchable-item">
+                                        <a href="<?= BASE_URL ?>asmcommision/asm_history" class="nav-link text-light py-1" style="font-size: 0.9rem;">
+                                            <i class="fa-solid fa-minus text-muted" style="width: 15px;"></i> ASM Comm List
+                                        </a>
+                                    </li>
+                                    <li class="nav-item searchable-item">
+                                        <a href="<?= BASE_URL ?>payment/asm_satlement" class="nav-link text-light py-1" style="font-size: 0.9rem;">
+                                            <i class="fa-solid fa-minus text-muted" style="width: 15px;"></i> Settlement Entry
+                                        </a>
+                                    </li>
+                                    <li class="nav-item searchable-item">
+                                        <a href="<?= BASE_URL ?>payment/asm_payment_list" class="nav-link text-light py-1" style="font-size: 0.9rem;">
+                                            <i class="fa-solid fa-minus text-muted" style="width: 15px;"></i> Settlement History
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <!-- 3. DR COMMISSION -->
+                        <li class="nav-item searchable-item mt-1">
                             <a href="<?= BASE_URL ?>drccommision/drc_history" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Dr Commision
+                                <i class="fa-solid fa-user-doctor" style="width: 20px;"></i> Dr Commission
                             </a>
                         </li>
-                        <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>asmcommision/asm_history" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> ASM Commision
-                            </a>
-                        </li>
-                         <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>payment/entry" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Sattlement Entry
-                            </a>
-                        </li>
-                        <li class="nav-item searchable-item">
-                            <a href="<?= BASE_URL ?>payment/payment_list" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Commission Sattlement History
-                            </a>
-                        </li>
+                        
                     </ul>
                 </div>
-                
             </li>
 
             <!-- ================= INVENTORY ================= -->
@@ -409,7 +447,7 @@
                         </li>
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>cd_rules" class="nav-link text-light py-1">
-                                <i class="fa-solid fa-calendar-days" style="width: 20px;"></i> CD Rules
+                                <i class="fa-solid fa-calendar-days" style="width: 20px;"></i>Super Stockist Settings
                             </a>
                         </li>
                         <li class="nav-item searchable-item">
@@ -440,13 +478,13 @@
             </h5>
         </a>
     </nav>
-
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
     // 1. Arrow Icon Toggle Logic
     document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(btn){
-        const icon = btn.querySelector('.toggle-icon');
+        // Find icon by class, or fallback to the specific font-awesome class if toggle-icon isn't used
+        const icon = btn.querySelector('.toggle-icon') || btn.querySelector('.fa-angle-down, .fa-angle-up');
         const targetSelector = btn.getAttribute('data-bs-target');
         const target = document.querySelector(targetSelector);
 
@@ -463,8 +501,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 2. Active State Logic (Auto-open current tab)
-    // Get the current URL without any ?id= parameters
+    // 2. Active State Logic (Auto-open ALL parent tabs for nested menus)
     const currentUrl = window.location.href.split('?')[0]; 
     
     document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
@@ -472,27 +509,32 @@ document.addEventListener('DOMContentLoaded', function () {
             // Highlight the link
             link.classList.add('active-menu');
             link.classList.remove('text-light');
+            link.classList.add('text-warning', 'fw-bold'); // Added extra highlight for visibility
             
-            // Find parent collapse container and open it
-            let parentCollapse = link.closest('.collapse');
-            if (parentCollapse) {
-                parentCollapse.classList.add('show');
-                
-                // Flip the arrow icon on the parent folder
-                let parentFolderBtn = document.querySelector('[data-bs-target="#' + parentCollapse.id + '"]');
-                if (parentFolderBtn) {
-                    parentFolderBtn.setAttribute('aria-expanded', 'true');
-                    let icon = parentFolderBtn.querySelector('.toggle-icon');
-                    if (icon) {
-                        icon.classList.remove('fa-angle-down');
-                        icon.classList.add('fa-angle-up');
+            // Traverse UP the DOM tree to find and open ALL parent .collapse containers
+            let currentElement = link.parentElement;
+            
+            while (currentElement) {
+                if (currentElement.classList && currentElement.classList.contains('collapse')) {
+                    currentElement.classList.add('show'); // Open the folder
+                    
+                    // Flip the arrow icon on the button that controls this specific folder
+                    let parentFolderBtn = document.querySelector('[data-bs-target="#' + currentElement.id + '"]');
+                    if (parentFolderBtn) {
+                        parentFolderBtn.setAttribute('aria-expanded', 'true');
+                        let icon = parentFolderBtn.querySelector('.toggle-icon') || parentFolderBtn.querySelector('.fa-angle-down, .fa-angle-up');
+                        if (icon) {
+                            icon.classList.remove('fa-angle-down');
+                            icon.classList.add('fa-angle-up');
+                        }
                     }
                 }
+                currentElement = currentElement.parentElement; // Move to the next parent up
             }
         }
     });
 
-    // 3. Sidebar Search Filter Logic
+    // 3. Sidebar Search Filter Logic (Updated for nested folders)
     const searchInput = document.getElementById('sidebarSearch');
     
     if (searchInput) {
@@ -509,27 +551,37 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (text.includes(filter)) {
                         item.style.display = '';
                         folderMatches = true;
+                        
+                        // If searching, force open ALL parent collapses of this specific item
+                        if (filter !== '') {
+                            let parentCol = item.parentElement;
+                            while(parentCol && parentCol !== folder.parentElement) {
+                                if(parentCol.classList && parentCol.classList.contains('collapse')) {
+                                    parentCol.classList.add('show');
+                                }
+                                parentCol = parentCol.parentElement;
+                            }
+                        }
                     } else {
                         item.style.display = 'none';
                     }
                 });
 
-                // If searching, force open folders that have matches. If cleared, revert.
-                let collapseDiv = folder.querySelector('.collapse');
-                
                 if (filter !== '') {
                     if (folderMatches) {
                         folder.style.display = '';
-                        if (collapseDiv) collapseDiv.classList.add('show');
                     } else {
                         folder.style.display = 'none';
                     }
                 } else {
                     folder.style.display = '';
-                    // Collapse all except the one containing the active menu
-                    if (collapseDiv && !collapseDiv.querySelector('.active-menu')) {
-                        collapseDiv.classList.remove('show');
-                    }
+                    // Collapse all except the ones containing the active menu
+                    let allCollapses = folder.querySelectorAll('.collapse');
+                    allCollapses.forEach(col => {
+                        if (!col.querySelector('.active-menu')) {
+                            col.classList.remove('show');
+                        }
+                    });
                 }
             });
         });

@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return `
                 <div class="dropdown">
                     <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="actionBtn${o.order_id}" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fa fa-cog"></i> Actions
+                        <i class="fa fa-cog"></i> <span class="d-none d-sm-inline ms-1">Actions</span>
                     </button>
                     <ul class="dropdown-menu shadow" aria-labelledby="actionBtn${o.order_id}">
                         ${menuItems}
@@ -86,38 +86,41 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        function loadOrders() {
+      function loadOrders() 
+      {
             const params = new URLSearchParams({
                 stockist_id: stockistSel.value || '',
                 from_date: fromDate.value || ''
             });
 
-            orderTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>`;
+            orderTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Loading…</td></tr>`;
 
             fetch(`${BASE_URL}OrderEntry/list_orders?${params.toString()}`)
                 .then(res => res.json())
                 .then(res => {
                     if (!res.success || !res.data.length) {
-                        orderTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No orders found</td></tr>`;
+                        orderTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No orders found</td></tr>`;
                         orderCount.textContent = 0;
                         return;
                     }
-                    orderTableBody.innerHTML = res.data.map(o => `
+                    
+                    // Add 'index' here and use index + 1 for the Sr. No
+                    orderTableBody.innerHTML = res.data.map((o, index) => `
                         <tr>
-                            <td>${o.order_no}<?td>
+                            <td>${index + 1}</td>
                             <td>${o.order_date}</td>
                             <td>₹${Math.round(Number(o.grand_total)).toLocaleString('en-IN')}</td>
                             <td><span class="badge ${statusClass(o.status)}">${statusText(o.status)}</span></td>
                             <td class="text-center">${actionIcons(o)}</td>
                         </tr>
                     `).join('');
+                    
                     orderCount.textContent = res.data.length;
                 })
                 .catch(() => {
-                    orderTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Failed to load orders</td></tr>`;
+                    orderTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Failed to load orders</td></tr>`;
                 });
         }
-
         btnSearch.addEventListener('click', loadOrders);
         btnReset.addEventListener('click', () => {
             stockistSel.value = '';

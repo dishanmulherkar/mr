@@ -44,18 +44,10 @@ include 'view/layout/header.php';
 
                     <div class="col-lg-4">
                         <div class="form-group">
-                            <label class="fw-bold">Head Quarter</label>
+                            <label class="fw-bold">ASM</label>
+                            <!-- Note: ID is hq_id but it actually holds the ASM ID based on your flow -->
                             <select name="hq_id" id="hq_id" class="form-control select2" required>
                                 <option value="">-- Select State First --</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="col-lg-4">
-                        <div class="form-group">
-                            <label class="fw-bold">Select MR</label>
-                            <select name="mr_id" id="mr_id" class="form-control select2" required>
-                                <option value="">-- Select HQ First --</option>
                             </select>
                         </div>
                     </div>
@@ -70,8 +62,8 @@ include 'view/layout/header.php';
                             <label class="fw-bold">Commission Type</label>
                             <select name="commission_type" id="commission_type" class="form-control" required>
                                 <option value="">-- Select Type --</option>
-                                <option value="MRC">MR Commission (MRC)</option>
-                                <option value="DRC">Dr Commission (DRC)</option>
+                                <option value="ASM">Commission</option>
+                               
                             </select>
                             <small id="balanceDisplay" class="form-text text-muted mt-1 d-block"></small>
                         </div>
@@ -96,71 +88,84 @@ include 'view/layout/header.php';
                     </div>
                 </div>
 
-                <!-- ROW 3: Stockist Settlement Details (Hidden by Default) -->
-                <div class="row g-3 mb-4 p-3 bg-light rounded border" id="stockistContainer" style="display: none;">
-                    <div class="col-lg-4">
-                        <div class="form-group">
-                            <label class="fw-bold text-danger">Select Stockist to Settle</label>
-                            <select name="stockist_id" id="stockist_id" class="form-control select2">
-                                <option value="">-- Select HQ First --</option>
+               <!-- ROW 3: Stockist Settlement Details (Hidden by Default) -->
+                <div class="row g-2 mb-3 p-2 bg-light rounded border shadow-sm" id="stockistContainer" style="display: none;">
+                    
+                    <!-- 1. Filters Row -->
+                    <div class="col-lg-4 col-md-6">
+                        <div class="form-group mb-0">
+                            <label class="fw-bold text-info small mb-1">Filter by Headquarter</label>
+                            <select name="filter_hq_id" id="filter_hq_id" class="form-control form-control-sm select2">
+                                <option value="">-- Select ASM First --</option>
                             </select>
                         </div>
                     </div>
 
-                    <div class="col-lg-4">
-                        <div class="form-group">
-                            <label class="fw-bold text-primary">Settlement Date (For CD Math)</label>
-                            <input type="date" name="settlement_date" id="settlement_date" class="form-control" value="<?= date('Y-m-d') ?>">
-                            <small class="form-text text-muted">Change date to retroactively apply Cash Discount.</small>
+                    <div class="col-lg-4 col-md-6">
+                        <div class="form-group mb-0">
+                            <label class="fw-bold text-danger small mb-1">Select Stockist to Settle</label>
+                            <select name="stockist_id" id="stockist_id" class="form-control form-control-sm select2">
+                                <option value="">-- Select ASM First --</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="col-lg-4 d-flex align-items-center">
-                        <div id="outstandingSummary" class="w-100 p-2 bg-white border rounded shadow-sm">
-                            <span class="text-muted"><i class="fa fa-info-circle"></i> Select stockist to view balance.</span>
+                    <div class="col-lg-4 col-md-12">
+                        <div class="form-group mb-0">
+                            <label class="fw-bold text-primary small mb-1">Settlement Date</label>
+                            <div class="input-group input-group-sm">
+                                <input type="date" name="settlement_date" id="settlement_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Detailed Bills Table -->
-                    <div class="col-lg-12 mt-3" id="billsTableContainer" style="display: none;">
-                        <h6 class="fw-bold text-secondary mb-2">Pending Bills & Applicable CD</h6>
+                    <!-- 2. Summary Strip -->
+                    <div class="col-12 mt-2">
+                        <div id="outstandingSummary" class="w-100 p-2 bg-white border rounded">
+                            <span class="text-muted small"><i class="fa fa-info-circle"></i> Select stockist to view balance.</span>
+                        </div>
+                    </div>
+
+                    <!-- 3. Detailed Bills Table -->
+                    <div class="col-12 mt-2" id="billsTableContainer" style="display: none;">
+                        <h6 class="fw-bold text-secondary mb-1 small">Pending Bills & Applicable CD</h6>
                         <div class="table-responsive">
-                            <table class="table table-bordered table-sm table-hover bg-white">
-                               <thead>
+                            <table class="table table-bordered table-sm table-hover bg-white mb-0" style="font-size: 0.85rem;">
+                               <thead class="table-light align-middle text-center">
                                     <tr>
                                         <th>Bill No</th>
                                         <th>Date (Age)</th>
                                         <th class="text-end">Net Amt</th>
                                         <th class="text-end">Paid Amt</th>
                                         <th class="text-end">Pending Amt</th>
-                                        <th class="text-end">CD Already Given</th>
-                                        <th class="text-end">New CD Earned</th>
-                                        <th class="text-end">Penalty (CD Lost)</th>
-                                        <th class="text-end">Net Bill Payable</th>
+                                        <th class="text-end">CD Given</th>
+                                        <th class="text-end">New CD</th>
+                                        <th class="text-end">Penalty</th>
+                                        <th class="text-end">Net Payable</th>
                                     </tr>
                                 </thead>
-                                <tbody id="billsTableBody">
+                                <tbody id="billsTableBody" class="align-middle">
                                     <!-- Populated via JS -->
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                    <!-- NEW: Payment Allocation History (For Edit/View Mode) -->
-                    <div class="col-lg-12 mt-3" id="allocatedBillsContainer" style="display: none;">
-                        <h6 class="fw-bold text-success mb-2"><i class="fa fa-history"></i> Payment Allocation History</h6>
+
+                    <!-- 4. Payment Allocation History -->
+                    <div class="col-12 mt-2" id="allocatedBillsContainer" style="display: none;">
+                        <h6 class="fw-bold text-success mb-1 small"><i class="fa fa-history"></i> Payment Allocation History</h6>
                         <div class="table-responsive">
-                            <table class="table table-bordered table-sm table-hover bg-white">
-                                <thead class="table-light text-center">
+                            <table class="table table-bordered table-sm table-hover bg-white mb-0" style="font-size: 0.85rem;">
+                                <thead class="table-light text-center align-middle">
                                     <tr>
                                         <th>Bill No</th>
                                         <th>Bill Date</th>
                                         <th class="text-end">Bill Total</th>
-                                        <th class="text-end text-success">Cash Allocated (This Payment)</th>
+                                        <th class="text-end text-success">Cash Allocated</th>
                                         <th class="text-center">CD / Penalty</th>
-                                        
                                     </tr>
                                 </thead>
-                                <tbody id="allocatedBillsBody">
+                                <tbody id="allocatedBillsBody" class="align-middle">
                                     <!-- Populated via JS -->
                                 </tbody>
                             </table>
@@ -193,7 +198,7 @@ include 'view/layout/header.php';
 <?php include 'view/layout/footer.php'; ?>
 
 <!-- Javascript Logic -->
-<script>1
+<script>
 $(document).ready(function() {
     
     // Initialize Select2
@@ -214,16 +219,16 @@ $(document).ready(function() {
         }
     }
 
-    // 1. Load HQ based on State
+    // 1. Load ASM based on State
     $('#state_id').change(function() {
         let stateId = $(this).val();
         
-        $('#mr_id').html('<option value="">-- Select HQ First --</option>');
-        $('#stockist_id').html('<option value="">-- Select HQ First --</option>');
+        $('#filter_hq_id').html('<option value="">-- Select ASM First --</option>');
+        $('#stockist_id').html('<option value="">-- Select ASM First --</option>');
 
         if (stateId) {
             $('#hq_id').html('<option value="">Loading...</option>');
-            $.post(BASE_URL + 'headquarter/getHqByStateAjax', { state_id: stateId }, function(res) {
+            $.post(BASE_URL + 'payment/getAsmByStateAjax', { state_id: stateId }, function(res) {
                 $('#hq_id').html(res).trigger('change');
             });
         } else {
@@ -231,43 +236,60 @@ $(document).ready(function() {
         }
     });
 
-    // 2. Load MRs and Stockists based on HQ
+    // 2. Load Headquarters and Stockists based on ASM Selection
     $('#hq_id').change(function() {
-        let hqId = $(this).val();
+        let asmId = $(this).val();
         
-        if (hqId) {
-            $('#mr_id').html('<option value="">Loading...</option>');
+        if (asmId) {
+            $('#filter_hq_id').html('<option value="">Loading...</option>');
             $('#stockist_id').html('<option value="">Loading...</option>');
 
-            // Fetch MRs for this HQ
-            $.get(BASE_URL + 'payment/get_mrs_by_hq', { hq_id: hqId }, function(res) {
+            // Fetch Headquarters associated with this ASM
+            $.get(BASE_URL + 'payment/get_hqs_by_asm', { asm_id: asmId }, function(res) {
                 if (res.success) {
-                    let mrOptions = '<option value="">-- Select MR --</option>';
-                    res.data.forEach(mr => { mrOptions += `<option value="${mr.m_id}">${mr.mr_name}</option>`; });
-                    $('#mr_id').html(mrOptions);
+                    let hqOptions = '<option value="">-- All Headquarters --</option>';
+                    res.data.forEach(hq => { hqOptions += `<option value="${hq.headquarter_id}">${hq.hq_name}</option>`; });
+                    $('#filter_hq_id').html(hqOptions);
                 } else {
-                    $('#mr_id').html('<option value="">No MR found</option>');
+                    $('#filter_hq_id').html('<option value="">No Headquarters found</option>');
                 }
             }, 'json');
 
-            // Fetch Stockists for this HQ
-            $.get(BASE_URL + 'payment/get_stockists_by_hq', { hq_id: hqId }, function(res) {
-                if (res.success) {
-                    let stkOptions = '<option value="">-- Select Stockist --</option>';
-                    res.data.forEach(stk => { stkOptions += `<option value="${stk.stockist_id}">${stk.stockist_name}</option>`; });
-                    $('#stockist_id').html(stkOptions);
-                } else {
-                    $('#stockist_id').html('<option value="">No Stockists found</option>');
-                }
-            }, 'json');
+            // Fetch ALL Stockists for this ASM initially
+            fetchStockists(asmId, null);
 
         } else {
-            $('#mr_id').html('<option value="">-- Select HQ First --</option>');
-            $('#stockist_id').html('<option value="">-- Select HQ First --</option>');
+            $('#filter_hq_id').html('<option value="">-- Select ASM First --</option>');
+            $('#stockist_id').html('<option value="">-- Select ASM First --</option>');
         }
     });
 
-    // 3. Toggle Stockist Container based on Payment Type
+    // 3. Filter Stockists when a specific Headquarter is selected
+    $('#filter_hq_id').change(function() {
+        let asmId = $('#hq_id').val();
+        let specificHqId = $(this).val();
+        fetchStockists(asmId, specificHqId);
+    });
+
+    function fetchStockists(asmId, specificHqId) {
+        $('#stockist_id').html('<option value="">Loading...</option>');
+        
+        // Dynamic endpoint mapping depending on whether a specific HQ is chosen or all under the ASM
+        let url = specificHqId ? (BASE_URL + 'payment/get_stockists_by_hq') : (BASE_URL + 'payment/get_stockists_by_hq');
+        let payload = specificHqId ? { hq_id: specificHqId } : { asm_id: asmId }; // Ensure backend endpoints match these keys
+
+        $.get(url, payload, function(res) {
+            if (res.success) {
+                let stkOptions = '<option value="">-- Select Stockist --</option>';
+                res.data.forEach(stk => { stkOptions += `<option value="${stk.stockist_id}">${stk.stockist_name}</option>`; });
+                $('#stockist_id').html(stkOptions);
+            } else {
+                $('#stockist_id').html('<option value="">No Stockists found</option>');
+            }
+        }, 'json');
+    }
+
+    // 4. Toggle Stockist Container based on Payment Type
     $('#payment_type').change(function() {
         let type = $(this).val();
         if (type === 'old_bill') {
@@ -282,17 +304,17 @@ $(document).ready(function() {
         }
     });
 
-    // Fetch Balance when Commission Type or HQ changes
+    // Fetch Balance when Commission Type or ASM changes
     $('#commission_type, #hq_id').change(function() {
         let type = $('#commission_type').val();
-        let hqId = $('#hq_id').val();
+        let asmId = $('#hq_id').val(); // hq_id dropdown holds ASM ID
         
         if(editData !== null) return; 
 
-        if(type && hqId) {
+        if(type && asmId) {
             $('#balanceDisplay').html('<i class="fa fa-spinner fa-spin"></i> Fetching balance...');
             
-            $.get(BASE_URL + 'payment/get_balance', { hq_id: hqId, type: type }, function(res) {
+            $.get(BASE_URL + 'payment/get_balance', { hq_id: asmId, type: type }, function(res) {
                 if(res.success) {
                     $('#balanceDisplay').html(`Available Balance: <span class="text-success fw-bold">₹${res.balance.toFixed(2)}</span>`);
                     $('#amount').attr('max', res.balance);
@@ -406,7 +428,7 @@ $(document).ready(function() {
     // Trigger fetch on Stockist OR Date change
     $('#stockist_id, #settlement_date').change(fetchOutstanding);
 
-    // 4. Handle Form Submission
+    // 5. Handle Form Submission
     $('#paymentEntryForm').on('submit', function(e) {
         e.preventDefault();
 
@@ -430,7 +452,7 @@ $(document).ready(function() {
         });
     });
 
-    // 5. Reset Form Logic
+    // 6. Reset Form Logic
     $('#btnReset').click(function() {
         $('#paymentEntryForm')[0].reset();
         $('.select2').val('').trigger('change');
@@ -457,7 +479,7 @@ $(document).ready(function() {
         let paymentAction = editData.payment_method === 'Commission Adjustment' ? 'old_bill' : 'account';
         $('#payment_type').val(paymentAction).prop('disabled', true).trigger('change');
 
-        $('#state_id, #hq_id, #mr_id, #stockist_id, #settlement_date').prop('disabled', true);
+        $('#state_id, #hq_id, #filter_hq_id, #stockist_id, #settlement_date').prop('disabled', true);
 
        // Cascade selections automatically with delays to allow AJAX to load dropdown values
         if (editData.state_id && editData.state_id !== '') {
@@ -467,8 +489,9 @@ $(document).ready(function() {
                 $('#hq_id').val(editData.hq_id).trigger('change');
                 
                 setTimeout(() => {
-                    if (editData.mr_id && editData.mr_id != 0) {
-                        $('#mr_id').val(editData.mr_id).trigger('change');
+                    // Update this to bind to the new specific HQ filter if your editData has it
+                    if (editData.specific_hq_id && editData.specific_hq_id != 0) {
+                        $('#filter_hq_id').val(editData.specific_hq_id).trigger('change');
                     }
                     if (editData.stockist_id && editData.stockist_id != 0) {
                         $('#stockist_id').val(editData.stockist_id).trigger('change');
@@ -481,17 +504,15 @@ $(document).ready(function() {
       $('#btnSubmitPayment, #btnReset').hide();
         
         if (editData.approval_status !== 'reversed') {
-            // Updated selector: Target the parent div of the submit button specifically
             $('#btnSubmitPayment').parent().append(`<button type="button" class="btn btn-danger fw-bold" id="btnReversePayment"><i class="fa fa-undo"></i> Reverse Payment</button>`);
         } else {
-            // Updated selector
             $('#btnSubmitPayment').parent().append(`<span class="badge bg-danger p-2 fs-6"><i class="fa fa-ban"></i> Already Reversed</span>`);
         }
 
-        // NEW: Fetch and display historical allocations if it was a bill settlement
+        // Fetch and display historical allocations if it was a bill settlement
         if (paymentAction === 'old_bill') {
             $('#allocatedBillsContainer').fadeIn();
-            $('#allocatedBillsBody').html('<tr><td colspan="6" class="text-center py-3"><i class="fa fa-spinner fa-spin"></i> Fetching allocation history...</td></tr>');
+            $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center py-3"><i class="fa fa-spinner fa-spin"></i> Fetching allocation history...</td></tr>');
             
             $.get(BASE_URL + 'payment/get_payment_allocations', { payment_id: editData.id }, function(res) {
                 if (res.success && res.data.length > 0) {
@@ -504,7 +525,6 @@ $(document).ready(function() {
                         let grandTotal = parseFloat(b.grand_total) || 0;
                         let currentPaid = parseFloat(b.paid_amt) || 0;
                         
-                        // Remaining balance calculation
                         let remaining = grandTotal - currentPaid;
                         if (remaining < 0) remaining = 0;
 
@@ -523,10 +543,10 @@ $(document).ready(function() {
                     });
                     $('#allocatedBillsBody').html(rows);
                 } else {
-                    $('#allocatedBillsBody').html('<tr><td colspan="6" class="text-center text-muted">No specific bill allocations found.</td></tr>');
+                    $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center text-muted">No specific bill allocations found.</td></tr>');
                 }
             }, 'json').fail(function() {
-                $('#allocatedBillsBody').html('<tr><td colspan="6" class="text-center text-danger">Failed to load allocation details.</td></tr>');
+                $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center text-danger">Failed to load allocation details.</td></tr>');
             });
         }
     }

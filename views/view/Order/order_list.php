@@ -37,6 +37,33 @@ include 'view/layout/header.php';
  .inv-table-wrap {
     min-height: 250px; /* Adjust this value if your dropdown is taller */
 }
+@media (max-width: 480px) {
+    .inv-table th {
+        background: var(--bg);
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--txt-muted);
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        padding: 8px 9px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .inv-table td {
+        font-size: 10px;
+        color: var(--txt-mid);
+        padding: 9px 11px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+    }
+
+    .inv-table .dropdown-menu {
+        min-width: 110px; /* Reduces Bootstrap's default wide menu */
+        font-size: 11px; 
+        padding: 4px 0;
+    }
+}
 </style>
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/salesentry.css">
 <div class="page-content">
@@ -69,7 +96,7 @@ include 'view/layout/header.php';
         <table class="inv-table">
             <thead>
             <tr>
-                <th>Order No</th>
+                <th>SR No</th>
                 <th>Date</th>
                 <th>Amount</th>
                 <th>Status</th>

@@ -59,7 +59,7 @@ class payment_ledger_mdl
                 LEFT JOIN banks b ON b.bank_id = pd.bank_id
                 WHERE pl.stockist_id = '$stockist_id' 
                 AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill')
+                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill','asm_settlement')
                 AND DATE(pl.created_at) >= '$from_date' 
                 AND DATE(pl.created_at) <= '$to_date'
                 ORDER BY pl.created_at ASC, pl.id ASC";

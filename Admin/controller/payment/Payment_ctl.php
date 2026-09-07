@@ -20,7 +20,6 @@ class PaymentApproval_ctl {
     }
 
     // Load Payment Entry View
-   // Load Payment Entry View (UPDATED to handle Edit Mode)
     public function entry() {
         if (!isset($_SESSION['admin_id'])) {
             header('Location: index');
@@ -157,7 +156,7 @@ class PaymentApproval_ctl {
         $hq_id = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
         $type = isset($_GET['type']) ? $_GET['type'] : '';
         
-        if ($hq_id > 0 && in_array($type, ['MRC', 'DRC'])) {
+        if ($hq_id > 0 && in_array($type, ['MRC', 'DRC', 'ASM'])) {
             $balance = $this->model->getAvailableBalance($hq_id, $type);
             echo json_encode(['success' => true, 'balance' => $balance]);
         } else {
@@ -248,5 +247,42 @@ public function get_payment_allocations() {
         }
         exit;
     }
+
+
+     public function getAsmByStateAjax()
+    {
+        if (isset($_POST['state_id'])) {
+            $state_id = (int)$_POST['state_id'];
+            $selected_hq = $_POST['selected_hq'] ?? '';
+
+            $hq_result = $this->model->getAsmByState($state_id);
+
+            echo '<option value="">Select ASM</option>';
+            while ($row = mysqli_fetch_assoc($hq_result)) {
+                $selected = ($row['admin_id'] == $selected_hq) ? 'selected' : '';
+                echo '<option value="' . $row['admin_id'] . '" ' . $selected . '>' . htmlspecialchars($row['admin_name']) . '</option>';
+            }
+        }
+    }
+
+    public function asm_satlement() {
+        if (!isset($_SESSION['admin_id'])) { header('Location: index'); exit; }
+        $states = $this->model->getStates();
+        include 'view/payment/payment_entry_asm.php'; // Update path if needed
+    }
+
+    public function get_hqs_by_asm() {
+        header('Content-Type: application/json');
+        $asm_id = isset($_GET['asm_id']) ? (int)$_GET['asm_id'] : 0;
+        
+        $hqs = $this->model->getHQByASM($asm_id);
+        if (empty($hqs)) {
+            echo json_encode(['success' => false, 'msg' => 'No HQs found']);
+        } else {
+            echo json_encode(['success' => true, 'data' => $hqs]);
+        }
+        exit;
+    }
+
 }
 ?>

@@ -428,7 +428,7 @@ ADD cd_earned_amt DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER cd_penalty_amt;
 -- 02-09-26  --- - - - - - - - - - - - - - - - - - - - - - - - -
 ALTER TABLE orders 
 ADD COLUMN order_no VARCHAR(50) NULL AFTER order_id,
-ADD UNIQUE INDEX idx_order_no (order_no);
+
 
 ALTER TABLE `stock_inward` 
   ADD COLUMN asm_com BIGINT NOT NULL;
@@ -440,3 +440,24 @@ MODIFY COLUMN commission_type ENUM('MRC', 'DRC', 'ASM') NOT NULL;
 -- 2. Modify ledger_type in the payment ledger table
 ALTER TABLE payment_ledgers 
 MODIFY COLUMN ledger_type ENUM('debt', 'mrc_wallet', 'drc_wallet', 'asm_wallet') NOT NULL;
+
+-- 03-09-26 ------------- - - - - - -- - - - 
+----------- - - - - - - - -- -- -- -- -- ---
+
+ALTER TABLE super_stockist
+ADD COLUMN order_prefix VARCHAR(15) DEFAULT 'T-',
+ADD COLUMN tally_start_no INT DEFAULT 1,
+ADD COLUMN fy_start_month INT DEFAULT 4, -- e.g., 4 for April, 1 for Jan
+ADD COLUMN financial_year VARCHAR(10) NULL, -- Stores their current active FY (e.g., '2026-27')
+ADD COLUMN order_sequence INT DEFAULT 0; -- Stores their current highest bill number
+
+
+-- ---- 07-09-26 -----
+ALTER TABLE orders DROP INDEX idx_order_no;
+
+ALTER TABLE payment_details MODIFY commission_type ENUM('none', 'mrc', 'drc', 'asm') NOT NULL DEFAULT 'none';
+
+ALTER TABLE payment_ledgers MODIFY transaction_type ENUM('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'commission_earned', 'settled_to_bill', 'paid_to_bank', 'asm_settlement') NOT NULL;
+
+-- change asm_com to default 0 in stock inward table
+ALTER TABLE stock_inward MODIFY asm_com TINYINT(1) NOT NULL DEFAULT 0;

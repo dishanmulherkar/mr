@@ -170,8 +170,7 @@ class orderentry_mdl
         $order['items'] = $items;
         return $order;
     }
-
-    public function saveOrderRecord($data)
+public function saveOrderRecord($data)
     {
         $mr_id       = $data['mr_id'];
         $order_date  = $data['order_date'];
@@ -186,11 +185,18 @@ class orderentry_mdl
         try {
             $this->con->begin_transaction();
 
+            // Pass the order_date so the sequence resets correctly per Financial Year
+            $orderData = $this->generateOrderNo($stockist_id, $order_date);
+            $order_no = $orderData['order_no'];
+
+            // Insert into orders storing ONLY the final order_no string
             $stmt = $this->con->prepare("
-                INSERT INTO orders (stockist_id, mr_id, total_amt, order_date)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO orders (stockist_id, mr_id, total_amt, order_date, order_no)
+                VALUES (?, ?, ?, ?, ?)
             ");
-            $stmt->bind_param("iids", $stockist_id, $mr_id, $total_amt, $order_date);
+            
+            // "iidss" => integer, integer, double, string, string
+            $stmt->bind_param("iidss", $stockist_id, $mr_id, $total_amt, $order_date, $order_no);
             $stmt->execute();
             $order_id = $this->con->insert_id;
             $stmt->close();
@@ -206,7 +212,8 @@ class orderentry_mdl
             return [
                 'success'  => true,
                 'msg'      => 'Order Saved Successfully.',
-                'entry_id' => $order_id
+                'entry_id' => $order_id,
+                'order_no' => $order_no 
             ];
 
         } catch (Exception $e) {
@@ -215,6 +222,7 @@ class orderentry_mdl
         }
     }
 
+    // Update method remains unchanged, ensuring it doesn't overwrite order_no
     public function updateOrderRecord($data)
     {
         $order_id    = (int)$data['order_id'];
@@ -259,6 +267,109 @@ class orderentry_mdl
             $this->con->rollback();
             return ['success' => false, 'msg' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Determines the Indian Financial Year (April 1st to March 31st)
+     */
+    private function getFinancialYear($dateString) 
+    {
+        $timestamp = strtotime($dateString);
+        $month = (int)date('m', $timestamp);
+        $year = (int)date('Y', $timestamp);
+        
+        if ($month >= 4) {
+            return $year . '-' . substr($year + 1, 2); // e.g., 2026-27
+        } else {
+            return ($year - 1) . '-' . substr($year, 2); // e.g., 2025-26
+        }
+    }
+
+    /**
+     * Generates a "normal" dynamic order number without relying on a stored sequence table
+     */
+    private function generateOrderNo($stockist_id, $order_date) 
+    {
+        // 1. Fetch only the necessary prefix and FY settings (Locks row to prevent concurrent duplicates)
+        $stmt = $this->con->prepare("
+            SELECT 
+                ss.super_stockist_id, 
+                ss.order_prefix, 
+                ss.fy_start_month 
+            FROM stockists st
+            INNER JOIN headquarter hq ON st.hq_id = hq.headquarter_id
+            INNER JOIN super_stockist ss ON hq.super_stockist_id = ss.super_stockist_id
+            WHERE st.stockist_id = ? 
+            FOR UPDATE
+        ");
+        
+        $stmt->bind_param("i", $stockist_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows === 0) {
+            throw new Exception("Super Stockist configuration not found for this Stockist.");
+        }
+        
+        $stockist = $result->fetch_assoc();
+        $stmt->close();
+
+        $super_stockist_id = (int)$stockist['super_stockist_id'];
+        $startMonth = (int)$stockist['fy_start_month'];
+
+        // 2. Calculate current Financial Year boundaries based on the order's date
+        $timestamp = strtotime($order_date);
+        $orderMonth = (int)date('m', $timestamp);
+        $orderYear = (int)date('Y', $timestamp);
+        
+        if ($orderMonth >= $startMonth) {
+            $fy_start_year = $orderYear;
+            $active_fy = $orderYear . '-' . substr($orderYear + 1, 2);
+        } else {
+            $fy_start_year = $orderYear - 1;
+            $active_fy = ($orderYear - 1) . '-' . substr($orderYear, 2);
+        }
+
+        // Generate the exact starting date of this Financial Year (e.g., 2026-04-01)
+        $fy_start_date = $fy_start_year . '-' . str_pad($startMonth, 2, '0', STR_PAD_LEFT) . '-01';
+
+        // 3. Dynamically find the highest sequence used in THIS financial year
+        $seqQuery = $this->con->prepare("
+            SELECT o.order_no 
+            FROM orders o 
+            INNER JOIN stockists st ON o.stockist_id = st.stockist_id 
+            INNER JOIN headquarter hq ON st.hq_id = hq.headquarter_id 
+            WHERE hq.super_stockist_id = ? AND o.order_date >= ?
+            ORDER BY o.order_id DESC 
+            LIMIT 1
+        ");
+        $seqQuery->bind_param("is", $super_stockist_id, $fy_start_date);
+        $seqQuery->execute();
+        $seqRes = $seqQuery->get_result();
+        
+        $next_sequence = 1; // Default to 1 if it's the first order of the Financial Year
+        
+        if ($row = $seqRes->fetch_assoc()) {
+            $last_order_no = $row['order_no'];
+            // Extract the sequence number from the end of the string (e.g., ORD-26-27-5 -> gets 5)
+            $parts = explode('-', $last_order_no);
+            $last_seq = (int)end($parts);
+            
+            if ($last_seq > 0) {
+                $next_sequence = $last_seq + 1;
+            }
+        }
+        $seqQuery->close();
+
+        // 4. Return the formatted normal order number (e.g., ORD-26-27-1)
+        $prefix =  'ORD-';
+        $order_no = $prefix . $next_sequence;
+
+        return [
+            'order_no' => $order_no,
+            'sequence' => $next_sequence,
+            'fy'       => $active_fy
+        ];
     }
 
     /**
@@ -391,118 +502,118 @@ class orderentry_mdl
         }
     }
 
-public function getOrdersByMr($mr_id, $stockist_id = 0, $from_date = '', $to_date = '')
-{
-    $sql = "
-        SELECT 
-            o.order_id,
-            o.order_date,
-            o.total_amt,
-            o.status,
-            s.stockist_name,
-
-            COALESCE(od.total_qty, 0) AS total_qty,
-
-            CASE 
-                WHEN o.status = 'approved' 
-                    THEN COALESCE(si.grand_total, o.total_amt)
-                ELSE o.total_amt
-            END AS display_total
-
-        FROM orders o
-
-        INNER JOIN stockists s 
-            ON s.stockist_id = o.stockist_id
-
-        LEFT JOIN (
+    public function getOrdersByMr($mr_id, $stockist_id = 0, $from_date = '', $to_date = '')
+    {
+        $sql = "
             SELECT 
-                order_id,
-                SUM(qty) AS total_qty
-            FROM order_details
-            GROUP BY order_id
-        ) od 
-            ON od.order_id = o.order_id
+                o.order_id,
+                o.order_date,
+                o.total_amt,
+                o.status,
+                s.stockist_name,
 
-        LEFT JOIN (
-            SELECT 
-                order_id,
-                MAX(grand_total) AS grand_total
-            FROM stock_inward
-            GROUP BY order_id
-        ) si 
-            ON si.order_id = o.order_id
+                COALESCE(od.total_qty, 0) AS total_qty,
 
-        WHERE o.mr_id = ?
-    ";
+                CASE 
+                    WHEN o.status = 'approved' 
+                        THEN COALESCE(si.grand_total, o.total_amt)
+                    ELSE o.total_amt
+                END AS display_total
 
-    $types = "i";
-    $params = [$mr_id];
+            FROM orders o
 
-    if (!empty($stockist_id)) {
-        $sql .= " AND o.stockist_id = ? ";
-        $types .= "i";
-        $params[] = $stockist_id;
+            INNER JOIN stockists s 
+                ON s.stockist_id = o.stockist_id
+
+            LEFT JOIN (
+                SELECT 
+                    order_id,
+                    SUM(qty) AS total_qty
+                FROM order_details
+                GROUP BY order_id
+            ) od 
+                ON od.order_id = o.order_id
+
+            LEFT JOIN (
+                SELECT 
+                    order_id,
+                    MAX(grand_total) AS grand_total
+                FROM stock_inward
+                GROUP BY order_id
+            ) si 
+                ON si.order_id = o.order_id
+
+            WHERE o.mr_id = ?
+        ";
+
+        $types = "i";
+        $params = [$mr_id];
+
+        if (!empty($stockist_id)) {
+            $sql .= " AND o.stockist_id = ? ";
+            $types .= "i";
+            $params[] = $stockist_id;
+        }
+
+        if (!empty($from_date)) {
+            $sql .= " AND o.order_date >= ? ";
+            $types .= "s";
+            $params[] = $from_date;
+        }
+
+        if (!empty($to_date)) {
+            $sql .= " AND o.order_date <= ? ";
+            $types .= "s";
+            $params[] = $to_date;
+        }
+
+        $sql .= "
+            ORDER BY o.order_date DESC, o.order_id DESC
+        ";
+
+        $stmt = $this->con->prepare($sql);
+
+        if (!$stmt) {
+            return [];
+        }
+
+        $stmt->bind_param($types, ...$params);
+
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+
+        $orders = [];
+
+        while ($row = $result->fetch_assoc()) {
+
+            $orders[] = [
+                'order_id'      => (int)$row['order_id'],
+
+            'order_no' => 'O' . str_pad($row['order_id'], 3, '0', STR_PAD_LEFT),
+                'order_date'    => date(
+                    'd-m',
+                    strtotime($row['order_date'])
+                ),
+
+                'stockist_name' => $row['stockist_name'],
+
+                'total_qty'     => (int)$row['total_qty'],
+
+                'total_amt'     => (float)$row['total_amt'],
+
+                // Final amount:
+                // Pending  -> orders.total_amt
+                // Approved -> stock_inward.grand_total
+                'grand_total'  => (float)$row['display_total'],
+
+                'status'        => $row['status'] ?? 'Pending',
+            ];
+        }
+
+        $stmt->close();
+
+        return $orders;
     }
-
-    if (!empty($from_date)) {
-        $sql .= " AND o.order_date >= ? ";
-        $types .= "s";
-        $params[] = $from_date;
-    }
-
-    if (!empty($to_date)) {
-        $sql .= " AND o.order_date <= ? ";
-        $types .= "s";
-        $params[] = $to_date;
-    }
-
-    $sql .= "
-        ORDER BY o.order_date DESC, o.order_id DESC
-    ";
-
-    $stmt = $this->con->prepare($sql);
-
-    if (!$stmt) {
-        return [];
-    }
-
-    $stmt->bind_param($types, ...$params);
-
-    $stmt->execute();
-
-    $result = $stmt->get_result();
-
-    $orders = [];
-
-    while ($row = $result->fetch_assoc()) {
-
-        $orders[] = [
-            'order_id'      => (int)$row['order_id'],
-
-           'order_no' => 'O' . str_pad($row['order_id'], 3, '0', STR_PAD_LEFT),
-            'order_date'    => date(
-                'd-m',
-                strtotime($row['order_date'])
-            ),
-
-            'stockist_name' => $row['stockist_name'],
-
-            'total_qty'     => (int)$row['total_qty'],
-
-            'total_amt'     => (float)$row['total_amt'],
-
-            // Final amount:
-            // Pending  -> orders.total_amt
-            // Approved -> stock_inward.grand_total
-            'grand_total'  => (float)$row['display_total'],
-
-            'status'        => $row['status'] ?? 'Pending',
-        ];
-    }
-
-    $stmt->close();
-
-    return $orders;
-}
 
 }

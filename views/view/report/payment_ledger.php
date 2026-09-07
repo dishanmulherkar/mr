@@ -231,6 +231,8 @@ include 'view/layout/header.php';
                                 $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
                             } elseif ($row['transaction_type'] === 'settled_to_bill') {
                                 $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
+                            }elseif ($row['transaction_type'] === 'asm_settlement') {
+                                $particulars = "<span style='font-weight: 600;'>ASM Settlement</span>";
                             } else {
                                 // Proper fallback for payments
                                 if (!empty($payment_method) && !empty($bank_name)) {
@@ -243,7 +245,7 @@ include 'view/layout/header.php';
                             }
 
                             // Differentiate Voucher Type
-                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill'])) {
+                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill','asm_settlement'])) {
                                 $vch_type = "Adjustment"; 
                             } else {
                                 $vch_type = "Receipt";    

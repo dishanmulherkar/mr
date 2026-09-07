@@ -106,7 +106,7 @@ include 'view/layout/header.php';
                         ?>
                                 <tr>
                                     <td class="text-center"><?= $count++; ?></td>
-                                    <td class="fw-bold text-primary">#ORD-<?= $row['order_id']; ?></td>
+                                    <td class="fw-bold text-primary"><?= $row['order_no']; ?></td>
                                     <td class="text-center"><?= date('d-m-Y', strtotime($row['order_date'])); ?></td>
                                     <td><?= $row['ss_name'] ?? '<span class="text-muted">Unknown</span>'; ?></td>
                                     <td class="text-center">
@@ -214,8 +214,8 @@ $(document).ready(function() {
     
     if ($.fn.DataTable) {
         $('#orderTable').DataTable({
-            "order": [[ 0, "desc" ]], // Order by the latest entry by default
-            "pageLength": 25
+            "order": [[ 0, "asc" ]], // Order by the latest entry by default
+            "pageLength": 50
         });
     }
 
