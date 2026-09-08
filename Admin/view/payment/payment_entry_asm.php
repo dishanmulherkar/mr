@@ -468,10 +468,10 @@ $(document).ready(function() {
     let editData = <?= $is_edit ? json_encode($edit_data) : 'null' ?>;
     
     if (editData !== null) {
-        // Pre-fill fields and disable them
+        // 1. Pre-fill basic fields
         $('#amount').val(editData.amount_paid).prop('readonly', true);
         
-        let commTypeStr = editData.commission_type ? editData.commission_type.toUpperCase() : '';
+        let commTypeStr = editData.commission_type ? editData.commission_type.toUpperCase() : 'ASM';
         $('#commission_type').val(commTypeStr).prop('disabled', true);
         
         $('#notes').val(editData.bank_details).prop('readonly', true);
@@ -479,29 +479,43 @@ $(document).ready(function() {
         let paymentAction = editData.payment_method === 'Commission Adjustment' ? 'old_bill' : 'account';
         $('#payment_type').val(paymentAction).prop('disabled', true).trigger('change');
 
+        // Lock all dropdowns immediately
         $('#state_id, #hq_id, #filter_hq_id, #stockist_id, #settlement_date').prop('disabled', true);
 
-       // Cascade selections automatically with delays to allow AJAX to load dropdown values
-        if (editData.state_id && editData.state_id !== '') {
-            $('#state_id').val(editData.state_id).trigger('change');
-            
-            setTimeout(() => {
-                $('#hq_id').val(editData.hq_id).trigger('change');
-                
-                setTimeout(() => {
-                    // Update this to bind to the new specific HQ filter if your editData has it
-                    if (editData.specific_hq_id && editData.specific_hq_id != 0) {
-                        $('#filter_hq_id').val(editData.specific_hq_id).trigger('change');
-                    }
-                    if (editData.stockist_id && editData.stockist_id != 0) {
-                        $('#stockist_id').val(editData.stockist_id).trigger('change');
-                    }
-                }, 800); 
-            }, 800);
+        // 2. Force the ASM ID (Stored in mr_id column)
+        let asmId = editData.mr_id; // ASM ID
+        if (asmId && asmId != 0) {
+            let asmName = editData.asm_name || ('Linked ASM'); 
+            if ($('#hq_id').find("option[value='" + asmId + "']").length === 0) {
+                $('#hq_id').append(new Option(asmName, asmId, true, true));
+            }
+            $('#hq_id').val(asmId).trigger('change');
         }
 
+        // 3. Force the Headquarter ID (Retrieved from Stockist)
+        setTimeout(() => {
+            if (editData.specific_hq_id && editData.specific_hq_id != 0) {
+                let hqName = editData.headquarter_name || 'Linked Headquarter';
+                if ($('#filter_hq_id').find("option[value='" + editData.specific_hq_id + "']").length === 0) {
+                    $('#filter_hq_id').append(new Option(hqName, editData.specific_hq_id, true, true));
+                }
+                $('#filter_hq_id').val(editData.specific_hq_id).trigger('change');
+            }
+        }, 300);
+
+        // 4. Force the Stockist ID
+        setTimeout(() => {
+            if (editData.stockist_id && editData.stockist_id != 0) {
+                let stockistName = editData.stockist_name || ('Linked Stockist');
+                if ($('#stockist_id').find("option[value='" + editData.stockist_id + "']").length === 0) {
+                    $('#stockist_id').append(new Option(stockistName, editData.stockist_id, true, true));
+                }
+                $('#stockist_id').val(editData.stockist_id).trigger('change');
+            }
+        }, 600); 
+
         // Hide normal buttons and inject the Reverse button
-      $('#btnSubmitPayment, #btnReset').hide();
+        $('#btnSubmitPayment, #btnReset').hide();
         
         if (editData.approval_status !== 'reversed') {
             $('#btnSubmitPayment').parent().append(`<button type="button" class="btn btn-danger fw-bold" id="btnReversePayment"><i class="fa fa-undo"></i> Reverse Payment</button>`);
@@ -509,7 +523,7 @@ $(document).ready(function() {
             $('#btnSubmitPayment').parent().append(`<span class="badge bg-danger p-2 fs-6"><i class="fa fa-ban"></i> Already Reversed</span>`);
         }
 
-        // Fetch and display historical allocations if it was a bill settlement
+        // Fetch and display historical allocations if it was an old bill settlement
         if (paymentAction === 'old_bill') {
             $('#allocatedBillsContainer').fadeIn();
             $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center py-3"><i class="fa fa-spinner fa-spin"></i> Fetching allocation history...</td></tr>');
@@ -551,7 +565,7 @@ $(document).ready(function() {
         }
     }
 
-    // ==========================================
+      // ==========================================
     // REVERSE PAYMENT AJAX ACTION
     // ==========================================
     $(document).on('click', '#btnReversePayment', function() {
@@ -577,6 +591,5 @@ $(document).ready(function() {
             btn.html('<i class="fa fa-undo"></i> Reverse Payment').prop('disabled', false);
         });
     });
-
 });
 </script>

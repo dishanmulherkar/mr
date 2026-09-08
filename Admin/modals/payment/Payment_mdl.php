@@ -757,18 +757,38 @@ public function submitManualEntry($data, $admin_id)
     // ==========================================
     public function getPaymentById($id) 
     {
-        $stmt = $this->con->prepare("
+      $stmt = $this->con->prepare("
             SELECT 
                 p.*, 
+                s.stockist_name,
+                s.hq_id AS specific_hq_id, 
+                hq.hq_name,
+                a.admin_name AS asm_name,
+                
                 -- If stockist exists, use its hq_id. Otherwise, use mr_users hq_id.
                 COALESCE(s.hq_id, m.hq_id, '') AS hq_id, 
-                -- Trace the state_id from the dynamically found headquarter, fallback to mr_users.state
-                COALESCE(hq.state_id, m.state, '') AS state_id 
+                
+                -- Trace the state_id from the dynamically found headquarter, fallback to mr_users,
+                -- or look up the state from the headquarter table if it is an ASM
+                COALESCE(
+                    hq.state_id, 
+                    m.state, 
+                    (SELECT state_id FROM headquarter WHERE asm_id = a.admin_id LIMIT 1), 
+                    ''
+                ) AS state_id 
+                
             FROM payment_details p
             LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-            -- Join mr_users using m_id based on your schema
-            LEFT JOIN mr_users m ON p.mr_id = m.m_id
+            
+            -- Join mr_users ONLY if it is an MRC or DRC payment
+            LEFT JOIN mr_users m ON p.mr_id = m.m_id AND LOWER(p.commission_type) != 'asm'
+            
+            -- Join admins table ONLY if it is an ASM payment (since asm_id is stored in mr_id)
+            LEFT JOIN admins a ON p.mr_id = a.admin_id AND LOWER(p.commission_type) = 'asm'
+            
+            -- Fetch Headquarter details from either the Stockist or the MR
             LEFT JOIN headquarter hq ON COALESCE(s.hq_id, m.hq_id) = hq.headquarter_id
+            
             WHERE p.id = ?
         ");
         
@@ -782,7 +802,7 @@ public function submitManualEntry($data, $admin_id)
     // ==========================================
     // NEW: Reverse Manual Payment Entry Safely
     // ==========================================
-    public function reverseManualEntry($payment_id, $admin_id) {
+   public function reverseManualEntry($payment_id, $admin_id) {
         try {
             $this->con->begin_transaction();
 
@@ -797,8 +817,13 @@ public function submitManualEntry($data, $admin_id)
                 throw new Exception("Payment not found or already reversed.");
             }
 
-            // 2. Find ledgers tied to this payment
-            $stmt = $this->con->prepare("SELECT id FROM payment_ledgers WHERE reference_id = ? AND transaction_type IN ('paid_to_bank', 'settled_to_bill', 'mrc_settlement', 'drc_settlement')");
+            // 2. Find ledgers tied to this payment (ADDED 'asm_settlement')
+            $stmt = $this->con->prepare("
+                SELECT id 
+                FROM payment_ledgers 
+                WHERE reference_id = ? 
+                AND transaction_type IN ('paid_to_bank', 'settled_to_bill', 'mrc_settlement', 'drc_settlement', 'asm_settlement')
+            ");
             $stmt->bind_param("i", $payment_id);
             $stmt->execute();
             $ledgers = $stmt->get_result();
@@ -834,8 +859,12 @@ public function submitManualEntry($data, $admin_id)
                 $this->con->query("DELETE FROM payment_allocations WHERE ledger_id = $ledger_id");
             }
 
-            // 4. Delete the ledgers
-            $this->con->query("DELETE FROM payment_ledgers WHERE reference_id = $payment_id AND transaction_type IN ('paid_to_bank', 'settled_to_bill', 'mrc_settlement', 'drc_settlement')");
+            // 4. Delete the ledgers (ADDED 'asm_settlement')
+            $this->con->query("
+                DELETE FROM payment_ledgers 
+                WHERE reference_id = $payment_id 
+                AND transaction_type IN ('paid_to_bank', 'settled_to_bill', 'mrc_settlement', 'drc_settlement', 'asm_settlement')
+            ");
 
             // 5. Mark payment as reversed
             $this->con->query("UPDATE payment_details SET approval_status = 'reversed', approved_by = $admin_id WHERE id = $payment_id");
@@ -1090,5 +1119,52 @@ public function getPaymentAllocations($payment_id) {
         return $data;
     }
 
+
+    public function getAsmManualPayments($filters = []) 
+    {
+        // Join admins table using p.mr_id (which stores the asm_id)
+        $query = "
+            SELECT p.*, s.stockist_name, a.admin_name as asm_name
+            FROM payment_details p
+            LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+            LEFT JOIN admins a ON p.mr_id = a.admin_id
+            WHERE LOWER(p.commission_type) = 'asm'
+        ";
+
+        // Apply ASM Filter (Frontend passes ASM ID as 'hq_id')
+        if (!empty($filters['hq_id'])) {
+            $asm_id = (int)$filters['hq_id'];
+            $query .= " AND p.mr_id = $asm_id";
+        }
+
+        // Apply State Filter directly on the admins table
+        // if (!empty($filters['state_id'])) {
+        //     $state_id = (int)$filters['state_id'];
+        //     $query .= " AND a.state_id = $state_id";
+        // }
+        
+        // Apply Date Filters
+        if (!empty($filters['start_date'])) {
+            $start_date = $this->con->real_escape_string($filters['start_date']);
+            $query .= " AND DATE(p.created_at) >= '$start_date'";
+        }
+        if (!empty($filters['end_date'])) {
+            $end_date = $this->con->real_escape_string($filters['end_date']);
+            $query .= " AND DATE(p.created_at) <= '$end_date'";
+        }
+
+        $query .= " ORDER BY p.created_at DESC";
+
+        $result = $this->con->query($query);
+        $payments = [];
+        
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $payments[] = $row;
+            }
+        }
+        
+        return $payments;
+    }
 }
 ?>

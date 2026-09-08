@@ -38,7 +38,7 @@ class PaymentApproval_ctl {
         include 'view/payment/payment_entry.php';
     }
 
-    // ==========================================
+   // ==========================================
     // NEW AJAX Endpoint: Reverse Manual Entry
     // ==========================================
     public function reverse_manual_entry() {
@@ -180,7 +180,7 @@ class PaymentApproval_ctl {
     }
 
     // AJAX Endpoint: Fetch the list of payments (UPDATED WITH DATE FILTERS)
-    public function fetch_list_pay_entry() {
+  public function fetch_list_pay_entry() {
         header('Content-Type: application/json');
         
         $status_filter = $_GET['status'] ?? ''; 
@@ -195,12 +195,20 @@ class PaymentApproval_ctl {
                 'start_date' => $_GET['start_date'] ?? '',
                 'end_date'   => $_GET['end_date'] ?? ''
             ];
-            $payments = $this->model->getManualPayments($filters);
+            
+            if (isset($filters['comm_type']) && strtolower($filters['comm_type']) === 'asm') {
+                // FIXED: Changed $data to $payments, and passed $filters
+                $payments = $this->model->getAsmManualPayments($filters);
+            } else {
+                // FIXED: Changed $data to $payments, and passed $filters
+                $payments = $this->model->getManualPayments($filters);
+            }
         } else {
             // Standard approvals
             $payments = $this->model->getPaymentsForAdmin($status_filter);
         }
         
+        // Now $payments exists no matter which IF block runs
         echo json_encode(['success' => true, 'data' => $payments]);
         exit;
     }
@@ -268,6 +276,11 @@ public function get_payment_allocations() {
     public function asm_satlement() {
         if (!isset($_SESSION['admin_id'])) { header('Location: index'); exit; }
         $states = $this->model->getStates();
+        $edit_id = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
+        $edit_data = null;
+        if ($edit_id > 0) {
+            $edit_data = $this->model->getPaymentById($edit_id);
+        }
         include 'view/payment/payment_entry_asm.php'; // Update path if needed
     }
 
@@ -283,6 +296,21 @@ public function get_payment_allocations() {
         }
         exit;
     }
+
+    // ==========================================
+    // NEW: Load Manual Payment History Page
+    // ==========================================
+    public function asm_payment_list() {
+        if (!isset($_SESSION['admin_id'])) {
+            header('Location: index');
+            exit;
+        }
+        $states = $this->model->getStates();
+        $current_page = 'Asm Payment History';
+        // Loads the new view file we are about to create
+        include 'view/payment/payment_entry_asm_list.php';
+    }
+
 
 }
 ?>
