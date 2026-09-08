@@ -461,3 +461,6 @@ ALTER TABLE payment_ledgers MODIFY transaction_type ENUM('bill_added', 'payment_
 
 -- change asm_com to default 0 in stock inward table
 ALTER TABLE stock_inward MODIFY asm_com TINYINT(1) NOT NULL DEFAULT 0;
+
+------ 08-09-26 -----
+ALTER TABLE stock_inward ADD COLUMN commission_drc_payout_id INT NULL;

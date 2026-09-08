@@ -105,7 +105,7 @@ class Commission_mdl {
             $this->con->begin_transaction();
 
             // 1. Insert the Master Payout Record
-            $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, status) VALUES (?, 'MR', ?, ?)");
+            $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, status) VALUES (?, 'MRC', ?, ?)");
             $stmt_payout->bind_param("ids", $hq_id, $final_payout, $status);
             
             if (!$stmt_payout->execute()) {
@@ -232,7 +232,7 @@ class Commission_mdl {
                 DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') AS date_paid,
                 (SELECT hq_name FROM headquarter WHERE hq_id = cp.hq_id LIMIT 1) AS hq_name 
             FROM commission_payouts cp
-            WHERE cp.hq_id = ? AND cp.commission_type = 'MR'
+            WHERE cp.hq_id = ? AND cp.commission_type = 'MRC'
         ";
         
         $params = [$hq_id];
@@ -305,7 +305,7 @@ class Commission_mdl {
         $data = ['bills' => [], 'adjustments' => [], 'hq_id' => 0];
 
         // ADDED: AND commission_type = 'MR'
-        $stmt_hq = $this->con->prepare("SELECT hq_id FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
+        $stmt_hq = $this->con->prepare("SELECT hq_id FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MRC'");
         $stmt_hq->bind_param("i", $payout_id);
         $stmt_hq->execute();
         $hq_result = $stmt_hq->get_result()->fetch_assoc();
@@ -371,7 +371,7 @@ class Commission_mdl {
     public function updateMrCommission($payout_id, $hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
     {
         try {
-            $stmt_check = $this->con->prepare("SELECT status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
+            $stmt_check = $this->con->prepare("SELECT status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MRC'");
             $stmt_check->bind_param("i", $payout_id);
             $stmt_check->execute();
             $payout_status = $stmt_check->get_result()->fetch_assoc();
@@ -408,7 +408,7 @@ class Commission_mdl {
             $stmt_del->execute();
             $stmt_del->close();
 
-            $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ? WHERE payout_id = ? AND commission_type = 'MR'";
+            $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ? WHERE payout_id = ? AND commission_type = 'MRC'";
             $stmt_payout = $this->con->prepare($update_payout);
             $stmt_payout->bind_param("dsi", $final_payout, $status, $payout_id);
             if (!$stmt_payout->execute()) {
@@ -526,7 +526,7 @@ class Commission_mdl {
             $this->con->begin_transaction();
 
             // 1. Get current payout data before updating
-            $stmt_info = $this->con->prepare("SELECT total_payout, status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR' FOR UPDATE");
+            $stmt_info = $this->con->prepare("SELECT total_payout, status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MRC' FOR UPDATE");
             $stmt_info->bind_param("i", $payout_id);
             $stmt_info->execute();
             $payout_data = $stmt_info->get_result()->fetch_assoc();
@@ -540,7 +540,7 @@ class Commission_mdl {
             $total_payout = (float)$payout_data['total_payout'];
 
             // 2. Update the payout status
-            $stmt = $this->con->prepare("UPDATE commission_payouts SET status = ? WHERE payout_id = ? AND commission_type = 'MR'");
+            $stmt = $this->con->prepare("UPDATE commission_payouts SET status = ? WHERE payout_id = ? AND commission_type = 'MRC'");
             $stmt->bind_param("si", $status, $payout_id);
             
             if (!$stmt->execute()) {
@@ -636,7 +636,7 @@ class Commission_mdl {
             $stmt_adj->close();
 
             // 4. Delete the payout record itself
-            $stmt_payout = $this->con->prepare("DELETE FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MR'");
+            $stmt_payout = $this->con->prepare("DELETE FROM commission_payouts WHERE payout_id = ? AND commission_type = 'MRC'");
             $stmt_payout->bind_param("i", $payout_id);
             
             if (!$stmt_payout->execute()) {

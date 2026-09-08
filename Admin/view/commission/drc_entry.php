@@ -65,7 +65,7 @@ include 'view/layout/header.php';
             <tbody id="commissionTableBody">
                 <?php if ($isEditMode && !empty($editData['bills'])): ?>
                     <?php foreach ($editData['bills'] as $bill): 
-                        $isChecked = ($bill['commission_payout_id'] == $payout_id) ? 'checked' : '';
+                        $isChecked = ($bill['commission_drc_payout_id'] == $payout_id) ? 'checked' : '';
                         $rowClass = $isChecked ? 'table-success' : '';
                         $badgeClass = ($bill['pay_status'] === 'PAID') ? 'bg-success' : 'bg-secondary';
                     ?>

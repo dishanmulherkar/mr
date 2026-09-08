@@ -40,7 +40,8 @@ class drc_mdl {
     public function getAdminMrBills($hqId, $month = '') {
         $hqId = (int)$hqId;
         
-        $stmt = $this->con->prepare("SELECT hq_id, commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
+        // Still checking if the HQ has an active user, but not fetching the rate
+        $stmt = $this->con->prepare("SELECT hq_id FROM mr_users WHERE hq_id = ? AND status = '1'");
         $stmt->bind_param("i", $hqId);
         $stmt->execute();
         $mr_data = $stmt->get_result()->fetch_assoc();
@@ -49,7 +50,9 @@ class drc_mdl {
         if (!$mr_data) return []; 
         
         $hq_id = $mr_data['hq_id'];
-        $rate = (float)$mr_data['commission_rate'];
+        
+        // Fixed DRC commission rate set to 20%
+        $rate = 20.0; 
 
         $month_sql = "";
         if (!empty($month)) {
@@ -87,7 +90,7 @@ class drc_mdl {
         return $bills;
     }
 
-public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
+    public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
     {
         try {
             $hq_id = (int)$hq_id; 
@@ -115,11 +118,11 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
             $payout_id = $this->con->insert_id;
             $stmt_payout->close();
 
-            // 2. Update stock_inward 
+            // 2. Update stock_inward (Updated to commission_drc_payout_id)
             $update_query = "
                 UPDATE stock_inward si
                 INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-                SET si.drc = 1, si.commission_payout_id = $payout_id
+                SET si.drc = 1, si.commission_drc_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
                 AND s.hq_id = $hq_id
                 AND si.drc = 0
@@ -158,11 +161,11 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
                 $stmt_mr->close();
                 $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0;
 
-                // Group bills by stockist and sum their exact commission portion
+                // Group bills by stockist and sum their exact commission portion (Updated to commission_drc_payout_id)
                 $stmt_dist = $this->con->prepare("
                     SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
                     FROM stock_inward 
-                    WHERE commission_payout_id = ?
+                    WHERE commission_drc_payout_id = ?
                     GROUP BY stockist_id
                 ");
                 $stmt_dist->bind_param("di", $rate, $payout_id);
@@ -272,11 +275,12 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
     {
         $details = ['bills' => [], 'adjustments' => []];
 
+        // Updated to commission_drc_payout_id
         $sql1 = "
             SELECT si.inward_no, si.inward_date, s.stockist_name, si.sub_total, si.commission_amount 
             FROM stock_inward si 
             LEFT JOIN stockists s ON si.stockist_id = s.stockist_id 
-            WHERE si.commission_payout_id = ?
+            WHERE si.commission_drc_payout_id = ?
         ";
         $stmt1 = $this->con->prepare($sql1);
         $stmt1->bind_param("i", $payout_id);
@@ -306,7 +310,7 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
         return $details;
     }
 
-    public function getEditData($payout_id) 
+   public function getEditData($payout_id) 
     {
         $data = ['bills' => [], 'adjustments' => [], 'hq_id' => 0];
 
@@ -323,14 +327,10 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
         $hq_id = (int)$hq_result['hq_id'];
         $data['hq_id'] = $hq_id;
 
-        $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
-        $stmt_mr->bind_param("i", $hq_id);
-        $stmt_mr->execute();
-        $mr_data = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
-        
-        $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0;
+        // Fixed DRC commission rate set to 20%
+        $rate = 20.0;
 
+        // Updated to commission_drc_payout_id
         $sql1 = "
             SELECT 
                 si.inward_id,
@@ -341,11 +341,11 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
                 UPPER(si.pay_status) AS pay_status,
                 $rate AS commission_percent,
                 ROUND((si.sub_total * ($rate / 100)), 2) AS commission_amount,
-                si.commission_payout_id
+                si.commission_drc_payout_id
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE (s.hq_id = ? AND si.drc = 0) 
-               OR (si.commission_payout_id = ?)
+               OR (si.commission_drc_payout_id = ?)
             ORDER BY si.created_at DESC
         ";
         
@@ -403,7 +403,8 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
 
             $this->con->begin_transaction();
 
-            $reset_bills = "UPDATE stock_inward SET drc = 0, commission_payout_id = NULL WHERE commission_payout_id = ?";
+            // Updated to commission_drc_payout_id
+            $reset_bills = "UPDATE stock_inward SET drc = 0, commission_drc_payout_id = NULL WHERE commission_drc_payout_id = ?";
             $stmt_reset = $this->con->prepare($reset_bills);
             $stmt_reset->bind_param("i", $payout_id);
             $stmt_reset->execute();
@@ -424,10 +425,11 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
             }
             $stmt_payout->close();
 
+            // Updated to commission_drc_payout_id
             $update_query = "
                 UPDATE stock_inward si
                 INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-                SET si.drc = 1, si.commission_payout_id = $payout_id
+                SET si.drc = 1, si.commission_drc_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
                 AND s.hq_id = $hq_id
             ";
@@ -461,11 +463,11 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
                 $stmt_mr->close();
                 $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0;
 
-                // Group bills by stockist and sum their exact commission portion
+                // Group bills by stockist and sum their exact commission portion (Updated to commission_drc_payout_id)
                 $stmt_dist = $this->con->prepare("
                     SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
                     FROM stock_inward 
-                    WHERE commission_payout_id = ?
+                    WHERE commission_drc_payout_id = ?
                     GROUP BY stockist_id
                 ");
                 $stmt_dist->bind_param("di", $rate, $payout_id);
@@ -558,8 +560,8 @@ public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $fi
             $stmt_ledger->execute();
             $stmt_ledger->close();
 
-            // 2. Unlink all bills (reset drc to 0)
-            $stmt_reset = $this->con->prepare("UPDATE stock_inward SET drc = 0, commission_payout_id = NULL WHERE commission_payout_id = ?");
+            // 2. Unlink all bills (Updated to commission_drc_payout_id)
+            $stmt_reset = $this->con->prepare("UPDATE stock_inward SET drc = 0, commission_drc_payout_id = NULL WHERE commission_drc_payout_id = ?");
             $stmt_reset->bind_param("i", $payout_id);
             $stmt_reset->execute();
             $stmt_reset->close();

@@ -61,7 +61,7 @@ class commission_mdl
         }
 
         // 3. START THE SINGLE 'WHERE' CLAUSE
-        $sql .= " WHERE cp.commission_type = 'MR' AND m.m_id = ?";
+        $sql .= " WHERE cp.commission_type = 'MRC' AND m.m_id = ?";
         
         $params = [$mr_id];
         $types = "i";
@@ -103,7 +103,7 @@ class commission_mdl
    // ========================================================
     // Fetch Detailed View Data for a specific Payout
     // ========================================================
-    public function getCommissionViewData($payout_id, $mr_id) {
+   public function getCommissionViewData($payout_id, $mr_id) {
         $payout_id = (int)$payout_id;
         $mr_id = (int)$mr_id;
         
@@ -123,17 +123,26 @@ class commission_mdl
 
         $data = ['payout' => $master, 'bills' => [], 'adjustments' => []];
 
+        // --- DYNAMICALLY CHOOSE THE COLUMN AND RATE BASED ON PAYOUT TYPE ---
+        $is_drc = (isset($master['commission_type']) && $master['commission_type'] === 'DRC');
+        
+        // If DRC, use the new column and a fixed 20% rate. Otherwise, use standard column and MR table rate.
+        $payout_column = $is_drc ? 'commission_drc_payout_id' : 'commission_payout_id';
+        $rate_sql      = $is_drc ? '20.0'                     : 'm.commission_rate';
+
         // 2. Get Linked Bills & calculate PTS dynamically
-        $stmt_bills = $this->con->prepare("
+        $sql = "
             SELECT si.inward_no, DATE_FORMAT(si.created_at, '%d %b %Y') as bill_date, 
                    s.stockist_name, si.sub_total as taxable_amount,
-                   m.commission_rate as pts,
-                   ROUND((si.sub_total * (m.commission_rate / 100)), 2) as commission_amount
+                   {$rate_sql} as pts,
+                   ROUND((si.sub_total * ({$rate_sql} / 100)), 2) as commission_amount
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             INNER JOIN mr_users m ON m.hq_id = s.hq_id
-            WHERE si.commission_payout_id = ?
-        ");
+            WHERE si.{$payout_column} = ?
+        ";
+        
+        $stmt_bills = $this->con->prepare($sql);
         $stmt_bills->bind_param("i", $payout_id);
         $stmt_bills->execute();
         $res_bills = $stmt_bills->get_result();
@@ -170,7 +179,6 @@ class commission_mdl
 
         return $data;
     }
-
 
      // ========================================================
     // NEW: Fetch Commission Payouts for the Logged In MR
