@@ -780,8 +780,15 @@ class OrderModel
 
     public function dispatchOrder($order_id)
     {
-        $stmt = $this->con->prepare("UPDATE orders SET status = 'Processed' WHERE order_id = ?");
-        $stmt->bind_param("i", $order_id);
+        // Get today's date
+        $current_date = date('Y-m-d');
+
+        // Update both status and dispatch_date at the same time
+        $stmt = $this->con->prepare("UPDATE orders SET status = 'Processed', dispatch_date = ? WHERE order_id = ?");
+        
+        // Bind the string (date) and integer (order_id)
+        $stmt->bind_param("si", $current_date, $order_id);
+        
         if ($stmt->execute()) {
             return ['success' => true];
         }

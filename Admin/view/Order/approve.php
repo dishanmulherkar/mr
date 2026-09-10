@@ -304,7 +304,7 @@ include 'view/layout/header.php';
                                             $saved_amt = ($raw_charges != 0) ? abs($raw_charges) : '';
                                         ?>
                                         <select id="other_charges_sign" name="other_charges_sign" class="form-select form-select-sm" style="max-width: 60px;">
-                                            <option value="+" <?= $saved_sign === '+' ? 'selected' : '' ?>>+</option>
+                                            <!-- <option value="+" <?= $saved_sign === '+' ? 'selected' : '' ?>>+</option> -->
                                             <option value="-" <?= $saved_sign === '-' ? 'selected' : '' ?>>-</option>
                                         </select>
                                         <input type="number" step="0.01" id="other_charges" name="other_charges" class="form-control form-control-sm" value="<?= $saved_amt; ?>" placeholder="0.00" min="0">

@@ -22,6 +22,7 @@ if (!$order_data) {
     .badge-pending { background: #ffc107; color: #212529 !important; }
     .badge-approved { background: #28a745; color: #fff !important; }
     .badge-rejected { background: #dc3545; color: #fff !important; }
+    .badge-dispatched { background: #0dcaf0; color: #000 !important; } /* Added missing class */
 
     .summary-card {
         background: #f8f9fa;
@@ -36,9 +37,9 @@ if (!$order_data) {
         border-radius: 4px;
         font-weight: bold;
     }
-    .qty-match { color: #28a745; } /* Green if approved matches ordered */
-    .qty-diff { color: #dc3545; background: #ffeeba; } /* Red/Yellow if admin changed it */
-    .qty-added { color: #fff; background: #17a2b8; font-size: 11px; padding: 2px 6px; border-radius: 4px; } /* Added by admin */
+    .qty-match { color: #28a745; } 
+    .qty-diff { color: #dc3545; background: #ffeeba; } 
+    .qty-added { color: #fff; background: #17a2b8; font-size: 11px; padding: 2px 6px; border-radius: 4px; }
    
 </style>
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/salesentry.css">
@@ -46,8 +47,7 @@ if (!$order_data) {
 <div class="page-content">
 
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
-        <!-- <h2>Order NO: ORD0<?= $order_data['order_id'] ?></h2> -->
-        <h5>Invoice NO :<?= $order_data['inward_no'] ?> </h5>
+        <h5>Invoice NO: <?= htmlspecialchars($order_data['inward_no'] ?? 'N/A') ?> </h5>
         <a href="<?= BASE_URL ?>OrderEntry/view" class="btn-submit" style="background: #6c757d; padding: 6px 12px;">
             <i class="fa fa-arrow-left"></i>
         </a>
@@ -61,10 +61,27 @@ if (!$order_data) {
         <div style="text-align: right;">
             <strong>Status:</strong> 
             <?php 
-                $status = $order_data['status'] ?? 'Pending';
-                $badge = ($status == 'Approved') ? 'badge-approved' : (($status == 'Rejected') ? 'badge-rejected' : 'badge-pending');
+                $raw_status = $order_data['status'] ?? 'Pending';
+                
+                // Determine badge class and what text to actually show the user
+                if ($raw_status === 'Processed') {
+                    $badge = 'badge-dispatched';
+                    $display_text = 'Dispatched';
+                } 
+                elseif ($raw_status === 'Approved') {
+                    $badge = 'badge-approved';
+                    $display_text = 'Approved';
+                } 
+                elseif ($raw_status === 'Rejected') {
+                    $badge = 'badge-rejected';
+                    $display_text = 'Rejected';
+                } 
+                else {
+                    $badge = 'badge-pending';
+                    $display_text = 'Pending';
+                }
             ?>
-            <span class="status-badge <?= $badge ?>"><?= strtoupper($status) ?></span><br>
+            <span class="status-badge <?= $badge ?>"><?= strtoupper($display_text) ?></span><br>
             <strong>Total Amount:</strong> <span style="font-size: 18px; color: #28a745; font-weight: bold;">₹<?= number_format($order_data['total_amt'], 2) ?></span>
         </div>
     </div>
@@ -77,8 +94,6 @@ if (!$order_data) {
                 <th>Product Name</th>
                 <th class="text-center">MR Ordered</th>
                 <th class="text-center">Admin Approved</th>
-                <!-- <th class="text-right">Rate (₹)</th>
-                <th class="text-right">Net Amount (₹)</th> -->
             </tr>
             </thead>
             <tbody>
@@ -86,12 +101,11 @@ if (!$order_data) {
                 $count = 1;
                 foreach ($order_data['items'] as $item): 
                     
-                    // Logic to visually highlight changes made by the Admin
                     $mr_qty = $item['qty'];
                     $admin_qty = $item['approved_qty'];
                     
                     $qty_display = '-';
-                    if ($status == 'Pending' || $admin_qty === null) {
+                    if ($raw_status == 'Pending' || $admin_qty === null) {
                         $qty_display = '<span style="color:gray;">Pending</span>';
                     } elseif ($mr_qty == 0 && $admin_qty > 0) {
                         $qty_display = '<span class="qty-added">Added by Admin: ' . $admin_qty . '</span>';
@@ -115,16 +129,23 @@ if (!$order_data) {
                     <td class="text-center">
                         <?= $qty_display ?>
                     </td>
-                    <!-- <td class="text-right"><?= number_format($item['pts'], 2) ?></td>
-                    <td class="text-right" style="font-weight: 600;">₹<?= number_format($item['net_total'], 2) ?></td> -->
                 </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
     </div>
 
-    <div class="table-footer">
-        Total Items: <span><?= count($order_data['items']) ?></span>
+    <!-- UPDATED FOOTER WITH DISPATCH DATE -->
+    <div class="table-footer d-flex justify-content-between align-items-center" style="padding: 10px 15px; background: #f8f9fa; border: 1px solid #e9ecef; border-top: none; border-radius: 0 0 6px 6px;">
+        <div>
+            Total Items: <strong><?= count($order_data['items']) ?></strong>
+        </div>
+        
+        <?php if ($raw_status === 'Processed' && !empty($order_data['dispatch_date'])): ?>
+            <div style="color: #0dcaf0; font-weight: bold; font-size: 15px;">
+                <i class="fa fa-truck"></i> Dispatched On: <?= date('d M Y', strtotime($order_data['dispatch_date'])) ?>
+            </div>
+        <?php endif; ?>
     </div>
 
 </div>

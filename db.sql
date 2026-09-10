@@ -488,3 +488,10 @@ SET cp.commission_rate = m.commission_rate
 WHERE cp.commission_type = 'MRC' 
 AND cp.commission_rate = 0.00
 AND m.status = '1';
+
+-- 10-09-26 
+
+
+ALTER TABLE `orders`    --- added  ---
+ADD `dispatch_date` DATE NULL DEFAULT NULL 
+AFTER `order_date`;

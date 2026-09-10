@@ -96,10 +96,12 @@ class DispatchDashboardModel
      */
     public function updateOrderStatus($order_id, $status)
     {
+
+         $current_date = date('Y-m-d');
         $order_id = (int)$order_id;
         $status = mysqli_real_escape_string($this->con, $status);
         
-        $sql = "UPDATE orders SET status = '$status' WHERE order_id = $order_id";
+        $sql = "UPDATE orders SET status = '$status', dispatch_date = '$current_date' WHERE order_id = $order_id ";
         
         return mysqli_query($this->con, $sql);
     }
