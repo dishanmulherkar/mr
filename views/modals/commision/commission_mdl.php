@@ -100,14 +100,14 @@ class commission_mdl
         return $data;
     }
 
-   // ========================================================
-    // Fetch Detailed View Data for a specific Payout
+  // ========================================================
+    // Fetch Detailed View Data for a specific Payout (MR/DRC)
     // ========================================================
-   public function getCommissionViewData($payout_id, $mr_id) {
+    public function getCommissionViewData($payout_id, $mr_id) {
         $payout_id = (int)$payout_id;
         $mr_id = (int)$mr_id;
         
-        // 1. Get Master Payout Data
+        // 1. Get Master Payout Data (Now includes the locked-in commission_rate)
         $stmt = $this->con->prepare("
             SELECT cp.*, DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') as payout_date
             FROM commission_payouts cp
@@ -123,27 +123,35 @@ class commission_mdl
 
         $data = ['payout' => $master, 'bills' => [], 'adjustments' => []];
 
-        // --- DYNAMICALLY CHOOSE THE COLUMN AND RATE BASED ON PAYOUT TYPE ---
+        // --- DYNAMICALLY CHOOSE THE COLUMN BASED ON PAYOUT TYPE ---
         $is_drc = (isset($master['commission_type']) && $master['commission_type'] === 'DRC');
-        
-        // If DRC, use the new column and a fixed 20% rate. Otherwise, use standard column and MR table rate.
         $payout_column = $is_drc ? 'commission_drc_payout_id' : 'commission_payout_id';
-        $rate_sql      = $is_drc ? '20.0'                     : 'm.commission_rate';
+        
+        // Extract the locked-in historical rate
+        $historical_rate = isset($master['commission_rate']) ? (float)$master['commission_rate'] : 0.00;
+        
+        // Legacy fallback: If it is an old DRC record without a saved rate, default to 20%
+        if ($is_drc && $historical_rate == 0.00) {
+            $historical_rate = 20.00;
+        }
 
-        // 2. Get Linked Bills & calculate PTS dynamically
+        // 2. Get Linked Bills & calculate PTS dynamically using the HISTORICAL rate
+        // (Removed the INNER JOIN to mr_users here since we don't need the live rate anymore)
         $sql = "
             SELECT si.inward_no, DATE_FORMAT(si.created_at, '%d %b %Y') as bill_date, 
                    s.stockist_name, si.sub_total as taxable_amount,
-                   {$rate_sql} as pts,
-                   ROUND((si.sub_total * ({$rate_sql} / 100)), 2) as commission_amount
+                   ? as pts,
+                   ROUND((si.sub_total * (? / 100)), 2) as commission_amount
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-            INNER JOIN mr_users m ON m.hq_id = s.hq_id
             WHERE si.{$payout_column} = ?
         ";
         
         $stmt_bills = $this->con->prepare($sql);
-        $stmt_bills->bind_param("i", $payout_id);
+        
+        // Bind the historical rate twice (once for display, once for math), then the ID
+        $stmt_bills->bind_param("ddi", $historical_rate, $historical_rate, $payout_id);
+        
         $stmt_bills->execute();
         $res_bills = $stmt_bills->get_result();
         

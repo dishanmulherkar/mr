@@ -67,12 +67,12 @@ switch($page)
 
     // --- NEW MOBILE DASHBOARDS ---
     case 'AsmDashboard':
-        include 'controller/AsmDashboardController.php';
-        $controller = new AsmDashboardController($con);
+        include 'controller/Asm/dashboard_ctl.php';
+        $controller = new AsmDashboardCtl($con);
         break;
     
     case 'Asm':
-        include 'controller/AsmController.php';
+        include 'controller/dashboard_ctl.php';
         $controller = new AsmController($con);
         break;
 

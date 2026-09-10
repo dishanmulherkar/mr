@@ -253,5 +253,88 @@ public function getReportmrc($hq_id, $from_date, $to_date)
         
         return 0;
     }
+
+
+   // ==========================================
+    // ASM Commission (ASM) Report
+    // ==========================================
+ public function getReportasm($hq_id, $from_date, $to_date)
+    {
+        $sql = "SELECT 
+                    MIN(p.id) AS id,
+                    p.user_id,
+                    IF(COUNT(p.id) > 1, 0, MAX(p.stockist_id)) AS stockist_id,
+                    p.ledger_type,
+                    p.transaction_type,
+                    p.reference_id,
+                    SUM(p.amount) AS amount,
+                    p.balance_action,
+                    
+                    -- If multiple rows are merged, rename the note to indicate it's a combined payout
+                    IF(COUNT(p.id) > 1, CONCAT('ASM Commission Earned (Payout #', p.reference_id, ')'), MAX(p.notes)) AS notes,
+                    
+                    MIN(p.created_at) AS created_at,
+                    MAX(p.updated_at) AS updated_at,
+                    
+                    -- Fallback the stockist name to 'Combined Payout' if old rows are merged
+                    IF(COUNT(p.id) > 1, 'Combined Payout / General', COALESCE(MAX(s.stockist_name), 'Combined Payout / General')) AS stockist_name,
+                    MAX(si.inward_no) AS settled_bill_no,
+                    
+                    -- Set outstanding debt to 0 if it's a combined row, otherwise run the subquery
+                    IF(COUNT(p.id) > 1, 0, MAX((
+                        SELECT 
+                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
+                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0))
+                        FROM payment_ledgers 
+                        WHERE stockist_id = p.stockist_id AND stockist_id > 0 AND ledger_type = 'debt'
+                    ))) AS stockist_outstanding
+
+                FROM payment_ledgers p
+                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+                LEFT JOIN stock_inward si ON p.reference_id = si.inward_id AND p.transaction_type IN ('mrc_settlement', 'settled_to_bill')
+                
+                WHERE p.user_id = ? 
+                AND p.ledger_type = 'asm_wallet'
+                AND DATE(p.created_at) >= ? 
+                AND DATE(p.created_at) <= ?
+                
+                -- Grouping by these columns merges old split records while keeping math accurate
+                GROUP BY p.user_id, p.ledger_type, p.transaction_type, p.reference_id, p.balance_action, DATE(p.created_at)
+                ORDER BY created_at ASC, id ASC";
+                
+        $stmt = $this->con->prepare($sql);
+        $stmt->bind_param("iss", $hq_id, $from_date, $to_date);
+        $stmt->execute();
+        return $stmt->get_result();
+    }
+
+   // ==========================================
+    // Opening balance calculation for ASM Wallet
+    // ==========================================
+    public function getOpeningBalanceAsm($hq_id, $from_date)
+    {
+        $sql = "SELECT 
+                    SUM(CASE WHEN balance_action = 'increase' THEN amount ELSE 0 END) as total_inc,
+                    SUM(CASE WHEN balance_action = 'decrease' THEN amount ELSE 0 END) as total_dec
+                FROM payment_ledgers 
+                WHERE user_id = ? 
+                AND ledger_type = 'asm_wallet'
+                AND DATE(created_at) < ?";
+
+        $stmt = $this->con->prepare($sql);
+        $stmt->bind_param("is", $hq_id, $from_date);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        if ($res && $row = $res->fetch_assoc()) {
+            $inc = (float)$row['total_inc'];
+            $dec = (float)$row['total_dec'];
+            
+            // For a wallet, Increase (Earned) - Decrease (Settled) = Current Balance
+            return $inc - $dec; 
+        }
+        
+        return 0;
+    }
 }
 ?>

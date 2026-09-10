@@ -131,5 +131,39 @@ class payment_ledger_ctl
             );
             include 'view/report/drc_ledger_report.php';
         }
+
+            // ==========================================
+    // Asm Commission (ASM) Ledger Controller
+    // ==========================================
+    public function asm_ledger()
+    {
+        // Start session if not already started
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $hq_id = $_SESSION['admin_id'] ?? 0;
+
+        // Get filter inputs
+        $start_date  = $_GET['start_date'] ?? '';
+        $end_date    = $_GET['end_date'] ?? '';
+
+        $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
+        $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
+
+        $opening_balance = 0;
+        $query = null;
+
+        // Fetch data if HQ ID exists
+        if ($hq_id > 0) {
+            $opening_balance = $this->model->getOpeningBalanceAsm($hq_id, $from_date);
+            $query = $this->model->getReportasm($hq_id, $from_date, $to_date);
+        }
+
+        // Load the view
+        include 'view/Asm/report/asm_commision_ledger.php';
+    }
+
+
 }
 ?>

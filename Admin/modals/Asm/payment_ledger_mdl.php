@@ -41,12 +41,7 @@ class payment_ledger_mdl
         return $stockists;
     }
 
-    public function getStockistName($stockist_id)
-    {
-        $sql = "SELECT stockist_name FROM stockists WHERE stockist_id = '$stockist_id'";
-        $res = mysqli_query($this->con, $sql);
-        return $res ? mysqli_fetch_assoc($res) : null;
-    }
+   
 
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
     public function getReport($stockist_id, $from_date, $to_date)
@@ -87,7 +82,7 @@ class payment_ledger_mdl
         }
         return 0;
     }
-    // ==========================================
+     // ==========================================
     // MR Commission (MRC) Report (Grouped by Ref ID)
     // ==========================================
     public function getReportmrc($hq_id, $from_date, $to_date)
@@ -103,15 +98,14 @@ class payment_ledger_mdl
                     SUM(p.amount) AS amount,
                     -- Provide a fallback name if stockist_id is 0
                     IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name
-                    FROM payment_ledgers p
+                FROM payment_ledgers p
                 
                 -- Changed to LEFT JOIN so stockist_id = 0 doesn't get dropped
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 LEFT JOIN stock_inward si ON p.reference_id = si.inward_id 
                 
-                -- FIXED: Check if the stockist belongs to the MR, 
-                -- OR if it's a Bank entry (0), ensure the ledger entry itself belongs to the MR
-                WHERE (s.hq_id = '$hq_id' OR (p.stockist_id = 0 AND p.user_id = '$hq_id'))
+                -- Allow the specific HQ OR rows where no stockist is attached (Bank Payments)
+                WHERE (s.hq_id = '$hq_id' OR p.stockist_id = 0)
                 AND p.ledger_type = 'mrc_wallet'
                 AND DATE(p.created_at) >= '$from_date' 
                 AND DATE(p.created_at) <= '$to_date'
@@ -137,12 +131,8 @@ class payment_ledger_mdl
                     SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
                     SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
                 FROM payment_ledgers p
-                
-                -- FIXED: Changed INNER JOIN to LEFT JOIN so we don't lose 'Bank / General' transactions (0)
-                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-                
-                -- FIXED: Ensure we capture bank payments belonging strictly to this MR
-                WHERE (s.hq_id = '$hq_id' OR (p.stockist_id = 0 AND p.user_id = '$hq_id'))
+                INNER JOIN stockists s ON p.stockist_id = s.stockist_id
+                WHERE s.hq_id = '$hq_id' 
                 AND p.ledger_type = 'mrc_wallet'
                 AND DATE(p.created_at) < '$from_date'";
 
@@ -159,7 +149,7 @@ class payment_ledger_mdl
         return 0;
     }
 
-   // ==========================================
+      // ==========================================
     // MR Commission (DRC) Report (Grouped by Ref ID)
     // ==========================================
     public function getReportdrc($hq_id, $from_date, $to_date)
@@ -173,15 +163,16 @@ class payment_ledger_mdl
                     MAX(p.notes) AS notes,
                     MAX(si.inward_no) AS settled_bill_no,
                     SUM(p.amount) AS amount,
+                    -- Provide a fallback name if stockist_id is 0
                     IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name
                 FROM payment_ledgers p
                 
+                -- Changed to LEFT JOIN so stockist_id = 0 doesn't get dropped
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 LEFT JOIN stock_inward si ON p.reference_id = si.inward_id 
                 
-                -- FIXED: Now it checks if the stockist belongs to the MR, 
-                -- OR if it's a Bank entry (0), it checks that the ledger entry itself belongs to the MR
-                WHERE (s.hq_id = '$hq_id' OR (p.stockist_id = 0 AND p.user_id = '$hq_id'))
+                -- Allow the specific HQ OR rows where no stockist is attached (Bank Payments)
+                WHERE (s.hq_id = '$hq_id' OR p.stockist_id = 0)
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) >= '$from_date' 
                 AND DATE(p.created_at) <= '$to_date'
@@ -202,16 +193,13 @@ class payment_ledger_mdl
     // ==========================================
     public function getOpeningBalancedrc($hq_id, $from_date)
     {
-        // FIXED: Changed INNER JOIN to LEFT JOIN and updated WHERE clause.
-        // If you keep INNER JOIN, 'Bank / General' transactions (0) are excluded from the opening balance!
+        // Safely uses 'balance_action' to determine adding or subtracting from the wallet
         $sql = "SELECT 
                     SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
                     SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
                 FROM payment_ledgers p
-                
-                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-                
-                WHERE (s.hq_id = '$hq_id' OR (p.stockist_id = 0 AND p.user_id = '$hq_id'))
+                INNER JOIN stockists s ON p.stockist_id = s.stockist_id
+                WHERE s.hq_id = '$hq_id' 
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) < '$from_date'";
 
@@ -221,6 +209,7 @@ class payment_ledger_mdl
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
             
+            // For a wallet, Increase (Earned) - Decrease (Settled) = Current Balance
             return $inc - $dec; 
         }
         

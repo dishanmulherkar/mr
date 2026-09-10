@@ -107,6 +107,14 @@ public function getAdminMrBills($hqId, $month = '')
     {
         try {
             $asm_id = (int)$asm_id; 
+
+            $stmt = $this->con->prepare("SELECT admin_id, commission_rate FROM admins WHERE admin_id = ?");
+            $stmt->bind_param("i", $asm_id);
+            $stmt->execute();
+            $mr_data = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            $rate = (float)$mr_data['commission_rate'];
             
             $bill_ids = json_decode($bill_ids_json, true);
             $adjustments = json_decode($adjustments_json, true);
@@ -120,10 +128,12 @@ public function getAdminMrBills($hqId, $month = '')
 
             $this->con->begin_transaction();
 
-            // 1. Insert the Master Payout Record 
+           // 1. Insert the Master Payout Record 
             // Note: Reusing 'hq_id' column to store the asm_id (admin_id) receiving the payout
-            $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, status) VALUES (?, 'ASM', ?, ?)");
-            $stmt_payout->bind_param("ids", $asm_id, $final_payout, $status);
+            $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, commission_rate, status) VALUES (?, 'ASM', ?, ?, ?)");
+            
+            // Fixed bind_param: added 'd' for double/float and passed the $rate variable
+            $stmt_payout->bind_param("idds", $asm_id, $final_payout, $rate, $status);
             
             if (!$stmt_payout->execute()) {
                 throw new Exception("Failed to create payout record.");
@@ -138,7 +148,7 @@ public function getAdminMrBills($hqId, $month = '')
                 UPDATE stock_inward si
                 INNER JOIN stockists s ON si.stockist_id = s.stockist_id
                 INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
-                SET si.asm_com = 1, si.commission_payout_id = $payout_id
+                SET si.asm_com = 1, si.commission_asm_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
                 AND h.asm_id = $asm_id
                 AND si.asm_com = 0
@@ -165,74 +175,27 @@ public function getAdminMrBills($hqId, $month = '')
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Split commission and include adjustments
+            // 4. LEDGER UPDATE: Single entry for the whole payout
             if ($status === 'Paid') {
                 
-                // FIX: Fetch ASM rate from admins table instead of mr_users
-                $stmt_asm = $this->con->prepare("SELECT commission_rate FROM admins WHERE admin_id = ?");
-                $stmt_asm->bind_param("i", $asm_id);
-                $stmt_asm->execute();
-                $asm_data = $stmt_asm->get_result()->fetch_assoc();
-                $stmt_asm->close();
-                $rate = $asm_data ? (float)$asm_data['commission_rate'] : 0;
-
-                $stmt_dist = $this->con->prepare("
-                    SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
-                    FROM stock_inward 
-                    WHERE commission_payout_id = ?
-                    GROUP BY stockist_id
-                ");
-                $stmt_dist->bind_param("di", $rate, $payout_id);
-                $stmt_dist->execute();
-                $dist_res = $stmt_dist->get_result();
+                $notes = "ASM Commission Earned (Payout #$payout_id)";
+                $action = 'increase';
+                $stockist_id = 0; // 0 because this is a combined master payout
                 
-                // Using the new 'asm_wallet'
+                // Insert exactly ONE row containing the $final_payout amount
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
-                    (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
+                    (user_id, stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
+                    VALUES (?, ?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
-                $calculated_bill_total = 0;
-                $last_stockist_id = 0;
-
-                // A. Insert base commission per stockist
-                while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = (int)$stk_row['stockist_id'];
-                    $stk_comm = (float)$stk_row['total_stk_comm'];
-                    
-                    if ($stk_comm > 0) {
-                        $last_stockist_id = $stockist_id;
-                        $calculated_bill_total += $stk_comm;
-                        
-                        $notes = "ASM Commission Earned (Payout #$payout_id)";
-                        $action = 'increase';
-                        
-                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
-                        if (!$stmt_ledger->execute()) {
-                            throw new Exception("Failed to update ledger for stockist $stockist_id");
-                        }
-                    }
-                }
+                $stmt_ledger->bind_param("iiidss", $asm_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
                 
-                // B. Insert difference (Adjustments/Deductions) to balance the final payout
-                $net_adjustment = round((float)$final_payout - $calculated_bill_total, 2);
-                
-                if ($net_adjustment != 0 && $last_stockist_id > 0) {
-                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
-                    $adj_amount = abs($net_adjustment);
-                    
-                    // FIX: Renamed note for clarity
-                    $adj_notes = "ASM Commission Adjustment (Payout #$payout_id)"; 
-                    
-                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
-                    if (!$stmt_ledger->execute()) {
-                        throw new Exception("Failed to apply commission adjustments to ledger.");
-                    }
+                if (!$stmt_ledger->execute()) {
+                    throw new Exception("Failed to update ledger for ASM payout.");
                 }
 
                 $stmt_ledger->close();
-                $stmt_dist->close();
             }
 
             $this->con->commit();
@@ -293,7 +256,7 @@ public function getAdminMrBills($hqId, $month = '')
             SELECT si.inward_no, si.inward_date, s.stockist_name, si.sub_total, si.commission_amount 
             FROM stock_inward si 
             LEFT JOIN stockists s ON si.stockist_id = s.stockist_id 
-            WHERE si.commission_payout_id = ?
+            WHERE si.commission_asm_payout_id = ?
         ";
         $stmt1 = $this->con->prepare($sql1);
         $stmt1->bind_param("i", $payout_id);
@@ -361,12 +324,12 @@ public function getAdminMrBills($hqId, $month = '')
                 UPPER(si.pay_status) AS pay_status,
                 $rate AS commission_percent,
                 ROUND((si.sub_total * ($rate / 100)), 2) AS commission_amount,
-                si.commission_payout_id
+                si.commission_asm_payout_id
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
             WHERE (h.asm_id = ? AND si.pay_status = 'paid' AND si.asm_com = 0) 
-               OR (si.commission_payout_id = ?)
+               OR (si.commission_asm_payout_id = ?)
             ORDER BY si.created_at DESC
         ";
         
@@ -412,6 +375,14 @@ public function getAdminMrBills($hqId, $month = '')
                 throw new Exception("This payout has already been marked as Paid and cannot be edited.");
             }
 
+            // Fetch the CURRENT ASM rate to lock it in for this update
+            $stmt_asm = $this->con->prepare("SELECT commission_rate FROM admins WHERE admin_id = ?");
+            $stmt_asm->bind_param("i", $asm_id);
+            $stmt_asm->execute();
+            $asm_data = $stmt_asm->get_result()->fetch_assoc();
+            $stmt_asm->close();
+            $rate = $asm_data ? (float)$asm_data['commission_rate'] : 0.00;
+
             $bill_ids = json_decode($bill_ids_json, true);
             $adjustments = json_decode($adjustments_json, true);
 
@@ -424,8 +395,8 @@ public function getAdminMrBills($hqId, $month = '')
 
             $this->con->begin_transaction();
 
-            // 1. Reset old linked bills for this payout (Changed mrc to asm_com)
-            $reset_bills = "UPDATE stock_inward SET asm_com = 0, commission_payout_id = NULL WHERE commission_payout_id = ?";
+            // 1. Reset old linked bills
+            $reset_bills = "UPDATE stock_inward SET asm_com = 0, commission_asm_payout_id = NULL WHERE commission_asm_payout_id = ?";
             $stmt_reset = $this->con->prepare($reset_bills);
             $stmt_reset->bind_param("i", $payout_id);
             $stmt_reset->execute();
@@ -438,21 +409,21 @@ public function getAdminMrBills($hqId, $month = '')
             $stmt_del->execute();
             $stmt_del->close();
 
-            // 3. Update Master Payout Record
-            $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ? WHERE payout_id = ? AND commission_type = 'ASM'";
+            // 3. Update Master Payout Record (UPDATED: Added commission_rate)
+            $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ?, commission_rate = ? WHERE payout_id = ? AND commission_type = 'ASM'";
             $stmt_payout = $this->con->prepare($update_payout);
-            $stmt_payout->bind_param("dsi", $final_payout, $status, $payout_id);
+            $stmt_payout->bind_param("dsdi", $final_payout, $status, $rate, $payout_id);
             if (!$stmt_payout->execute()) {
                 throw new Exception("Failed to update master payout record.");
             }
             $stmt_payout->close();
 
-            // 4. Link new bills to this payout with headquarter JOIN
+            // 4. Link new bills
             $update_query = "
                 UPDATE stock_inward si
                 INNER JOIN stockists s ON si.stockist_id = s.stockist_id
                 INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
-                SET si.asm_com = 1, si.commission_payout_id = $payout_id
+                SET si.asm_com = 1, si.commission_asm_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
                 AND h.asm_id = $asm_id
             ";
@@ -476,72 +447,24 @@ public function getAdminMrBills($hqId, $month = '')
                 $stmt_adj->close();
             }
 
-            // 6. LEDGER UPDATE: Split commission and include adjustments
+            // 6. LEDGER UPDATE: Single entry (No more splitting!)
             if ($status === 'Paid') {
+                $notes = "ASM Commission Earned (Payout #$payout_id)";
+                $action = 'increase';
+                $stockist_id = 0; // 0 represents a combined master payout
                 
-                // Fetch ASM rate from admins table
-                $stmt_asm = $this->con->prepare("SELECT commission_rate FROM admins WHERE admin_id = ?");
-                $stmt_asm->bind_param("i", $asm_id);
-                $stmt_asm->execute();
-                $asm_data = $stmt_asm->get_result()->fetch_assoc();
-                $stmt_asm->close();
-                $rate = $asm_data ? (float)$asm_data['commission_rate'] : 0;
-
-                $stmt_dist = $this->con->prepare("
-                    SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
-                    FROM stock_inward 
-                    WHERE commission_payout_id = ?
-                    GROUP BY stockist_id
-                ");
-                $stmt_dist->bind_param("di", $rate, $payout_id);
-                $stmt_dist->execute();
-                $dist_res = $stmt_dist->get_result();
-                
-                // Using asm_wallet
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
-                    (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
+                    (user_id, stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
+                    VALUES (?, ?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
-
-                $calculated_bill_total = 0;
-                $last_stockist_id = 0;
-
-                // A. Insert base commission per stockist
-                while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = (int)$stk_row['stockist_id'];
-                    $stk_comm = (float)$stk_row['total_stk_comm'];
-                    
-                    if ($stk_comm > 0) {
-                        $last_stockist_id = $stockist_id;
-                        $calculated_bill_total += $stk_comm;
-                        
-                        $notes = "ASM Commission Earned (Payout #$payout_id)";
-                        $action = 'increase';
-                        
-                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
-                        if (!$stmt_ledger->execute()) {
-                            throw new Exception("Failed to update ledger for stockist $stockist_id");
-                        }
-                    }
-                }
                 
-                // B. Insert difference (Adjustments/Deductions) to balance the final payout
-                $net_adjustment = round((float)$final_payout - $calculated_bill_total, 2);
+                $stmt_ledger->bind_param("iiidss", $asm_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
                 
-                if ($net_adjustment != 0 && $last_stockist_id > 0) {
-                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
-                    $adj_amount = abs($net_adjustment);
-                    $adj_notes = "ASM Commission Adjustment (Payout #$payout_id)"; 
-                    
-                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
-                    if (!$stmt_ledger->execute()) {
-                        throw new Exception("Failed to apply commission adjustments to ledger.");
-                    }
+                if (!$stmt_ledger->execute()) {
+                    throw new Exception("Failed to apply commission to ASM ledger.");
                 }
-
                 $stmt_ledger->close();
-                $stmt_dist->close();
             }
 
             $this->con->commit();
@@ -552,15 +475,14 @@ public function getAdminMrBills($hqId, $month = '')
             return ['success' => false, 'msg' => $e->getMessage()];
         }
     }
-
    // ==========================================================
     // NEW METHOD: Flip the status between Pending and Paid (WITH STRICT ERROR CHECKING)
     // ==========================================================
-  public function updatePayoutStatus($payout_id, $status = 'Paid') {
+    public function updatePayoutStatus($payout_id, $status = 'Paid') {
         try {
             $this->con->begin_transaction();
 
-            // 1. Get current payout data before updating (Fetch hq_id which stores asm_id)
+            // 1. Get current payout data before updating 
             $stmt_info = $this->con->prepare("SELECT hq_id, total_payout, status FROM commission_payouts WHERE payout_id = ? AND commission_type = 'ASM' FOR UPDATE");
             $stmt_info->bind_param("i", $payout_id);
             $stmt_info->execute();
@@ -584,75 +506,29 @@ public function getAdminMrBills($hqId, $month = '')
             }
             $stmt->close();
 
-            // 3. Update the payment_ledgers based on status change
+            // 3. Update the payment_ledgers based on status change (Single Entry Logic)
             if ($status === 'Paid' && $current_status !== 'Paid') {
                 
-                // Fetch ASM rate from admins table
-                $stmt_asm = $this->con->prepare("SELECT commission_rate FROM admins WHERE admin_id = ?");
-                $stmt_asm->bind_param("i", $asm_id);
-                $stmt_asm->execute();
-                $asm_data = $stmt_asm->get_result()->fetch_assoc();
-                $stmt_asm->close();
-                $rate = $asm_data ? (float)$asm_data['commission_rate'] : 0;
-
-                // Accurately split the commission per stockist like in the claim/update methods
-                $stmt_dist = $this->con->prepare("
-                    SELECT stockist_id, SUM(ROUND((sub_total * (? / 100)), 2)) as total_stk_comm
-                    FROM stock_inward 
-                    WHERE commission_payout_id = ?
-                    GROUP BY stockist_id
-                ");
-                $stmt_dist->bind_param("di", $rate, $payout_id);
-                $stmt_dist->execute();
-                $dist_res = $stmt_dist->get_result();
+                $notes = "ASM Commission Earned (Payout #$payout_id)";
+                $action = 'increase';
+                $stockist_id = 0; // 0 represents a combined master payout
                 
                 $stmt_ledger = $this->con->prepare("
                     INSERT INTO payment_ledgers 
-                    (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
+                    (user_id, stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
+                    VALUES (?, ?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
                 if (!$stmt_ledger) {
                     throw new Exception("SQL Error in payment_ledgers: " . $this->con->error);
                 }
 
-                $calculated_bill_total = 0;
-                $last_stockist_id = 0;
-
-                while ($stk_row = $dist_res->fetch_assoc()) {
-                    $stockist_id = (int)$stk_row['stockist_id'];
-                    $stk_comm = (float)$stk_row['total_stk_comm'];
-                    
-                    if ($stk_comm > 0) {
-                        $last_stockist_id = $stockist_id;
-                        $calculated_bill_total += $stk_comm;
-                        
-                        $notes = "ASM Commission Earned (Payout #$payout_id)";
-                        $action = 'increase';
-                        
-                        $stmt_ledger->bind_param("iidss", $stockist_id, $payout_id, $stk_comm, $action, $notes);
-                        if (!$stmt_ledger->execute()) {
-                            throw new Exception("Failed to update ledger for stockist $stockist_id");
-                        }
-                    }
-                }
+                $stmt_ledger->bind_param("iiidss", $asm_id, $stockist_id, $payout_id, $total_payout, $action, $notes);
                 
-                // Handle Adjustments
-                $net_adjustment = round((float)$total_payout - $calculated_bill_total, 2);
-                
-                if ($net_adjustment != 0 && $last_stockist_id > 0) {
-                    $adj_action = ($net_adjustment > 0) ? 'increase' : 'decrease';
-                    $adj_amount = abs($net_adjustment);
-                    $adj_notes = "ASM Commission Adjustment (Payout #$payout_id)"; 
-                    
-                    $stmt_ledger->bind_param("iidss", $last_stockist_id, $payout_id, $adj_amount, $adj_action, $adj_notes);
-                    if (!$stmt_ledger->execute()) {
-                        throw new Exception("Failed to apply commission adjustments to ledger.");
-                    }
+                if (!$stmt_ledger->execute()) {
+                    throw new Exception("Failed to add amount to ASM ledger.");
                 }
-
                 $stmt_ledger->close();
-                $stmt_dist->close();
 
             } elseif ($status !== 'Paid' && $current_status === 'Paid') {
                 // If it was reverted to Pending/Rejected, remove the wallet credit
@@ -692,7 +568,7 @@ public function getAdminMrBills($hqId, $month = '')
             $stmt_ledger->close();
 
             // 2. Unlink all bills (reset asm_com to 0)
-            $stmt_reset = $this->con->prepare("UPDATE stock_inward SET asm_com = 0, commission_payout_id = NULL WHERE commission_payout_id = ?");
+            $stmt_reset = $this->con->prepare("UPDATE stock_inward SET asm_com = 0, commission_asm_payout_id = NULL WHERE commission_asm_payout_id = ?");
             $stmt_reset->bind_param("i", $payout_id);
             $stmt_reset->execute();
             $stmt_reset->close();
@@ -731,5 +607,185 @@ public function getAdminMrBills($hqId, $month = '')
              WHERE s.state_id = '$state_id' AND a.role = 'ASM' ORDER BY a.admin_name ASC"
         );
     }
+
+
+ // ========================================================
+    // Fetch Live Wallet Balances (Using Trusted Query Format)
+    // ========================================================
+    public function getWalletBalances($asm_id)
+    {
+        $asm_id = (int)$asm_id;
+        $asm_balance = 0.00;
+        
+        // Ensure we have a valid ASM ID before querying
+        if ($asm_id > 0) { 
+            
+            // Get ASM Balance directly from payment_ledgers without stockist/MR joins
+            // UPDATED: Changed WHERE hq_id = ? to WHERE user_id = ?
+            $stmt = $this->con->prepare("
+                SELECT SUM(CASE WHEN balance_action = 'increase' THEN amount ELSE -amount END) as total_balance
+                FROM payment_ledgers 
+                WHERE user_id = ? AND ledger_type = 'asm_wallet'
+            ");
+            
+            $stmt->bind_param("i", $asm_id);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
+            
+            $asm_balance = $res['total_balance'] ? (float)$res['total_balance'] : 0.00;
+            $stmt->close();
+        }
+        
+        return [
+            'asm_balance' => $asm_balance
+        ];
+    }
+
+
+        // ========================================================
+    // NEW: Fetch Commission Payouts for the Logged In asm
+    // ========================================================
+   public function getDrCommissionsList($mr_id, $stockist_id = 0, $from_date = '')
+    {
+        // 1. SELECT AND FROM (No WHERE clause here)
+        $sql = "
+            SELECT DISTINCT
+                cp.payout_id, 
+                cp.total_payout, 
+                cp.status, 
+                DATE_FORMAT(cp.created_at, '%d %b %Y') AS date_paid,
+                cp.created_at
+            FROM commission_payouts cp
+            INNER JOIN admins a ON a.admin_id = cp.hq_id 
+        ";
+        
+        // 2. ALL JOINS MUST HAPPEN BEFORE THE 'WHERE' CLAUSE
+        if ($stockist_id > 0) {
+            $sql .= " INNER JOIN stock_inward si ON si.commission_asm_payout_id = cp.payout_id ";
+        }
+
+        // 3. START THE SINGLE 'WHERE' CLAUSE
+        $sql .= " WHERE cp.commission_type = 'ASM' AND a.admin_id = ?";
+        
+        $params = [$mr_id];
+        $types = "i";
+
+        // 4. APPEND ADDITIONAL CONDITIONS WITH 'AND'
+        if ($stockist_id > 0) {
+            $sql .= " AND si.stockist_id = ?";
+            $params[] = $stockist_id;
+            $types .= "i";
+        }
+
+        if (!empty($from_date)) {
+            // Using DATE() to match only the specific day
+            $sql .= " AND DATE(cp.created_at) = ?";
+            $params[] = $from_date;
+            $types .= "s";
+        }
+        
+        $sql .= " ORDER BY cp.created_at DESC";
+
+        $stmt = $this->con->prepare($sql);
+        
+        // Dynamic binding
+        if (!empty($params)) {
+            $stmt->bind_param($types, ...$params);
+        }
+        
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $data = [];
+        while ($row = $result->fetch_assoc()) {
+            $data[] = $row;
+        }
+        
+        $stmt->close();
+        return $data;
+    }
+
+
+    // ========================================================
+    // Fetch Detailed View Data for a specific Payout
+    // ========================================================
+ public function getAsmCommissionViewData($payout_id, $asm_id) {
+        $payout_id = (int)$payout_id;
+        $asm_id = (int)$asm_id;
+        
+        // 1. Get Master Payout Data 
+        // (This now includes the frozen 'commission_rate' saved during payout creation)
+        $stmt = $this->con->prepare("
+            SELECT cp.*, DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') as payout_date
+            FROM commission_payouts cp
+            INNER JOIN admins a ON a.admin_id = cp.hq_id
+            WHERE cp.payout_id = ? AND a.admin_id = ? AND cp.commission_type = 'ASM'
+        ");
+        $stmt->bind_param("ii", $payout_id, $asm_id);
+        $stmt->execute();
+        $master = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$master) return false;
+
+        $data = ['payout' => $master, 'bills' => [], 'adjustments' => []];
+
+        // Extract the locked-in historical rate (Fallback to 0 if missing for old records)
+        $historical_rate = isset($master['commission_rate']) ? (float)$master['commission_rate'] : 0.00;
+
+        // 2. Get Linked Bills & calculate PTS using the HISTORICAL rate
+        // (Removed the JOIN to admins since we no longer want the live rate)
+        $sql = "
+            SELECT si.inward_no, DATE_FORMAT(si.created_at, '%d %b %Y') as bill_date, 
+                   s.stockist_name, si.sub_total as taxable_amount,
+                   ? as pts,
+                   ROUND((si.sub_total * (? / 100)), 2) as commission_amount
+            FROM stock_inward si
+            INNER JOIN stockists s ON si.stockist_id = s.stockist_id
+            INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
+            WHERE si.commission_asm_payout_id = ?
+        ";
+        
+        $stmt_bills = $this->con->prepare($sql);
+        
+        // Bind the historical rate twice (once for display 'pts', once for math), then the ID
+        $stmt_bills->bind_param("ddi", $historical_rate, $historical_rate, $payout_id);
+        
+        $stmt_bills->execute();
+        $res_bills = $stmt_bills->get_result();
+        
+        $bill_total = 0;
+        while($row = $res_bills->fetch_assoc()) {
+            $data['bills'][] = $row;
+            $bill_total += (float)$row['commission_amount'];
+        }
+        $data['payout']['bill_total'] = $bill_total;
+        $stmt_bills->close();
+
+        // 3. Get Adjustments
+        $stmt_adj = $this->con->prepare("
+            SELECT description, adj_type, amount
+            FROM commission_adjustments
+            WHERE payout_id = ?
+        ");
+        $stmt_adj->bind_param("i", $payout_id);
+        $stmt_adj->execute();
+        $res_adj = $stmt_adj->get_result();
+        
+        $adj_total = 0;
+        while($row = $res_adj->fetch_assoc()) {
+            $data['adjustments'][] = $row;
+            if ($row['adj_type'] === '+') {
+                $adj_total += (float)$row['amount'];
+            } else {
+                $adj_total -= (float)$row['amount'];
+            }
+        }
+        $data['payout']['adj_total'] = $adj_total;
+        $stmt_adj->close();
+
+        return $data;
+    }
+
 }
 ?>

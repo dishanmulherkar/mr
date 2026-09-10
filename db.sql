@@ -464,3 +464,27 @@ ALTER TABLE stock_inward MODIFY asm_com TINYINT(1) NOT NULL DEFAULT 0;
 
 ------ 08-09-26 -----
 ALTER TABLE stock_inward ADD COLUMN commission_drc_payout_id INT NULL;
+
+
+
+-- 09-09-26 
+
+ALTER TABLE payment_ledgers 
+ADD COLUMN user_id INT NOT NULL DEFAULT 0 AFTER id;
+
+
+ALTER TABLE stock_inward ADD COLUMN commission_asm_payout_id INT NULL;
+
+ALTER TABLE commission_payouts 
+ADD COLUMN commission_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00 AFTER total_payout;
+
+UPDATE commission_payouts 
+SET commission_rate = 20.00
+WHERE commission_type = 'DRC' AND commission_rate = 0.00;
+
+UPDATE commission_payouts cp
+INNER JOIN mr_users m ON cp.hq_id = m.hq_id
+SET cp.commission_rate = m.commission_rate
+WHERE cp.commission_type = 'MRC' 
+AND cp.commission_rate = 0.00
+AND m.status = '1';
