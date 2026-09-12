@@ -289,7 +289,9 @@ include 'view/layout/header.php';
                                     </div>
                                 <div class="col-md-3">
                                     <label class="form-label fw-bold small">Credit Days</label>
-                                    <input type="number" name="credit_days" class="form-control" value="<?= $ROW['credit_days'] ?? ''; ?>" placeholder="0" min="0">
+                                    <input type="number" name="credit_days" class="form-control" 
+                                        value="<?= (!empty($ROW['credit_days'])) ? $ROW['credit_days'] : ($ROW['stockist_credit_days'] ?? '0'); ?>" 
+                                        placeholder="0" min="0">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label fw-bold small">Add Discount (₹)</label>

@@ -159,7 +159,7 @@ table { border-collapse: collapse; width: 100%; }
 ">
     <tr>
         <td style="width: 33.33%; padding: 2px; text-align: left;"></td>
-        <td style="width: 33.33%; padding: 2px; text-align: center;">TAX INVOICE</td>
+        <td style="width: 33.33%; padding: 2px; text-align: center;">PROFORMA INVOICE</td>
         <td style="width: 33.33%; padding: 2px; text-align: right;">Original / Duplicate / Triplicate</td>
     </tr>
 </table>

@@ -78,7 +78,7 @@ include 'view/layout/header.php';
                     </div>
                     <div class="form-field"><label>Customer Type</label>
 
-                       <select name="customer_type" required>
+                       <select name="customer_type" id="customer_type" required>
                             <option value="Doctor"
                                 <?= (($customer['customer_type'] ?? '') == 'Doctor') ? 'selected' : ''; ?>>
                                 Doctor
@@ -92,11 +92,28 @@ include 'view/layout/header.php';
                     </div>
                 </div>
 
-                <div class="form-grid-3">
-                    <div class="form-field"><label>Qualification</label><input type="text" name="qualification" value="<?= htmlspecialchars($customer['qualification'] ?? '') ?>" placeholder="Enter Qualification" required /></div>
-                    <div class="form-field"><label>Mobile Number</label><input type="tel" name="mobile" value="<?= htmlspecialchars($customer['mobile'] ?? '') ?>" placeholder="Enter Mobile Number"  maxlength="10"
-           pattern="[6-9]{1}[0-9]{9}" required /></div>
-                    <div class="form-field"><label>Email</label><input type="email" name="email" value="<?= htmlspecialchars($customer['email'] ?? '') ?>" placeholder="Enter Email Address"/></div>
+               <div class="form-grid-3">
+                    <!-- Qualification Field (Shows for Doctor) -->
+                    <div class="form-field" id="qualification_div">
+                        <label>Qualification</label>
+                        <input type="text" id="qualification" name="qualification" value="<?= htmlspecialchars($customer['qualification'] ?? '') ?>" placeholder="Enter Qualification"  />
+                    </div>
+
+                    <!-- GST No Field (Shows for Chemist) -->
+                    <div class="form-field" id="gst_no_div" style="display: none;">
+                        <label>GST No</label>
+                        <input type="text" id="gst_no" name="gst_no" value="<?= htmlspecialchars($customer['gst_no'] ?? '') ?>" placeholder="Enter GST No" />
+                    </div>
+
+                    <div class="form-field">
+                        <label>Mobile Number</label>
+                        <input type="tel" name="mobile" value="<?= htmlspecialchars($customer['mobile'] ?? '') ?>" placeholder="Enter Mobile Number" maxlength="10" pattern="[6-9]{1}[0-9]{9}" required />
+                    </div>
+                    
+                    <div class="form-field">
+                        <label>Email</label>
+                        <input type="email" name="email" value="<?= htmlspecialchars($customer['email'] ?? '') ?>" placeholder="Enter Email Address"/>
+                    </div>
                 </div>
 
                 <div class="form-grid-3">
@@ -207,6 +224,31 @@ if (customerImg) {
 }
   // State → District AJAX (same as stockist)
     $(document).ready(function(){
+
+        function handleCustomerType() {
+        var type = $('#customer_type').val();
+        
+        if (type === 'Chemist') {
+            $('#qualification_div').hide();
+            $('#qualification').removeAttr('required');
+            
+            $('#gst_no_div').show();
+            $('#gst_no').attr('required', 'required');
+        } else {
+            $('#gst_no_div').hide();
+            $('#gst_no').removeAttr('required');
+            
+            $('#qualification_div').show();
+            $('#qualification').attr('required', 'required');
+        }
+    }
+
+    // Trigger on change
+    $('#customer_type').on('change', handleCustomerType);
+
+    // Trigger on page load (for edit mode)
+    handleCustomerType();
+
         function loadDistrict(state_id, district = '')
     {
         $.ajax({

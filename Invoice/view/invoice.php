@@ -91,7 +91,7 @@ foreach ($items as $item) {
 // CORRECTED: Total of all discounts
 $totalLineItemDiscount = $trueItemDiscount;
 $totalCdDiscount = $trueCdDiscount;
-$totalAllDiscounts = $trueItemDiscount + $trueCdDiscount + $additionalDiscount;
+$totalAllDiscounts = $trueItemDiscount + $trueCdDiscount ;
 
 $netAmountRounded = round($dbGrandTotal);
 $roundOff = ($invoice['round_off'] ?? 0);
@@ -486,18 +486,12 @@ table { border-collapse: collapse; width: 100%; }
                     </tr>
                     <?php endif; ?>
                     
-                    <!-- Additional Discount (Invoice Level) -->
-                    <?php if ($additionalDiscount > 0): ?>
-                    <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add.Discount</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">-<?= number_format($additionalDiscount, 2) ?></td>
-                    </tr>
-                    <?php endif; ?>
+                   
                     
                     <!-- Subtotal After All Discounts -->
                     <?php if ($totalAllDiscounts > 0): ?>
                     <tr style="border-top: 1px solid #000; font-weight: bold;">
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Subtotal</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Taxable Amount</td>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= number_format($trueGrossAmount - $totalAllDiscounts, 2) ?></td>
                     </tr>
                     <?php else: ?>
@@ -545,6 +539,14 @@ table { border-collapse: collapse; width: 100%; }
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Credit Note</td>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">- 0.00</td>
                     </tr> -->
+
+                     <!-- Additional Discount (Invoice Level) -->
+                    <?php if ($additionalDiscount > 0): ?>
+                    <tr>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Add.Discount</td>
+                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">-<?= number_format($additionalDiscount, 2) ?></td>
+                    </tr>
+                    <?php endif; ?>
                     <tr>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Round Off</td>
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= $roundOff > 0 ? '+' : '' ?> <?= number_format($roundOff, 2) ?></td>

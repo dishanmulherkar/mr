@@ -136,12 +136,11 @@ class CustomerModel
         return mysqli_num_rows($check) > 0;
     }
 
-    public function insert($data, $image_name)
+   public function insert($data, $image_name)
     {
-         $admin_id = isset($_SESSION['admin_id']) ? intval($_SESSION['admin_id']) : "NULL";
+        $admin_id = isset($_SESSION['admin_id']) ? intval($_SESSION['admin_id']) : "NULL";
         $customer_name = mysqli_real_escape_string($this->con, $data['customer_name']);
         $customer_type = mysqli_real_escape_string($this->con, $data['customer_type']);
-        $qualification = mysqli_real_escape_string($this->con, $data['qualification']);
         $mobile        = mysqli_real_escape_string($this->con, $data['mobile']);
         $email         = mysqli_real_escape_string($this->con, $data['email']);
         $address       = mysqli_real_escape_string($this->con, $data['address']);
@@ -152,12 +151,16 @@ class CustomerModel
         $status        = intval($data['status']);
         $created_by    = "mr";
 
+        // Assign Qualification or GST No based on type
+        $qualification = ($customer_type == 'Doctor') ? mysqli_real_escape_string($this->con, $data['qualification']) : '';
+        $gst_no        = ($customer_type == 'Chemist') ? mysqli_real_escape_string($this->con, $data['gst_no']) : '';
+
         return mysqli_query(
             $this->con,
             "INSERT INTO customers
-            (admin_id,customer_name, customer_type, qualification, customer_img, mobile, email, address, district, state, hq_id, pincode, status, created_by)
+            (admin_id, customer_name, customer_type, qualification, gst_no, customer_img, mobile, email, address, district, state, hq_id, pincode, status, created_by)
             VALUES
-            ('$admin_id','$customer_name','$customer_type','$qualification','$image_name','$mobile','$email','$address','$district','$state','$hq_id','$pincode','$status','$created_by')"
+            ('$admin_id','$customer_name','$customer_type','$qualification','$gst_no','$image_name','$mobile','$email','$address','$district','$state','$hq_id','$pincode','$status','$created_by')"
         );
     }
 
@@ -165,7 +168,6 @@ class CustomerModel
     {
         $customer_name = mysqli_real_escape_string($this->con, $data['customer_name']);
         $customer_type = mysqli_real_escape_string($this->con, $data['customer_type']);
-        $qualification = mysqli_real_escape_string($this->con, $data['qualification']);
         $mobile        = mysqli_real_escape_string($this->con, $data['mobile']);
         $email         = mysqli_real_escape_string($this->con, $data['email']);
         $address       = mysqli_real_escape_string($this->con, $data['address']);
@@ -173,8 +175,12 @@ class CustomerModel
         $state         = mysqli_real_escape_string($this->con, $data['state']);
         $hq_id         = intval($data['hq_id']);
         $pincode       = mysqli_real_escape_string($this->con, $data['pincode']);
-         $status        = intval($data['status']);
+        $status        = intval($data['status']);
         $created_by    = "mr";
+
+        // Assign Qualification or GST No based on type
+        $qualification = ($customer_type == 'Doctor') ? mysqli_real_escape_string($this->con, $data['qualification']) : '';
+        $gst_no        = ($customer_type == 'Chemist') ? mysqli_real_escape_string($this->con, $data['gst_no']) : '';
 
         return mysqli_query(
             $this->con,
@@ -182,6 +188,7 @@ class CustomerModel
                 customer_name  = '$customer_name',
                 customer_type  = '$customer_type',
                 qualification  = '$qualification',
+                gst_no         = '$gst_no',
                 customer_img   = '$image_name',
                 mobile         = '$mobile',
                 email          = '$email',

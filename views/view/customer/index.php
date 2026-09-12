@@ -239,7 +239,7 @@ include 'view/layout/header.php';
             </div>
             <div class="detail-modal-body" id="detailModalBody">
               <p><span>Name</span><input type="text" id="detailName" class="detail-input" disabled></p>
-              <p><span>Qualification</span> <input type="text" id="detailQualification" class="detail-input" disabled></p>
+              <!-- <p><span>Qualification</span> <input type="text" id="detailQualification" class="detail-input" disabled></p> -->
               <p><span>Mobile</span><input type="tel" id="detailMobile" class="detail-input" disabled></p>
                <p><span>Address</span>
                    <div id="detailAddress" class="detail-address"></div>

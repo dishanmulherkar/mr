@@ -118,7 +118,7 @@ class orderentry_mdl
         $order_id = (int)$order_id;
         $mr_id    = (int)$mr_id;
 
-        $stmt = $this->con->prepare("SELECT o.*, s.stockist_name,si.inward_no FROM orders o 
+        $stmt = $this->con->prepare("SELECT o.*, s.stockist_name,si.inward_no,si.inward_date FROM orders o 
                                         LEFT JOIN `stock_inward` si ON si.order_id = o.order_id
                                         LEFT JOIN stockists s ON o.stockist_id = s.stockist_id
                                          WHERE o.order_id = ? AND o.mr_id = ?");

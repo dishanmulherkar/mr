@@ -495,3 +495,12 @@ AND m.status = '1';
 ALTER TABLE `orders`    --- added  ---
 ADD `dispatch_date` DATE NULL DEFAULT NULL 
 AFTER `order_date`;
+
+
+-- 12-09-26  
+ALTER TABLE customers 
+ADD COLUMN gst_no VARCHAR(15) DEFAULT NULL AFTER qualification;
+
+ALTER TABLE stockists 
+ADD COLUMN credit_days INT(11) DEFAULT 0 AFTER `number`; 
+/* You can change 'AFTER mobile' to place it after any column you prefer */

@@ -61,6 +61,7 @@ class AddCustomerController
         $data['state']           = (int)$_POST['state'];
         $data['district']        = trim($_POST['district']);
         $data['pincode']         = trim($_POST['pincode']);
+        $data['gst_no']         = trim($_POST['gst_no']);
 
         $image = "";
 
@@ -146,6 +147,7 @@ class AddCustomerController
         $data['state']         = (int)$_POST['state'];
         $data['district']      = trim($_POST['district']);
         $data['pincode']       = trim($_POST['pincode']);
+        $data['gst_no']         = trim($_POST['gst_no']);
 
         $data['customer_img'] = "";
 

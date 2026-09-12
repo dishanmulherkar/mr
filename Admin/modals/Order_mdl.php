@@ -149,6 +149,7 @@ class OrderModel
                 si.other_charges,
                 si.remarks,
                 s.transport AS stockist_transport,
+                s.credit_days AS stockist_credit_days,
                 s.dispatch_to AS stockist_dispatch_to,
                 ss.state as super_stockist_state,
                 s.state as stockist_state

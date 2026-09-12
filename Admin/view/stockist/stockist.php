@@ -249,7 +249,7 @@ include 'view/layout/header.php';
                                         </div>
 
                                     <!-- Dispatch To -->
-                                    <div class="col-lg-4">
+                                    <div class="col-lg-3">
                                         <div class="form-group">
                                             <label>Dispatch To</label>
                                             <input type="text" name="dispatch_to" class="form-control"
@@ -259,7 +259,7 @@ include 'view/layout/header.php';
                                     </div>
 
                                     <!-- Transport -->
-                                    <div class="col-lg-4">
+                                    <div class="col-lg-3">
                                         <div class="form-group">
                                             <label>Transport</label>
                                             <input type="text" name="transport" class="form-control"
@@ -267,6 +267,8 @@ include 'view/layout/header.php';
                                                 value="<?php echo isset($ROW['transport']) ? htmlspecialchars($ROW['transport']) : ''; ?>">
                                         </div>
                                     </div>
+
+                                    
 
                                
 
@@ -277,6 +279,16 @@ include 'view/layout/header.php';
                                         <select name="hq_id" id="hq_id" class="form-control select2" required>
                                             <option value="">Select Head Quarter</option>
                                             </select>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3">
+                                    <div class="form-group">
+                                        <label>Credit Days</label>
+                                        <input type="number" name="credit_days" class="form-control"
+                                            placeholder="Enter Credit Days"
+                                            value="<?php echo isset($ROW['credit_days']) ? htmlspecialchars($ROW['credit_days']) : '0'; ?>"
+                                            min="0">
                                     </div>
                                 </div>
 

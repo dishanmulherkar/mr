@@ -141,37 +141,36 @@ class StockistModel
         ");
     }
 
-    public function insert($data, $image)
+  public function insert($data, $image)
     {
         $hq_id = intval($data['hq_id']);
-         $admin_id = (int)$_SESSION['admin_id'];
+        $admin_id = (int)$_SESSION['admin_id'];
+        $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
 
-           $result = mysqli_query($this->con, "
-        SELECT ss.state
-        FROM headquarter h
-        INNER JOIN super_stockist ss
-            ON h.super_stockist_id = ss.super_stockist_id
-        WHERE h.headquarter_id = '$hq_id'
-        LIMIT 1
-    ");
+        $result = mysqli_query($this->con, "
+            SELECT ss.state
+            FROM headquarter h
+            INNER JOIN super_stockist ss
+                ON h.super_stockist_id = ss.super_stockist_id
+            WHERE h.headquarter_id = '$hq_id'
+            LIMIT 1
+        ");
 
-    $super_state = '';
-    if ($result && mysqli_num_rows($result) > 0) {
-        $row = mysqli_fetch_assoc($result);
-        $super_state = $this->getStateById($row['state'] ?? '');
-    }
+        $super_state = '';
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            $super_state = $this->getStateById($row['state'] ?? '');
+        }
 
+        $stockist_state = $this->getStateById($data['state']);
 
-           $stockist_state = $this->getStateById($data['state']);
-
-
-            if ($stockist_state == 'Nepal') {
-                $gst_type = 'VAT';
-            } elseif ($super_state == $stockist_state) {
-                $gst_type = 'CGST_SGST';
-            } else {
-                $gst_type = 'IGST';
-            }
+        if ($stockist_state == 'Nepal') {
+            $gst_type = 'VAT';
+        } elseif ($super_state == $stockist_state) {
+            $gst_type = 'CGST_SGST';
+        } else {
+            $gst_type = 'IGST';
+        }
 
         return mysqli_query($this->con, "
             INSERT INTO stockists
@@ -191,7 +190,8 @@ class StockistModel
                 stockist_image,
                 admin_id,
                 pan_no,
-                dl_no
+                dl_no,
+                credit_days
             )
             VALUES
             (
@@ -210,49 +210,43 @@ class StockistModel
                 '$image',
                 '$admin_id',
                 '".$data['pan_no']."',
-                '".$data['dl_no']."'
-
+                '".$data['dl_no']."',
+                '$credit_days'
             )
         ");
     }
 
     public function update($id, $data, $image)
     {
+        $admin_id = (int)$_SESSION['admin_id'];
+        $hq_id = (int)$data['hq_id'];
+        $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
 
-    $admin_id = (int)$_SESSION['admin_id'];
-    $hq_id = (int)$data['hq_id'];
+        $result = mysqli_query($this->con, "
+            SELECT ss.state
+            FROM headquarter h
+            INNER JOIN super_stockist ss
+                ON h.super_stockist_id = ss.super_stockist_id
+            WHERE h.headquarter_id = '$hq_id'
+            LIMIT 1
+        ");
 
-    $result = mysqli_query($this->con, "
-        SELECT ss.state
-        FROM headquarter h
-        INNER JOIN super_stockist ss
-            ON h.super_stockist_id = ss.super_stockist_id
-        WHERE h.headquarter_id = '$hq_id'
-        LIMIT 1
-    ");
+        $super_state = '';
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            $super_state = $this->getStateById($row['state'] ?? '');
+        }
 
-    $super_state = '';
-    if ($result && mysqli_num_rows($result) > 0) {
-        $row = mysqli_fetch_assoc($result);
-        $super_state = $this->getStateById($row['state'] ?? '');
-    }
+        $stockist_state = $this->getStateById($data['state']);
 
+        if ($stockist_state == 'Nepal' AND $super_state == 'Nepal') {
+            $gst_type = 'VAT';
+        } elseif ($super_state == $stockist_state) {
+            $gst_type = 'CGST_SGST';
+        } else {
+            $gst_type = 'IGST';
+        }
 
-    $stockist_state = $this->getStateById($data['state']);
-
-    // echo "<pre>";
-    // print_r("Super State: " . $super_state);
-    // print_r("\nStockist State: " . $stockist_state);
-    // echo "</pre>";
-    // exit;
-
-            if ($stockist_state == 'Nepal' AND $super_state == 'Nepal') {
-                $gst_type = 'VAT';
-            } elseif ($super_state == $stockist_state) {
-                $gst_type = 'CGST_SGST';
-            } else {
-                $gst_type = 'IGST';
-            }
         return mysqli_query($this->con, "
             UPDATE stockists SET
                 stockist_name='".$data['stockist_name']."',
@@ -269,8 +263,9 @@ class StockistModel
                 admin_id='$admin_id',
                 address='".$data['address']."',
                 stockist_image='$image',
-                 pan_no ='".$data['pan_no']."',
-                dl_no = '".$data['dl_no']."'
+                pan_no ='".$data['pan_no']."',
+                dl_no = '".$data['dl_no']."',
+                credit_days = '$credit_days'
             WHERE stockist_id='$id'
         ");
     }

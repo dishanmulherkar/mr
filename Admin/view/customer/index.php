@@ -123,7 +123,7 @@ include 'view/layout/header.php';
             <div class="col-lg-3">
                 <div class="form-group">
                     <label>Customer Type</label>
-                    <select name="customer_type" class="form-control" required>
+                    <select name="customer_type" id="customer_type" class="form-control" required>
                         <option value="">Select Type</option>
                         <option value="Doctor"  <?php if(isset($ROW['customer_type']) && $ROW['customer_type'] == 'Doctor')  echo 'selected'; ?>>Doctor</option>
                         <option value="Chemist" <?php if(isset($ROW['customer_type']) && $ROW['customer_type'] == 'Chemist') echo 'selected'; ?>>Chemist</option>
@@ -142,12 +142,23 @@ include 'view/layout/header.php';
                 </div>
             </div>
 
-            <div class="col-lg-6">
+            <!-- Qualification Field (Shows for Doctor) -->
+            <div class="col-lg-6" id="qualification_div">
                 <div class="form-group">
                     <label>Qualification</label>
-                    <input type="text" name="qualification" class="form-control"
+                    <input type="text" id="qualification" name="qualification" class="form-control"
                         placeholder="Enter Qualification"
                         value="<?php echo isset($ROW['qualification']) ? htmlspecialchars($ROW['qualification']) : ''; ?>">
+                </div>
+            </div>
+
+            <!-- GST No Field (Shows for Chemist) -->
+            <div class="col-lg-6" id="gst_no_div" style="display: none;">
+                <div class="form-group">
+                    <label>GST No</label>
+                    <input type="text" id="gst_no" name="gst_no" class="form-control"
+                        placeholder="Enter GST No"
+                        value="<?php echo isset($ROW['gst_no']) ? htmlspecialchars($ROW['gst_no']) : ''; ?>">
                 </div>
             </div>
 
@@ -359,41 +370,41 @@ include 'view/layout/header.php';
 // 3. Include the bottom layout and scripts
 include 'view/layout/footer.php'; 
 ?>
-                <script>
+             <script>
     function openImage(src)
-{
-    document.getElementById('imageModal').style.display = 'block';
-    document.getElementById('modalImg').src = src;
-}
-
-document.querySelector('.close-modal').onclick = function()
-{
-    document.getElementById('imageModal').style.display = 'none';
-};
-
-document.getElementById('imageModal').onclick = function(e)
-{
-    if(e.target === this)
     {
-        this.style.display = 'none';
+        document.getElementById('imageModal').style.display = 'block';
+        document.getElementById('modalImg').src = src;
     }
-};
 
-$('#customerTable').DataTable({
-    dom: 'Bfrtip',
-    buttons: [{
-        extend: 'excelHtml5',
-        exportOptions: {
-            columns: [0,1,2,3,4,5,6,7,8,9,10,11]
-        }
-    }],
-    columnDefs: [
+    document.querySelector('.close-modal').onclick = function()
+    {
+        document.getElementById('imageModal').style.display = 'none';
+    };
+
+    document.getElementById('imageModal').onclick = function(e)
+    {
+        if(e.target === this)
         {
-            targets: [5,10], // Email and Address
-            visible: false
+            this.style.display = 'none';
         }
-    ]
-});
+    };
+
+    $('#customerTable').DataTable({
+        dom: 'Bfrtip',
+        buttons: [{
+            extend: 'excelHtml5',
+            exportOptions: {
+                columns: [0,1,2,3,4,5,6,7,8,9,10,11]
+            }
+        }],
+        columnDefs: [
+            {
+                targets: [5,10], // Email and Address
+                visible: false
+            }
+        ]
+    });
 
     // Auto-hide alerts after 5 seconds
     setTimeout(function(){
@@ -402,105 +413,127 @@ $('#customerTable').DataTable({
         });
     }, 5000);
 
-    // State → District AJAX (same as stockist)
-// State → District AJAX
-$(document).ready(function(){
+    // Live image preview
+    function previewImage(input) {
+        const preview = document.getElementById('imgPreview');
 
-    // 1. Function to Load Districts
-   // 1. Function to Load Districts
-    function loadDistrict(state_id, district_id = '') {
-        $.ajax({
-            url: '<?= BASE_URL ?>district/getDistricts',
-            type: 'POST',
-            data: { state_id: state_id, selected_district: district_id },
-            success: function(response) {
-                // STEP 1: Destroy Select2 FIRST (if it exists)
-                if ($('#district').hasClass('select2-hidden-accessible')) {
-                    $('#district').select2('destroy');
-                }
-                
-                // STEP 2: Update the HTML SECOND
-                $('#district').html(response);
-                
-                // STEP 3: Re-initialize THIRD
-                $('#district').select2({ theme: 'bootstrap-5' });
-            }
-        });
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+
+            reader.readAsDataURL(input.files[0]);
+        }
     }
 
-    // 2. Function to Load Head Quarters
-    function loadHQ(state_id, hq_id = '') {
-        console.log("Loading HQ for State ID: " + state_id);
+    // ==========================================
+    // ALL $(document).ready() LOGIC GOES HERE
+    // ==========================================
+    $(document).ready(function(){
 
-        if (!state_id) {
-            console.error("Error: state_id is empty!");
-            return; 
+        // --- 1. Customer Type Toggle Logic ---
+        function handleCustomerType() {
+            var type = $('#customer_type').val();
+            
+            if (type === 'Chemist') {
+                $('#qualification_div').hide();
+                $('#qualification').removeAttr('required');
+                
+                $('#gst_no_div').show();
+                $('#gst_no').attr('required', 'required');
+            } else {
+                $('#gst_no_div').hide();
+                $('#gst_no').removeAttr('required');
+                
+                $('#qualification_div').show();
+                $('#qualification').attr('required', 'required');
+            }
         }
 
-        $.ajax({
-            url: '<?= BASE_URL ?>customer/getHQs', 
-            type: 'POST',
-            data: { state_id: state_id, selected_id: hq_id },
-            success: function(response) {
-                // STEP 1: Destroy Select2 FIRST
-                if ($('#hq_id').hasClass('select2-hidden-accessible')) {
-                    $('#hq_id').select2('destroy');
+        // Trigger on change
+        $('#customer_type').on('change', handleCustomerType);
+
+        // Trigger on page load (for edit mode)
+        handleCustomerType();
+
+
+        // --- 2. State → District AJAX ---
+        function loadDistrict(state_id, district_id = '') {
+            $.ajax({
+                url: '<?= BASE_URL ?>district/getDistricts',
+                type: 'POST',
+                data: { state_id: state_id, selected_district: district_id },
+                success: function(response) {
+                    // Destroy Select2 FIRST (if it exists)
+                    if ($('#district').hasClass('select2-hidden-accessible')) {
+                        $('#district').select2('destroy');
+                    }
+                    
+                    // Update the HTML SECOND
+                    $('#district').html(response);
+                    
+                    // Re-initialize THIRD
+                    $('#district').select2({ theme: 'bootstrap-5' });
                 }
-                
-                // STEP 2: Update the HTML SECOND
-                $('#hq_id').html(response);
-                
-                // STEP 3: Re-initialize THIRD
-                $('#hq_id').select2({ theme: 'bootstrap-5' });
-            },
-            error: function(xhr, status, error) {
-                console.error("AJAX Error:", error);
+            });
+        }
+
+        // --- 3. State → Head Quarters AJAX ---
+        function loadHQ(state_id, hq_id = '') {
+            console.log("Loading HQ for State ID: " + state_id);
+
+            if (!state_id) {
+                console.error("Error: state_id is empty!");
+                return; 
             }
+
+            $.ajax({
+                url: '<?= BASE_URL ?>customer/getHQs', 
+                type: 'POST',
+                data: { state_id: state_id, selected_id: hq_id },
+                success: function(response) {
+                    // Destroy Select2 FIRST
+                    if ($('#hq_id').hasClass('select2-hidden-accessible')) {
+                        $('#hq_id').select2('destroy');
+                    }
+                    
+                    // Update the HTML SECOND
+                    $('#hq_id').html(response);
+                    
+                    // Re-initialize THIRD
+                    $('#hq_id').select2({ theme: 'bootstrap-5' });
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX Error:", error);
+                }
+            });
+        }
+
+        // --- 4. Trigger both on State change ---
+        $('#state_id').change(function(){
+            var state_id = $(this).val();
+            loadDistrict(state_id);
+            loadHQ(state_id);
         });
-    }
-    // 3. Trigger both on State change
-    $('#state_id').change(function(){
-        var state_id = $(this).val();
-        loadDistrict(state_id);
-        loadHQ(state_id);
+
+        // --- 5. Edit mode logic ---
+        var state_id = $('#state_id').val();
+        
+        // PHP variables from the server
+        var district = "<?= isset($ROW['district']) ? $ROW['district'] : '' ?>";
+        var hq_id    = "<?= isset($ROW['hq_id']) ? $ROW['hq_id'] : '' ?>";
+        
+        if(state_id != '') {
+            loadDistrict(state_id, district);
+            loadHQ(state_id, hq_id);
+        }
+        
+        // Initialize Select2 on page load for any already-populated dropdowns
+        $('.select2').select2({ theme: 'bootstrap-5' });
+
     });
-
-    // 4. Edit mode: Trigger only if state is already set
-    var state_id = $('#state_id').val();
-    
-    // PHP variables from the server
-    var district = "<?= isset($ROW['district']) ? $ROW['district'] : '' ?>";
-    var hq_id    = "<?= isset($ROW['hq_id']) ? $ROW['hq_id'] : '' ?>";
-    
-    if(state_id != '') {
-        loadDistrict(state_id, district);
-        loadHQ(state_id, hq_id);
-    }
-    
-    // Initialize Select2 on page load for any already-populated dropdowns
-    $('.select2').select2({ theme: 'bootstrap-5' });
-});
-
-
-      // Live image preview
-  function previewImage(input) {
-    const preview = document.getElementById('imgPreview');
-
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-
-        reader.onload = function(e) {
-            preview.src = e.target.result;
-            preview.style.display = 'block';
-        };
-
-        reader.readAsDataURL(input.files[0]);
-    }
-}
-
-
-
-    
-
 </script>
 

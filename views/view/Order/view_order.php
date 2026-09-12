@@ -56,7 +56,8 @@ if (!$order_data) {
     <div class="summary-card d-flex justify-content-between">
         <div>
             <strong>Stockist:</strong> <?= htmlspecialchars($order_data['stockist_name'] ?? 'N/A') ?><br>
-            <strong>Order Date:</strong> <?= date('d M Y', strtotime($order_data['order_date'])) ?>
+         <strong>Order Date:</strong> <?= date('d/n/y', strtotime($order_data['order_date'])) ?> <br>
+<strong>Inv Date:</strong> <?= !empty($order_data['inward_date']) ? date('d/n/y', strtotime($order_data['inward_date'])) : 'N/A' ?>
         </div>
         <div style="text-align: right;">
             <strong>Status:</strong> 

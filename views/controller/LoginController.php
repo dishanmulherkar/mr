@@ -68,7 +68,7 @@ class LoginController
         {
             echo json_encode([
                 'status'=>'error',
-                'message'=>'Invalid Email or Password'
+                'message'=>'Invalid User ID or Password'
             ]);
         }
     }

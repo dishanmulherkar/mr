@@ -51,7 +51,7 @@ private $db;
     return mysqli_fetch_assoc($query);
 }
 
-    public function store($data)
+   public function store($data)
     {
         $stmt = mysqli_prepare($this->db, "
             INSERT INTO customers
@@ -59,6 +59,7 @@ private $db;
                 customer_name,
                 customer_type,
                 qualification,
+                gst_no,
                 mobile,
                 email,
                 address,
@@ -69,15 +70,21 @@ private $db;
                 hq_id
             )
             VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
+
+        // Note: 's' added for gst_no, total params now 12 (ssssssssissi)
+        // Set variables based on customer type to prevent inserting hidden required fields
+        $qualification = ($data['customer_type'] == 'Doctor') ? $data['qualification'] : null;
+        $gst_no = ($data['customer_type'] == 'Chemist') ? $data['gst_no'] : null;
 
         mysqli_stmt_bind_param(
             $stmt,
-            "sssssssissi",
+            "ssssssssissi", 
             $data['customer_name'],
             $data['customer_type'],
-            $data['qualification'],
+            $qualification,
+            $gst_no,
             $data['mobile'],
             $data['email'],
             $data['address'],
@@ -97,19 +104,23 @@ private $db;
 
         $customer_name = mysqli_real_escape_string($this->db,$data['customer_name']);
         $customer_type = mysqli_real_escape_string($this->db,$data['customer_type']);
-        $qualification = mysqli_real_escape_string($this->db,$data['qualification']);
         $mobile        = mysqli_real_escape_string($this->db,$data['mobile']);
         $email         = mysqli_real_escape_string($this->db,$data['email']);
         $address       = mysqli_real_escape_string($this->db,$data['address']);
         $state         = (int)$data['state'];
-        $district      = $data['district'];
+        $district      = mysqli_real_escape_string($this->db,$data['district']);
         $pincode       = mysqli_real_escape_string($this->db,$data['pincode']);
+        
+        // Nullify appropriate fields based on selection
+        $qualification = ($customer_type == 'Doctor') ? mysqli_real_escape_string($this->db,$data['qualification']) : '';
+        $gst_no        = ($customer_type == 'Chemist') ? mysqli_real_escape_string($this->db,$data['gst_no']) : '';
 
         $sql = "
-            UPDATE customers SET
+            UPDATE customers SET 
                 customer_name='$customer_name',
                 customer_type='$customer_type',
                 qualification='$qualification',
+                gst_no='$gst_no',
                 mobile='$mobile',
                 email='$email',
                 address='$address',
@@ -121,7 +132,6 @@ private $db;
         if(!empty($data['customer_img']))
         {
             $customer_img = mysqli_real_escape_string($this->db,$data['customer_img']);
-
             $sql .= ", customer_img='$customer_img'";
         }
 
@@ -129,6 +139,5 @@ private $db;
 
         return mysqli_query($this->db,$sql);
     }
-
 }
 ?>

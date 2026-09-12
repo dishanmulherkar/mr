@@ -53,7 +53,7 @@ class payment_ledger_mdl
     }
 
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
-    public function getReport($stockist_id, $from_date, $to_date)
+   public function getReport($stockist_id, $from_date, $to_date)
     {
         $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id ,pd.payment_method ,b.bank_name
                 FROM payment_ledgers pl 
@@ -62,7 +62,7 @@ class payment_ledger_mdl
                 LEFT JOIN banks b ON b.bank_id = pd.bank_id
                 WHERE pl.stockist_id = '$stockist_id' 
                 AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill')
+                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
                 AND DATE(pl.created_at) >= '$from_date' 
                 AND DATE(pl.created_at) <= '$to_date'
                 ORDER BY pl.created_at ASC, pl.id ASC";
@@ -75,11 +75,11 @@ class payment_ledger_mdl
     {
         $sql = "SELECT 
                     SUM(CASE WHEN transaction_type = 'bill_added' THEN amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END) as total_dec
+                    SUM(CASE WHEN transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill') THEN amount ELSE 0 END) as total_dec
                 FROM payment_ledgers 
                 WHERE stockist_id = '$stockist_id' 
                 AND ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill')
+                AND transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
                 AND DATE(created_at) < '$from_date'";
         
         $res = mysqli_query($this->con, $sql);
