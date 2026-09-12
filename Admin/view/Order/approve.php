@@ -292,7 +292,7 @@ include 'view/layout/header.php';
                                     <input type="number" name="credit_days" class="form-control" value="<?= $ROW['credit_days'] ?? ''; ?>" placeholder="0" min="0">
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label fw-bold small">Header Discount (₹)</label>
+                                    <label class="form-label fw-bold small">Add Discount (₹)</label>
                                     <input type="number" step="0.01" id="discount" name="header_discount" class="form-control" value="<?= $ROW['header_discount'] ?? ''; ?>" placeholder="0.00" min="0">
                                 </div>
                                 <div class="col-md-3">
@@ -304,8 +304,8 @@ include 'view/layout/header.php';
                                             $saved_amt = ($raw_charges != 0) ? abs($raw_charges) : '';
                                         ?>
                                         <select id="other_charges_sign" name="other_charges_sign" class="form-select form-select-sm" style="max-width: 60px;">
-                                            <!-- <option value="+" <?= $saved_sign === '+' ? 'selected' : '' ?>>+</option> -->
-                                            <option value="-" <?= $saved_sign === '-' ? 'selected' : '' ?>>-</option>
+                                            <option value="+" <?= $saved_sign === '+' ? 'selected' : '' ?>>+</option>
+                                            <!-- <option value="-" <?= $saved_sign === '-' ? 'selected' : '' ?>>-</option> -->
                                         </select>
                                         <input type="number" step="0.01" id="other_charges" name="other_charges" class="form-control form-control-sm" value="<?= $saved_amt; ?>" placeholder="0.00" min="0">
                                     </div>
@@ -362,7 +362,7 @@ include 'view/layout/header.php';
                             <span class="summary-value" id="show_gst">₹0.00</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Header Discount</span>
+                            <span class="summary-label">Add Discount</span>
                             <span class="summary-value" id="show_discount">₹0.00</span>
                         </div>
                         

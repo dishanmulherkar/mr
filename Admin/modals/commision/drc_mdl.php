@@ -198,14 +198,16 @@ class drc_mdl {
     public function getDrCommissionHistory($hq_id, $month) 
     {
         $sql = "
-            SELECT 
-                cp.payout_id, 
-                cp.total_payout,
-                cp.status, 
-                DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') AS date_paid,
-                (SELECT hq_name FROM headquarter WHERE hq_id = cp.hq_id LIMIT 1) AS hq_name 
-            FROM commission_payouts cp
-            WHERE cp.hq_id = ? AND cp.commission_type = 'DRC'
+            SELECT  
+            cp.payout_id, 
+            cp.total_payout,
+            cp.status, 
+            DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') AS date_paid,
+            h.hq_name 
+        FROM commission_payouts cp
+        LEFT JOIN headquarter h 
+            ON cp.hq_id = h.headquarter_id
+        WHERE cp.hq_id = ? AND cp.commission_type = 'DRC'
         ";
         
         $params = [$hq_id];

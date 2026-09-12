@@ -193,14 +193,17 @@ class Commission_mdl {
     public function getMrCommissionHistory($hq_id, $month) {
         // ADDED: AND cp.commission_type = 'MR'
         $sql = "
-            SELECT 
-                cp.payout_id, 
-                cp.total_payout,
-                cp.status, 
-                DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') AS date_paid,
-                (SELECT hq_name FROM headquarter WHERE hq_id = cp.hq_id LIMIT 1) AS hq_name 
-            FROM commission_payouts cp
-            WHERE cp.hq_id = ? AND cp.commission_type = 'MRC'
+            SELECT  
+            cp.payout_id, 
+            cp.total_payout,
+            cp.status, 
+            DATE_FORMAT(cp.created_at, '%d %b %Y, %h:%i %p') AS date_paid,
+            h.hq_name 
+        FROM commission_payouts cp
+        LEFT JOIN headquarter h 
+            ON cp.hq_id = h.headquarter_id
+        WHERE cp.hq_id = ? 
+        AND cp.commission_type = 'MRC'
         ";
         
         $params = [$hq_id];
@@ -453,13 +456,11 @@ class Commission_mdl {
         }
     }
 
-  // ==========================================================
-    // NEW METHOD: Flip the status between Pending and Paid (WITH STRICT ERROR CHECKING)
-    // ==========================================================
     // ==========================================================
     // NEW METHOD: Flip the status between Pending and Paid (WITH STRICT ERROR CHECKING)
     // ==========================================================
-    public function updatePayoutStatus($payout_id, $status = 'Paid') {
+    public function updatePayoutStatus($payout_id, $status = 'Paid') 
+    {
         try {
             $this->con->begin_transaction();
 
@@ -543,7 +544,7 @@ class Commission_mdl {
             return ['success' => false, 'msg' => $e->getMessage()];
         }
     }
-// ==========================================================
+    // ==========================================================
     // DELETE MR COMMISSION (Protected against ledger corruption)
     // ==========================================================
     public function deleteMrCommission($payout_id)

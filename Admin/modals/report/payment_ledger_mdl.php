@@ -90,111 +90,157 @@ class payment_ledger_mdl
         }
         return 0;
     }
+   // ==========================================
+    // MR Commission (MRC) Report (Grouped by Ref ID)
     // ==========================================
-    // MR Commission (MRC) Report
-    // ==========================================
-public function getReportmrc($hq_id, $from_date, $to_date)
+    public function getReportmrc($hq_id, $from_date, $to_date)
     {
-        // 1. Joins 'stockists' to get stockist name
-        // 2. Joins 'payment_details' & 'mr_users' to trace HQ for Bank Payouts (stockist_id = 0)
-        // 3. Joins 'stock_inward' to fetch the Bill No if settled to a bill
-        // 4. Runs a subquery to calculate the live 'debt' outstanding for that stockist
+        // 1. Fetch the corresponding MR ID (m_id) for this HQ
+        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
+        $stmt_mr->bind_param("i", $hq_id);
+        $stmt_mr->execute();
+        $res_mr = $stmt_mr->get_result()->fetch_assoc();
+        $stmt_mr->close();
         
-        $sql = "SELECT 
-                    p.*, 
-                    COALESCE(s.stockist_name, 'Bank Payout / General') AS stockist_name,
-                    si.inward_no AS settled_bill_no,
-                    
-                    (
-                        SELECT 
-                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
-                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement') THEN amount ELSE 0 END), 0))
-                        FROM payment_ledgers 
-                        -- Ensure we only calculate outstanding debt if it's a real stockist (> 0)
-                        WHERE stockist_id = p.stockist_id AND stockist_id > 0 AND ledger_type = 'debt'
-                    ) AS stockist_outstanding
+        $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
 
+        // 2. Run the main report query
+        $sql = "SELECT 
+                    MIN(p.id) AS id,
+                    MIN(p.created_at) AS created_at,
+                    p.reference_id,
+                    p.transaction_type,
+                    p.balance_action,
+                    MAX(p.notes) AS notes,
+                    
+                    -- Safely fetch ALL settled bill numbers for this transaction
+                    (
+                        SELECT GROUP_CONCAT(DISTINCT si.inward_no SEPARATOR ', ')
+                        FROM payment_ledgers pd
+                        INNER JOIN payment_allocations pa ON pd.id = pa.ledger_id
+                        INNER JOIN stock_inward si ON pa.inward_id = si.inward_id
+                        WHERE pd.reference_id = p.reference_id AND pd.ledger_type = 'debt'
+                    ) AS settled_bill_no,
+                    
+                    SUM(p.amount) AS amount,
+                    IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name,
+                    
+                    -- Fetch Outstanding balance efficiently from the joined table
+                    COALESCE(MAX(debt_calc.outstanding_amount), 0) AS stockist_outstanding
+                    
                 FROM payment_ledgers p
                 
-                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
+                -- Only join the stockist table
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 
-                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
-                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
-                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
+                -- Join the aggregated debt calculation exactly once per stockist
+                LEFT JOIN (
+                    SELECT 
+                        stockist_id,
+                        ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
+                        ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement') THEN amount ELSE 0 END), 0)) AS outstanding_amount
+                    FROM payment_ledgers 
+                    WHERE stockist_id > 0 AND ledger_type = 'debt'
+                    GROUP BY stockist_id
+                ) debt_calc ON p.stockist_id = debt_calc.stockist_id
                 
-                -- Attempt to get the invoice number if reference_id matches an inward_id
-                LEFT JOIN payment_allocations pa ON p.id = pa.ledger_id AND p.transaction_type IN ('mrc_settlement')
-                LEFT JOIN stock_inward si ON pa.inward_id = si.inward_id
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
-                AND p.ledger_type = 'mrc_wallet'
-                AND DATE(p.created_at) >= '$from_date' 
-                AND DATE(p.created_at) <= '$to_date'
-                ORDER BY p.created_at ASC, p.id ASC";
+                -- FIX: Check stockist HQ, OR check if user_id matches legacy HQ ID or new MR ID
+                WHERE (s.hq_id = ? OR p.user_id IN (?, ?))
+                  AND p.ledger_type = 'mrc_wallet'
+                  AND DATE(p.created_at) >= ? 
+                  AND DATE(p.created_at) <= ?
                 
-        return mysqli_query($this->con, $sql);
+                GROUP BY 
+                    DATE(p.created_at), 
+                    p.reference_id, 
+                    p.transaction_type, 
+                    p.balance_action,
+                    p.stockist_id
+                    
+                ORDER BY MIN(p.created_at) ASC, MIN(p.id) ASC";
+                
+        $stmt = $this->con->prepare($sql);
+        // Bind 5 parameters: HQ ID (for stockist), HQ ID (for legacy bank), MR ID (for new bank), From Date, To Date
+        $stmt->bind_param("iiiss", $hq_id, $hq_id, $mr_id, $from_date, $to_date);
+        $stmt->execute();
+        
+        return $stmt->get_result();
     }
 
-    // ==========================================
+   // ==========================================
     // Opening balance calculation for MRC Wallet
     // ==========================================
     public function getOpeningBalancemrc($hq_id, $from_date)
     {
-        // Safely uses 'balance_action' to determine adding or subtracting from the wallet
+        // 1. Fetch the corresponding MR ID (m_id) for this HQ
+        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
+        $stmt_mr->bind_param("i", $hq_id);
+        $stmt_mr->execute();
+        $res_mr = $stmt_mr->get_result()->fetch_assoc();
+        $stmt_mr->close();
+        
+        $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
+
+        // 2. Calculate Opening Balance
+        // Added LOWER() to ensure case-insensitivity on balance_action so no commissions are dropped
         $sql = "SELECT 
-                    SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
+                    SUM(CASE WHEN LOWER(p.balance_action) = 'increase' THEN p.amount ELSE 0 END) as total_inc,
+                    SUM(CASE WHEN LOWER(p.balance_action) = 'decrease' THEN p.amount ELSE 0 END) as total_dec
                 FROM payment_ledgers p
                 
-                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
+                -- LEFT JOIN so we don't lose 'Bank / General' transactions (0)
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 
-                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
-                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
-                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
+                -- FIX: Check stockist HQ, OR check if user_id matches legacy HQ ID or new MR ID
+                WHERE (s.hq_id = ? OR p.user_id IN (?, ?))
                 AND p.ledger_type = 'mrc_wallet'
-                AND DATE(p.created_at) < '$from_date'";
+                AND DATE(p.created_at) < ?";
 
-        $res = mysqli_query($this->con, $sql);
+        // Use prepared statements for maximum security
+        $stmt = $this->con->prepare($sql);
         
-        if ($res && $row = mysqli_fetch_assoc($res)) {
+        // Bind 4 parameters: HQ ID (for stockist), HQ ID (for legacy bank), MR ID (for new bank), From Date
+        $stmt->bind_param("iiis", $hq_id, $hq_id, $mr_id, $from_date);
+        $stmt->execute();
+        
+        $res = $stmt->get_result();
+        
+        if ($res && $row = $res->fetch_assoc()) {
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
+            
+            $stmt->close();
             
             // For a wallet, Increase (Earned) - Decrease (Settled) = Current Balance
             return $inc - $dec; 
         }
         
-        return 0;
+        if (isset($stmt)) {
+            $stmt->close();
+        }
+        
+        return 0.00;
     }
-
+   // ==========================================
+    // DR Commission (DRC) Report
     // ==========================================
+  // ==========================================
     // DR Commission (DRC) Report
     // ==========================================
     public function getReportdrc($hq_id, $from_date, $to_date)
     {
-        // 1. Joins 'stockists' to get stockist name (LEFT JOIN)
-        // 2. Joins 'payment_details' & 'mr_users' to trace HQ for Bank Payouts (stockist_id = 0)
-        // 3. Joins 'stock_inward' to fetch the Bill No if settled to a bill
-        // 4. Runs a subquery to calculate the live 'debt' outstanding for that stockist
-        
+        // 1. Fetch the corresponding MR ID (m_id) to ensure we don't drop direct wallet earnings
+        $mr_id = 0;
+        $mr_query = mysqli_query($this->con, "SELECT m_id FROM mr_users WHERE hq_id = '$hq_id' LIMIT 1");
+        if ($mr_query && $mr_row = mysqli_fetch_assoc($mr_query)) {
+            $mr_id = (int)$mr_row['m_id'];
+        }
+
         $sql = "SELECT 
                     p.*, 
                     COALESCE(s.stockist_name, 'Bank Payout / General') AS stockist_name,
                     si.inward_no AS settled_bill_no,
-                    
-                    (
-                        SELECT 
-                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
-                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0))
-                        FROM payment_ledgers 
-                        -- Ensure we only calculate outstanding debt if it's a real stockist (> 0)
-                        WHERE stockist_id = p.stockist_id AND stockist_id > 0 AND ledger_type = 'debt'
-                    ) AS stockist_outstanding
+                    COALESCE(debt_calc.outstanding_amount, 0) AS stockist_outstanding
 
                 FROM payment_ledgers p
                 
@@ -204,10 +250,23 @@ public function getReportmrc($hq_id, $from_date, $to_date)
                 -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
                 LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
                 LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                LEFT JOIN payment_allocations pa   ON p.id = pa.ledger_id AND p.transaction_type IN ('drc_settlement', 'settled_to_bill')
+                
+                LEFT JOIN payment_allocations pa ON p.id = pa.ledger_id AND p.transaction_type IN ('drc_settlement', 'settled_to_bill')
                 LEFT JOIN stock_inward si ON pa.inward_id = si.inward_id
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
+                
+                -- JOIN the aggregated debt calculation
+                LEFT JOIN (
+                    SELECT 
+                        stockist_id,
+                        ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
+                        ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0)) AS outstanding_amount
+                    FROM payment_ledgers 
+                    WHERE stockist_id > 0 AND ledger_type = 'debt'
+                    GROUP BY stockist_id
+                ) debt_calc ON p.stockist_id = debt_calc.stockist_id
+
+                -- FIX: Catch earnings by checking user_id as well as stockist/MR HQ
+                WHERE (s.hq_id = '$hq_id' OR p.user_id IN ('$hq_id', '$mr_id'))
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) >= '$from_date' 
                 AND DATE(p.created_at) <= '$to_date'
@@ -221,21 +280,25 @@ public function getReportmrc($hq_id, $from_date, $to_date)
     // ==========================================
     public function getOpeningBalancedrc($hq_id, $from_date)
     {
-        // Safely uses 'balance_action' to determine adding or subtracting from the wallet
+        // Fetch MR ID to ensure we don't drop direct wallet earnings in the opening balance
+        $mr_id = 0;
+        $mr_query = mysqli_query($this->con, "SELECT m_id FROM mr_users WHERE hq_id = '$hq_id' LIMIT 1");
+        if ($mr_query && $mr_row = mysqli_fetch_assoc($mr_query)) {
+            $mr_id = (int)$mr_row['m_id'];
+        }
+
         $sql = "SELECT 
-                    SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
+                    SUM(CASE WHEN LOWER(p.balance_action) = 'increase' THEN p.amount ELSE 0 END) as total_inc,
+                    SUM(CASE WHEN LOWER(p.balance_action) = 'decrease' THEN p.amount ELSE 0 END) as total_dec
                 FROM payment_ledgers p
                 
-                -- Changed to LEFT JOIN to prevent dropping records with stockist_id = 0
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 
-                -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
                 LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
                 LEFT JOIN mr_users m ON pd.mr_id = m.m_id
                 
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
+                -- FIX: Catch earnings by checking user_id as well as stockist/MR HQ
+                WHERE (s.hq_id = '$hq_id' OR p.user_id IN ('$hq_id', '$mr_id'))
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) < '$from_date'";
 
@@ -245,14 +308,11 @@ public function getReportmrc($hq_id, $from_date, $to_date)
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
             
-            // For a wallet, Increase (Earned) - Decrease (Settled) = Current Balance
             return $inc - $dec; 
         }
         
         return 0;
     }
-
-
    // ==========================================
     // ASM Commission (ASM) Report
     // ==========================================

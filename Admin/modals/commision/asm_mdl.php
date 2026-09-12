@@ -37,85 +37,93 @@ class asm_com_mdl {
         );
     }
 
-public function getAdminMrBills($hqId, $month = '') 
-{
-    $hqId = (int)$hqId;
-    
-    // Fetch from admins table as per your updated schema
-    $stmt = $this->con->prepare("SELECT admin_id, commission_rate FROM admins WHERE admin_id = ?");
-    $stmt->bind_param("i", $hqId);
-    $stmt->execute();
-    $mr_data = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
+    public function getAdminMrBills($hqId, $month = '') 
+    {
+        $hqId = (int)$hqId;
+        
+        // Fetch from admins table as per your updated schema
+        $stmt = $this->con->prepare("SELECT admin_id, commission_rate FROM admins WHERE admin_id = ?");
+        $stmt->bind_param("i", $hqId);
+        $stmt->execute();
+        $mr_data = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
 
-    // Fix: Return the correct associative array structure if no admin is found
-    if (!$mr_data) {
-        return [
-            'bills' => [],
-            'admin_id' => $hqId
-        ]; 
-    }
-    
-    $admin_id = $mr_data['admin_id'];
-    $rate = (float)$mr_data['commission_rate'];
-
-    $month_sql = "";
-    if (!empty($month)) {
-        $safe_month = mysqli_real_escape_string($this->con, $month);
-        $month_sql = " AND DATE_FORMAT(si.created_at, '%Y-%m') = '$safe_month' ";
-    }
-
-    // Fix: Removed inline SQL comments to prevent accidental truncation of the query
-    $query = "
-        SELECT 
-            si.inward_id,
-            si.inward_no,
-            DATE(si.created_at) as bill_date,
-            s.stockist_name,
-            si.sub_total AS taxable_amount,
-            si.grand_total,
-            si.paid_amt,
-            UPPER(si.pay_status) AS pay_status,
-            $rate AS commission_percent,
-            ROUND((si.sub_total * ($rate / 100)), 2) AS commission_amount
-        FROM stock_inward si
-        INNER JOIN stockists s ON si.stockist_id = s.stockist_id
-        INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
-        WHERE h.asm_id = $admin_id
-        AND si.pay_status = 'paid' 
-        AND si.asm_com = 0 
-        $month_sql
-        ORDER BY si.created_at ASC
-    ";
-
-    $result = $this->con->query($query);
-    $bills = [];
-    
-    if ($result) {
-        while ($row = $result->fetch_assoc()) {
-            $bills[] = $row;
+        // Fix: Return the correct associative array structure if no admin is found
+        if (!$mr_data) {
+            return [
+                'bills' => [],
+                'admin_id' => $hqId
+            ]; 
         }
+        
+        $admin_id = $mr_data['admin_id'];
+        $rate = (float)$mr_data['commission_rate'];
+
+        $month_sql = "";
+        if (!empty($month)) {
+            $safe_month = mysqli_real_escape_string($this->con, $month);
+            $month_sql = " AND DATE_FORMAT(si.created_at, '%Y-%m') = '$safe_month' ";
+        }
+
+        // Fix: Removed inline SQL comments to prevent accidental truncation of the query
+        $query = "
+            SELECT 
+                si.inward_id,
+                si.inward_no,
+                DATE(si.created_at) as bill_date,
+                s.stockist_name,
+                si.sub_total AS taxable_amount,
+                si.grand_total,
+                si.paid_amt,
+                UPPER(si.pay_status) AS pay_status,
+                $rate AS commission_percent,
+                ROUND((si.sub_total * ($rate / 100)), 2) AS commission_amount
+            FROM stock_inward si
+            INNER JOIN stockists s ON si.stockist_id = s.stockist_id
+            INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
+            WHERE h.asm_id = $admin_id
+            AND si.pay_status = 'paid' 
+            AND si.asm_com = 0 
+            $month_sql
+            ORDER BY si.created_at ASC
+        ";
+
+        $result = $this->con->query($query);
+        $bills = [];
+        
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $bills[] = $row;
+            }
+        }
+        
+        // Return as an associative array
+        return [
+            'bills' => $bills,
+            'admin_id' => $admin_id
+        ];
     }
-    
-    // Return as an associative array
-    return [
-        'bills' => $bills,
-        'admin_id' => $admin_id
-    ];
-}
    public function claimAsmCommission($asm_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
     {
         try {
             $asm_id = (int)$asm_id; 
 
+            // 0. Fetch the CURRENT ASM rate AND admin_id to lock it in for this payout
             $stmt = $this->con->prepare("SELECT admin_id, commission_rate FROM admins WHERE admin_id = ?");
             $stmt->bind_param("i", $asm_id);
             $stmt->execute();
-            $mr_data = $stmt->get_result()->fetch_assoc();
+            $asm_data = $stmt->get_result()->fetch_assoc();
             $stmt->close();
 
-            $rate = (float)$mr_data['commission_rate'];
+            $rate = $asm_data ? (float)$asm_data['commission_rate'] : 0.00;
             
+            // FIX: Capture the actual admin_id from the database to use in the ledger!
+            $admin_id = $asm_data ? (int)$asm_data['admin_id'] : 0;
+
+            if ($admin_id === 0) {
+                throw new Exception("ASM profile not found.");
+            }
+
             $bill_ids = json_decode($bill_ids_json, true);
             $adjustments = json_decode($adjustments_json, true);
 
@@ -128,12 +136,12 @@ public function getAdminMrBills($hqId, $month = '')
 
             $this->con->begin_transaction();
 
-           // 1. Insert the Master Payout Record 
-            // Note: Reusing 'hq_id' column to store the asm_id (admin_id) receiving the payout
+            // 1. Insert the Master Payout Record 
+            // Note: Reusing 'hq_id' column to store the admin_id receiving the payout
             $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, commission_rate, status) VALUES (?, 'ASM', ?, ?, ?)");
             
-            // Fixed bind_param: added 'd' for double/float and passed the $rate variable
-            $stmt_payout->bind_param("idds", $asm_id, $final_payout, $rate, $status);
+            // Passed the verified $admin_id variable
+            $stmt_payout->bind_param("idds", $admin_id, $final_payout, $rate, $status);
             
             if (!$stmt_payout->execute()) {
                 throw new Exception("Failed to create payout record.");
@@ -150,7 +158,7 @@ public function getAdminMrBills($hqId, $month = '')
                 INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
                 SET si.asm_com = 1, si.commission_asm_payout_id = $payout_id
                 WHERE si.inward_id IN ($id_string)
-                AND h.asm_id = $asm_id
+                AND h.asm_id = $admin_id
                 AND si.asm_com = 0
             ";
 
@@ -189,7 +197,8 @@ public function getAdminMrBills($hqId, $month = '')
                     VALUES (?, ?, 'asm_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
-                $stmt_ledger->bind_param("iiidss", $asm_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
+                // Passed the verified $admin_id to ensure perfect tracking
+                $stmt_ledger->bind_param("iiidss", $admin_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
                 
                 if (!$stmt_ledger->execute()) {
                     throw new Exception("Failed to update ledger for ASM payout.");

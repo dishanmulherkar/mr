@@ -85,7 +85,6 @@ include 'view/layout/header.php';
                                 <td></td>
                                 <td><strong>By Opening Balance</strong></td>
                                 <td></td>
-                                <td class='text-end'></td>
                                 <td class='text-end'><strong>".number_format($opening_balance, 2)."</strong></td>
                               </tr>";
                     } elseif (isset($opening_balance) && $opening_balance < 0) {
@@ -94,7 +93,6 @@ include 'view/layout/header.php';
                                 <td>".date('d-M-y', strtotime($from_date))."</td>
                                 <td></td>
                                 <td><strong>To Opening Balance</strong></td>
-                                <td></td>
                                 <td class='text-end'><strong>".number_format(abs($opening_balance), 2)."</strong></td>
                                 <td class='text-end'></td>
                               </tr>";
@@ -104,22 +102,25 @@ include 'view/layout/header.php';
                     if($query && mysqli_num_rows($query) > 0) {
                         while($row = mysqli_fetch_assoc($query)) {
                             $date = date('d-M-y', strtotime($row['created_at']));
-                            $stockist_name = htmlspecialchars($row['stockist_name']);
+                            $stockist_name = htmlspecialchars($row['stockist_name'] ?? '');
                             
                             $debit = 0;
                             $credit = 0;
                             $particulars = "";
                             $vch_type = "";
 
+                            // FIX: Use strtolower to make the check case-insensitive
+                            $action = strtolower(trim($row['balance_action']));
+
                             // Determine if money was earned (increase) or settled/paid out (decrease)
-                            if ($row['balance_action'] == 'increase') {
+                            if ($action === 'increase') {
                                 // Earned Commission (Credit)
                                 $particulars = "By Commission Earned";
                                 $vch_type = "Commission";
                                 $credit = (float)$row['amount'];
                                 $total_credit += $credit;
                                 
-                            } else if ($row['balance_action'] == 'decrease') {
+                            } else if ($action === 'decrease') {
                                 // Settled or Paid Out (Debit)
                                 $debit = (float)$row['amount'];
                                 $total_debit += $debit;
@@ -127,7 +128,7 @@ include 'view/layout/header.php';
                                 // UPDATE: Use the transaction_type from your database directly
                                 if ($row['transaction_type'] === 'settled_to_bill' || !empty($row['settled_bill_no'])) {
                                     $bill_badge = !empty($row['settled_bill_no']) ? "<span class='badge bg-info text-dark ms-1'>" . $row['settled_bill_no'] . "</span>" : "";
-                                    $particulars =  $row['stockist_name'];
+                                    $particulars =  $stockist_name;
                                     $vch_type = "Adjustment";
                                 } else {
                                     $particulars = "To Bank Transfer";
@@ -139,7 +140,7 @@ include 'view/layout/header.php';
                                 <td><?= $date ?></td>
                                 <td>
                                     <?= $particulars ?><br>
-                                    <small class="text-muted" style="font-size:0.75em;"><?= htmlspecialchars($row['notes']) ?></small>
+                                    <small class="text-muted" style="font-size:0.75em;"><?= htmlspecialchars($row['notes'] ?? '') ?></small>
                                 </td>
                                 <td><?= $vch_type ?></td>
                                 <td class="text-end text-danger"><?= $debit > 0 ? number_format($debit, 2) : '' ?></td>
