@@ -67,11 +67,15 @@ class Payment_model {
         return $payments;
     }
 
-    // Save a new pending payment entry
+   // Save a new pending payment entry
     public function addPayment($data, $file) 
     {
         try {
             $stockist_id = (int)($data['stockist_id'] ?? 0);
+            
+            // ADDED: Capture mr_id (Checks 'mr_id' first, falls back to 'hq_id' if used in ASM views)
+            $mr_id = !empty($_SESSION['mr_id']) ? (int)$_SESSION['mr_id'] : (!empty($data['hq_id']) ? (int)$data['hq_id'] : 0);
+            
             $amount_paid = (float)($data['amount_paid'] ?? 0);
 
             $payment_method = trim($data['payment_method'] ?? '');
@@ -123,11 +127,12 @@ class Payment_model {
                 }
             }
 
-            // Insert payment (Note: commission_type defaults to 'none' in the DB schema for standard MR cash payments)
+            // Insert payment (ADDED mr_id to columns and VALUES)
             $stmt = $this->con->prepare("
                 INSERT INTO payment_details 
                 (
                     stockist_id,
+                    mr_id,
                     amount_paid,
                     payment_method,
                     bank_details,
@@ -135,16 +140,18 @@ class Payment_model {
                     approval_status,
                     bank_id
                 ) 
-                VALUES (?, ?, ?, ?, ?, ?,?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             if (!$stmt) {
                 throw new Exception("Prepare failed: " . $this->con->error);
             }
 
+            // ADDED: Updated bind string to "iidssssi" (added an 'i' for mr_id) and passed $mr_id
             $stmt->bind_param(
-                "idssssi",
+                "iidssssi",
                 $stockist_id,
+                $mr_id,
                 $amount_paid,
                 $payment_method,
                 $bank_details,

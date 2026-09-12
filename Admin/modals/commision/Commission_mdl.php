@@ -87,18 +87,22 @@ class Commission_mdl {
         return $bills;
     }
 
-    public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
+   public function claimMrCommission($hq_id, $bill_ids_json, $adjustments_json, $final_payout, $status = 'Pending') 
     {
         try {
             $hq_id = (int)$hq_id; 
             
-            // 0. Fetch the CURRENT MR rate to lock it in for this payout
-            $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
+            // 0. Fetch the CURRENT MR rate and m_id to lock it in for this payout
+            $stmt_mr = $this->con->prepare("SELECT commission_rate, m_id FROM mr_users WHERE hq_id = ? AND status = '1'");
             $stmt_mr->bind_param("i", $hq_id);
             $stmt_mr->execute();
             $mr_data = $stmt_mr->get_result()->fetch_assoc();
             $stmt_mr->close();
+            
             $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0.00;
+            
+            // FIX: Capture the MR's actual user ID so we can save it to the ledger!
+            $mr_id = $mr_data ? (int)$mr_data['m_id'] : 0; 
 
             $bill_ids = json_decode($bill_ids_json, true);
             $adjustments = json_decode($adjustments_json, true);
@@ -112,7 +116,7 @@ class Commission_mdl {
 
             $this->con->begin_transaction();
 
-            // 1. Insert the Master Payout Record (UPDATED: Added commission_rate)
+            // 1. Insert the Master Payout Record 
             $stmt_payout = $this->con->prepare("INSERT INTO commission_payouts (hq_id, commission_type, total_payout, commission_rate, status) VALUES (?, 'MRC', ?, ?, ?)");
             $stmt_payout->bind_param("idds", $hq_id, $final_payout, $rate, $status);
             
@@ -167,8 +171,8 @@ class Commission_mdl {
                     VALUES (?, ?, 'mrc_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
-                // Bind $hq_id as user_id, along with the single $final_payout amount
-                $stmt_ledger->bind_param("iiidss", $hq_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
+                // FIX: Replaced $hq_id with $mr_id so the ledger strictly points to the User's ID
+                $stmt_ledger->bind_param("iiidss", $mr_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
                 
                 if (!$stmt_ledger->execute()) {
                     throw new Exception("Failed to apply commission to MR ledger.");
@@ -350,13 +354,15 @@ class Commission_mdl {
                 throw new Exception("This payout has already been marked as Paid and cannot be edited.");
             }
 
-            // Fetch the CURRENT MR rate to lock it in for this update
-            $stmt_mr = $this->con->prepare("SELECT commission_rate FROM mr_users WHERE hq_id = ? AND status = '1'");
+            // FIX: Fetch the CURRENT MR rate AND m_id to lock it in for this update
+            $stmt_mr = $this->con->prepare("SELECT commission_rate, m_id FROM mr_users WHERE hq_id = ? AND status = '1'");
             $stmt_mr->bind_param("i", $hq_id);
             $stmt_mr->execute();
             $mr_data = $stmt_mr->get_result()->fetch_assoc();
             $stmt_mr->close();
+            
             $rate = $mr_data ? (float)$mr_data['commission_rate'] : 0.00;
+            $mr_id = $mr_data ? (int)$mr_data['m_id'] : 0; // FIX: Capture the MR's actual user ID
 
             $bill_ids = json_decode($bill_ids_json, true);
             $adjustments = json_decode($adjustments_json, true);
@@ -382,7 +388,7 @@ class Commission_mdl {
             $stmt_del->execute();
             $stmt_del->close();
 
-            // 3. Update Master Payout Record (UPDATED: Added commission_rate)
+            // 3. Update Master Payout Record
             $update_payout = "UPDATE commission_payouts SET total_payout = ?, status = ?, commission_rate = ? WHERE payout_id = ? AND commission_type = 'MRC'";
             $stmt_payout = $this->con->prepare($update_payout);
             $stmt_payout->bind_param("dsdi", $final_payout, $status, $rate, $payout_id);
@@ -417,7 +423,7 @@ class Commission_mdl {
                 $stmt_adj->close();
             }
 
-            // 4. LEDGER UPDATE: Single entry (No more splitting!)
+            // 4. LEDGER UPDATE: Single entry
             if ($status === 'Paid') {
                 $notes = "MR Commission Earned (Payout #$payout_id)";
                 $action = 'increase';
@@ -429,7 +435,8 @@ class Commission_mdl {
                     VALUES (?, ?, 'mrc_wallet', 'commission_earned', ?, ?, ?, ?)
                 ");
 
-                $stmt_ledger->bind_param("iiidss", $hq_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
+                // FIX: Replaced $hq_id with $mr_id
+                $stmt_ledger->bind_param("iiidss", $mr_id, $stockist_id, $payout_id, $final_payout, $action, $notes);
                 
                 if (!$stmt_ledger->execute()) {
                     throw new Exception("Failed to update ledger for MR payout.");
@@ -449,6 +456,9 @@ class Commission_mdl {
   // ==========================================================
     // NEW METHOD: Flip the status between Pending and Paid (WITH STRICT ERROR CHECKING)
     // ==========================================================
+    // ==========================================================
+    // NEW METHOD: Flip the status between Pending and Paid (WITH STRICT ERROR CHECKING)
+    // ==========================================================
     public function updatePayoutStatus($payout_id, $status = 'Paid') {
         try {
             $this->con->begin_transaction();
@@ -466,7 +476,16 @@ class Commission_mdl {
 
             $current_status = trim($payout_data['status']);
             $total_payout = (float)$payout_data['total_payout'];
-            $hq_id = (int)$payout_data['hq_id']; // Captured for the ledger
+            $hq_id = (int)$payout_data['hq_id']; 
+            
+            // FIX: Fetch the MR ID (m_id) to ensure ledger consistency
+            $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
+            $stmt_mr->bind_param("i", $hq_id);
+            $stmt_mr->execute();
+            $res_mr = $stmt_mr->get_result()->fetch_assoc();
+            $stmt_mr->close();
+            
+            $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0; // Captured for the ledger
 
             // 2. Update the payout status
             $stmt = $this->con->prepare("UPDATE commission_payouts SET status = ? WHERE payout_id = ? AND commission_type = 'MRC'");
@@ -495,7 +514,8 @@ class Commission_mdl {
                     throw new Exception("SQL Error in payment_ledgers: " . $this->con->error);
                 }
 
-                $stmt_ledger->bind_param("iiidss", $hq_id, $stockist_id, $payout_id, $total_payout, $action, $notes);
+                // FIX: Replaced $hq_id with $mr_id
+                $stmt_ledger->bind_param("iiidss", $mr_id, $stockist_id, $payout_id, $total_payout, $action, $notes);
                 
                 if (!$stmt_ledger->execute()) {
                     throw new Exception("Failed to add amount to MR commission ledger: " . $stmt_ledger->error);
@@ -523,7 +543,6 @@ class Commission_mdl {
             return ['success' => false, 'msg' => $e->getMessage()];
         }
     }
-
 // ==========================================================
     // DELETE MR COMMISSION (Protected against ledger corruption)
     // ==========================================================

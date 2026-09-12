@@ -9,10 +9,9 @@ class StockistModel
         $this->con = $con;
     }
 
-   public function getAll()
+     public function getAll()
     {
         if ($_SESSION['admin_role'] == 'Super Admin') {
-
             return mysqli_query($this->con, "
                 SELECT
                     stockists.*,
@@ -26,6 +25,7 @@ class StockistModel
                 ORDER BY stockists.stockist_id DESC
             ");
         }
+
         $admin_id = (int)$_SESSION['admin_id'];
 
         return mysqli_query($this->con, "
@@ -34,11 +34,13 @@ class StockistModel
                 hq.hq_name,
                 state.state_name
             FROM stockists
+            INNER JOIN admin_state ast
+                ON stockists.state = ast.state_id
             LEFT JOIN headquarter hq
                 ON hq.headquarter_id = stockists.hq_id
             LEFT JOIN state
                 ON state.state_id = stockists.state
-            WHERE stockists.admin_id = $admin_id
+            WHERE ast.admin_id = $admin_id
             ORDER BY stockists.stockist_id DESC
         ");
     }

@@ -59,7 +59,7 @@ class PaymentApproval_mdl {
     // Secure Transaction to Approve or Reject a Payment
    // Secure Transaction to Approve or Reject a Payment
     
- public function processApproval($payment_id, $admin_id, $action_status) 
+public function processApproval($payment_id, $admin_id, $action_status) 
     {
         try {
             $this->con->begin_transaction();
@@ -68,7 +68,7 @@ class PaymentApproval_mdl {
             // STEP 1: Fetch Payment Details
             // ==========================================
             $stmt = $this->con->prepare("
-                SELECT stockist_id, amount_paid, payment_method 
+                SELECT stockist_id, mr_id, amount_paid, payment_method 
                 FROM payment_details 
                 WHERE id = ? AND approval_status = 'pending' 
                 FOR UPDATE
@@ -83,6 +83,7 @@ class PaymentApproval_mdl {
             
             $payment = $result->fetch_assoc();
             $stockist_id = (int)($payment['stockist_id'] ?? 0);
+            $mr_id = (int)($payment['mr_id'] ?? 0); // ADDED: Fetch the MR ID
             $amount_paid = (float)($payment['amount_paid'] ?? 0);
             $payment_method = $payment['payment_method'] ?? 'Unknown';
             $stmt->close();
@@ -129,13 +130,15 @@ class PaymentApproval_mdl {
                 // ==========================================
                 // STEP 4: Create Main Payment Ledger Entry
                 // ==========================================
+                // ADDED: user_id to columns and values
                 $stmt = $this->con->prepare("
                     INSERT INTO payment_ledgers 
-                    (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
-                    VALUES (?, 'debt', 'payment_made', ?, ?, 'decrease', ?)
+                    (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
+                    VALUES (?, ?, 'debt', 'payment_made', ?, ?, 'decrease', ?)
                 ");
                 $notes = "Payment Approved: " . $payment_method;
-                $stmt->bind_param("isds", $stockist_id, $payment_id, $amount_paid, $notes);
+                // ADDED: 'i' for mr_id binding
+                $stmt->bind_param("iiids", $stockist_id, $mr_id, $payment_id, $amount_paid, $notes);
                 $stmt->execute();
                 $ledger_id = $this->con->insert_id; 
                 $stmt->close();
@@ -175,15 +178,15 @@ class PaymentApproval_mdl {
                     $upd_paid_amt = 0; $upd_status = ""; $upd_cd_percent = 0; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
                     $stmt_update->bind_param("dsiddi", $upd_paid_amt, $upd_status, $upd_cd_percent, $upd_penalty, $upd_earned, $upd_inward_id);
 
-                    // FIX: Reverted to 'payment_made' to match your existing system exactly
-                    $stmt_cd = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, 'debt', 'payment_made', ?, ?, 'decrease', ?)");
+                    // ADDED: user_id to CD Ledger
+                    $stmt_cd = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', 'payment_made', ?, ?, 'decrease', ?)");
                     $cd_stockist_id = 0; $cd_inward_id = 0; $cd_amount = 0; $cd_notes = "";
-                    $stmt_cd->bind_param("iids", $cd_stockist_id, $cd_inward_id, $cd_amount, $cd_notes);
+                    $stmt_cd->bind_param("iiids", $cd_stockist_id, $mr_id, $cd_inward_id, $cd_amount, $cd_notes);
                     
-                    // FIX: Reverted to 'bill_added' to bypass the ENUM error (Notes will still say 'CD Revoked')
-                    $stmt_penalty = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, 'debt', 'bill_added', ?, ?, 'increase', ?)");
+                    // ADDED: user_id to Penalty Ledger
+                    $stmt_penalty = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', 'bill_added', ?, ?, 'increase', ?)");
                     $pen_stockist_id = 0; $pen_inward_id = 0; $pen_amount = 0; $pen_notes = "";
-                    $stmt_penalty->bind_param("iids", $pen_stockist_id, $pen_inward_id, $pen_amount, $pen_notes);
+                    $stmt_penalty->bind_param("iiids", $pen_stockist_id, $mr_id, $pen_inward_id, $pen_amount, $pen_notes);
 
                     // ==========================================
                     // STEP 6: Loop through Pending Bills
@@ -358,7 +361,7 @@ public function submitManualEntry($data, $admin_id)
             // Extract the Entity ID (MR or ASM). 
             // In the ASM form, the ASM ID is passed as 'hq_id'. 
             // For MRC/DRC forms, it might be passed as 'mr_id'.
-            $mr_id = !empty($data['hq_id']) ? (int)$data['hq_id'] : (!empty($data['mr_id']) ? (int)$data['mr_id'] : 0);
+            $mr_id = (!empty($data['mr_id']) ? (int)$data['mr_id'] : 0);
 
             $commission_type = strtoupper($data['commission_type'] ?? ''); 
             $payment_type = $data['payment_type'] ?? ''; 
@@ -401,15 +404,15 @@ public function submitManualEntry($data, $admin_id)
             if ($payment_type === 'old_bill') {
                 if ($stockist_id <= 0) throw new Exception("Stockist ID is required to settle an old bill.");
                 
-                // Deduct from appropriate wallet (ASM, MRC, or DRC)
-                $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'settled_to_bill', ?, ?, 'decrease', ?)");
-                $stmt_w->bind_param("isids", $stockist_id, $ledger_wallet_type, $payment_id, $amount, $notes);
+                // Deduct from appropriate wallet (ASM, MRC, or DRC) - ADDED user_id
+                $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, ?, 'settled_to_bill', ?, ?, 'decrease', ?)");
+                $stmt_w->bind_param("iisids", $stockist_id, $mr_id, $ledger_wallet_type, $payment_id, $amount, $notes);
                 $stmt_w->execute(); 
                 $stmt_w->close();
 
-                // Decrease debt 
-                $stmt_d = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, 'debt', ?, ?, ?, 'decrease', ?)");
-                $stmt_d->bind_param("isids", $stockist_id, $settlement_type, $payment_id, $amount, $notes);
+                // Decrease debt - ADDED user_id
+                $stmt_d = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', ?, ?, ?, 'decrease', ?)");
+                $stmt_d->bind_param("iisids", $stockist_id, $mr_id, $settlement_type, $payment_id, $amount, $notes);
                 $stmt_d->execute(); 
                 $ledger_id = $this->con->insert_id; 
                 $stmt_d->close();
@@ -472,13 +475,14 @@ public function submitManualEntry($data, $admin_id)
                     $upd_paid_amt = 0; $upd_status = ""; $upd_cd_percent = 0; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
                     $stmt_update->bind_param("dsiddi", $upd_paid_amt, $upd_status, $upd_cd_percent, $upd_penalty, $upd_earned, $upd_inward_id);
 
-                    $stmt_cd = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, 'debt', 'payment_made', ?, ?, 'decrease', ?)");
+                    // ADDED user_id to CD and Penalty ledgers
+                    $stmt_cd = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', 'payment_made', ?, ?, 'decrease', ?)");
                     $cd_stockist_id = 0; $cd_inward_id = 0; $cd_amount = 0; $cd_notes = "";
-                    $stmt_cd->bind_param("iids", $cd_stockist_id, $cd_inward_id, $cd_amount, $cd_notes);
+                    $stmt_cd->bind_param("iiids", $cd_stockist_id, $mr_id, $cd_inward_id, $cd_amount, $cd_notes);
                     
-                    $stmt_penalty = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, 'debt', 'bill_added', ?, ?, 'increase', ?)");
+                    $stmt_penalty = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', 'bill_added', ?, ?, 'increase', ?)");
                     $pen_stockist_id = 0; $pen_inward_id = 0; $pen_amount = 0; $pen_notes = "";
-                    $stmt_penalty->bind_param("iids", $pen_stockist_id, $pen_inward_id, $pen_amount, $pen_notes);
+                    $stmt_penalty->bind_param("iiids", $pen_stockist_id, $mr_id, $pen_inward_id, $pen_amount, $pen_notes);
 
                     // ==========================================
                     // STEP 5: Loop through Pending Bills & Calculate Math
@@ -598,9 +602,9 @@ public function submitManualEntry($data, $admin_id)
                     $stmt_penalty->close();
                 }
             } else {
-                // Direct Transfer (Not settling bills)
-                $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, ?, ?, ?, 'decrease', ?)");
-                $stmt_w->bind_param("issids", $stockist_id, $ledger_wallet_type, $settlement_type, $payment_id, $amount, $notes);
+                // Direct Transfer (Not settling bills) - ADDED user_id HERE!
+                $stmt_w = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, ?, ?, ?, ?, 'decrease', ?)");
+                $stmt_w->bind_param("iissids", $stockist_id, $mr_id, $ledger_wallet_type, $settlement_type, $payment_id, $amount, $notes);
                 $stmt_w->execute(); 
                 $stmt_w->close();
             }
@@ -613,10 +617,13 @@ public function submitManualEntry($data, $admin_id)
             return ['success' => false, 'msg' => 'Error: ' . $e->getMessage()];
         }
     }
-    // ==========================================
+// ==========================================
     // NEW: Calculate total available balance for an HQ
     // ==========================================
-  public function getAvailableBalance($hq_id, $type) 
+   // ==========================================
+    // Calculate total available balance for an HQ
+    // ==========================================
+    public function getAvailableBalance($hq_id, $type) 
     {
         // Define ledger type dynamically
         $ledger_type = match($type) {
@@ -636,30 +643,40 @@ public function submitManualEntry($data, $admin_id)
                 LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
                 LEFT JOIN headquarter h ON s.hq_id = h.headquarter_id
                 
-                -- Trace Bank Payouts (stockist = 0) to payment_details
-                LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
-                
-                -- COALESCE checks regular commissions (h.asm_id) first, then falls back to Bank Payouts (pd.mr_id)
-                WHERE COALESCE(h.asm_id, pd.mr_id) = ? AND pl.ledger_type = ?
+                -- Safely match ASM: Either through the stockist's HQ, OR directly via user_id
+                WHERE (h.asm_id = ? OR pl.user_id = ?) AND pl.ledger_type = ?
             ");
+            
+            // Bind 3 parameters for ASM ("iis")
+            $stmt->bind_param("iis", $hq_id, $hq_id, $ledger_type);
+            
         } else {
-            // Standard Logic for MRC/DRC
+            // 1. Fetch the corresponding MR ID (m_id) for this HQ to catch new bank transfers
+            $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
+            $stmt_mr->bind_param("i", $hq_id);
+            $stmt_mr->execute();
+            $res_mr = $stmt_mr->get_result()->fetch_assoc();
+            $stmt_mr->close();
+            
+            $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
+
+            // 2. Standard Logic for MRC/DRC (Matches your optimized report logic!)
             $stmt = $this->con->prepare("
                 SELECT 
                     SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
                 FROM payment_ledgers pl
+                
                 LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
-                LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
                 
-                -- Trace Bank Payouts to the MR
-                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = ? AND pl.ledger_type = ?
+                -- Match HQ using OR: Check stockist HQ, or check if user_id matches legacy HQ ID or new MR ID
+                WHERE (s.hq_id = ? OR pl.user_id IN (?, ?)) 
+                AND pl.ledger_type = ?
             ");
+            
+            // Bind 4 parameters for MRC/DRC ("iiis")
+            $stmt->bind_param("iiis", $hq_id, $hq_id, $mr_id, $ledger_type);
         }
         
-        $stmt->bind_param("is", $hq_id, $ledger_type);
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
         $stmt->close();

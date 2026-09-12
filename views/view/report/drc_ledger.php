@@ -150,7 +150,7 @@ include 'view/layout/header.php';
                               </tr>";
                     }
 
-                    // Process Rows
+                  // Process Rows
                     while($row = mysqli_fetch_assoc($query)) {
                         $date = date('d-M', strtotime($row['created_at']));
                         
@@ -158,14 +158,30 @@ include 'view/layout/header.php';
                         $short_types = [
                             'commission_earned' => 'Commission',
                             'mrc_settlement'    => 'Bank Transfer',
-                            'settled_to_bill'   => 'Bill Adjusted'
+                            'settled_to_bill'   => 'Bill Adjusted',
+                            'drc_settlement'    => 'Bank Transfer' // Added just in case it appears here!
                         ];
 
                         // If it's in the array, use the short name. Otherwise, format the original text.
                         $raw_type = strtolower($row['transaction_type']);
                         $vch_type = $short_types[$raw_type] ?? ucwords(str_replace('_', ' ', $raw_type));
-                        $vch_no = htmlspecialchars($row['settled_bill_no'] ?? $row['reference_id'] ?? '-');
-                        $vch_id = preg_replace('/[^0-9]/', '', $vch_no);
+                        
+                        // ==========================================
+                        // FIX: Explicitly handle IDs based on type
+                        // ==========================================
+                        if ($vch_type === 'Commission' || $vch_type === 'Bank Transfer') {
+                            // Commissions and Bank Transfers should always use the ledger's reference_id
+                            $vch_no = $row['reference_id'];
+                            $vch_id = $row['reference_id'];
+                        } else {
+                            // Bill Adjustments should use the fetched bill number, falling back to reference_id
+                            $vch_no = !empty($row['settled_bill_no']) ? $row['settled_bill_no'] : (!empty($row['reference_id']) ? $row['reference_id'] : '-');
+                            $vch_id = preg_replace('/[^0-9]/', '', $vch_no);
+                        }
+                        
+                        // Escape the visual number for HTML safety
+                        $vch_no_display = htmlspecialchars($vch_no);
+
                         $earned = 0;
                         $settled = 0;
 
@@ -188,13 +204,13 @@ include 'view/layout/header.php';
                                        onmouseover="this.style.textDecoration='underline'" 
                                        onmouseout="this.style.textDecoration='none'">
                                         <?= $vch_type ?> 
-                                        <?= $vch_no !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
+                                        <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no_display.')</small>' : '' ?>
                                     </a>
                                 
                                 <?php elseif ($vch_type === 'Bill Adjusted'): ?>
                                     <!-- Bill Adjusted with Stockist Name -->
                                     <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
-                                    <?= $vch_no !== '-' ? '<small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
+                                    <?= $vch_no_display !== '-' ? '<small class="text-muted" style="color: #6c757d;">(#'.$vch_no_display.')</small>' : '' ?>
                                     <br>
                                     <button type="button" class="btn btn-sm btn-light" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; border: 1px solid #dee2e6;">
                                         <i class="fa fa-user text-primary"></i> <?= htmlspecialchars($row['stockist_name']); ?>
@@ -203,7 +219,7 @@ include 'view/layout/header.php';
                                 <?php else: ?>
                                     <!-- Other Settlement Types -->
                                     <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
-                                    <?= $vch_no !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no.')</small>' : '' ?>
+                                    <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no_display.')</small>' : '' ?>
                                 <?php endif; ?>
                             </td>
                             <td class="text-right" style="color: #5cb85c; font-weight: 500; white-space: nowrap;"><?= $earned > 0 ? number_format($earned, 2) : '' ?></td>

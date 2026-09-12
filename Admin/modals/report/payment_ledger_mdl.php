@@ -108,7 +108,7 @@ public function getReportmrc($hq_id, $from_date, $to_date)
                     (
                         SELECT 
                             ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
-                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0))
+                            ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement') THEN amount ELSE 0 END), 0))
                         FROM payment_ledgers 
                         -- Ensure we only calculate outstanding debt if it's a real stockist (> 0)
                         WHERE stockist_id = p.stockist_id AND stockist_id > 0 AND ledger_type = 'debt'
@@ -124,8 +124,8 @@ public function getReportmrc($hq_id, $from_date, $to_date)
                 LEFT JOIN mr_users m ON pd.mr_id = m.m_id
                 
                 -- Attempt to get the invoice number if reference_id matches an inward_id
-                LEFT JOIN stock_inward si ON p.reference_id = si.inward_id AND p.transaction_type IN ('mrc_settlement', 'settled_to_bill')
-                
+                LEFT JOIN payment_allocations pa ON p.id = pa.ledger_id AND p.transaction_type IN ('mrc_settlement')
+                LEFT JOIN stock_inward si ON pa.inward_id = si.inward_id
                 -- Match HQ from either the Stockist OR the MR User
                 WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
                 AND p.ledger_type = 'mrc_wallet'
@@ -204,10 +204,8 @@ public function getReportmrc($hq_id, $from_date, $to_date)
                 -- Trace the HQ for Bank Payouts by joining payment_details and mr_users
                 LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
                 LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                
-                -- Attempt to get the invoice number if reference_id matches an inward_id
-                LEFT JOIN stock_inward si ON p.reference_id = si.inward_id AND p.transaction_type IN ('drc_settlement', 'settled_to_bill')
-                
+                LEFT JOIN payment_allocations pa   ON p.id = pa.ledger_id AND p.transaction_type IN ('drc_settlement', 'settled_to_bill')
+                LEFT JOIN stock_inward si ON pa.inward_id = si.inward_id
                 -- Match HQ from either the Stockist OR the MR User
                 WHERE COALESCE(s.hq_id, m.hq_id) = '$hq_id' 
                 AND p.ledger_type = 'drc_wallet'

@@ -251,10 +251,10 @@ class commission_mdl
         return $data;
     }
 
-   // ========================================================
+// ========================================================
     // Fetch Live Wallet Balances (Using Trusted Query Format)
     // ========================================================
-   public function getWalletBalances($mr_id)
+    public function getWalletBalances($mr_id)
     {
         $mr_id = (int)$mr_id;
         
@@ -271,47 +271,42 @@ class commission_mdl
         $drc_balance = 0.00;
         
         if ($hq_id > 0) {
-            // 2. Get MRC Balance (Updated to include Bank Payouts where stockist_id = 0)
-            $stmt_mrc = $this->con->prepare("
-                SELECT SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
+            // 2. Fetch BOTH MRC and DRC balances safely
+            $query = "
+                SELECT 
+                    SUM(CASE 
+                        WHEN pl.ledger_type = 'mrc_wallet' AND pl.balance_action = 'increase' THEN pl.amount 
+                        WHEN pl.ledger_type = 'mrc_wallet' AND pl.balance_action != 'increase' THEN -pl.amount 
+                        ELSE 0 
+                    END) as mrc_total,
+                    
+                    SUM(CASE 
+                        WHEN pl.ledger_type = 'drc_wallet' AND pl.balance_action = 'increase' THEN pl.amount 
+                        WHEN pl.ledger_type = 'drc_wallet' AND pl.balance_action != 'increase' THEN -pl.amount 
+                        ELSE 0 
+                    END) as drc_total
+
                 FROM payment_ledgers pl
                 
-                -- Changed to LEFT JOIN to prevent dropping Bank Payouts (stockist_id = 0)
+                -- Only join stockists to trace bill settlements
                 LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
                 
-                -- Trace Bank Payouts to the MR/HQ via payment_details
-                LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
-                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = ? AND pl.ledger_type = 'mrc_wallet'
-            ");
-            $stmt_mrc->bind_param("i", $hq_id);
-            $stmt_mrc->execute();
-            $res_mrc = $stmt_mrc->get_result()->fetch_assoc();
-            $mrc_balance = $res_mrc['total_balance'] ? (float)$res_mrc['total_balance'] : 0.00;
-            $stmt_mrc->close();
+                -- FIX: Check HQ from stockist OR check if user_id matches either the legacy HQ ID or the new MR ID
+                WHERE (s.hq_id = ? OR pl.user_id IN (?, ?))
+                  AND pl.ledger_type IN ('mrc_wallet', 'drc_wallet')
+            ";
+
+            $stmt = $this->con->prepare($query);
             
-            // 3. Get DRC Balance (Updated to include Bank Payouts where stockist_id = 0)
-            $stmt_drc = $this->con->prepare("
-                SELECT SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
-                FROM payment_ledgers pl
-                
-                -- Changed to LEFT JOIN to prevent dropping Bank Payouts (stockist_id = 0)
-                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
-                
-                -- Trace Bank Payouts to the MR/HQ via payment_details
-                LEFT JOIN payment_details pd ON pl.reference_id = pd.id AND pl.stockist_id = 0
-                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                
-                -- Match HQ from either the Stockist OR the MR User
-                WHERE COALESCE(s.hq_id, m.hq_id) = ? AND pl.ledger_type = 'drc_wallet'
-            ");
-            $stmt_drc->bind_param("i", $hq_id);
-            $stmt_drc->execute();
-            $res_drc = $stmt_drc->get_result()->fetch_assoc();
-            $drc_balance = $res_drc['total_balance'] ? (float)$res_drc['total_balance'] : 0.00;
-            $stmt_drc->close();
+            // Bind three parameters: HQ ID (for stockist), HQ ID (for legacy ledgers), MR ID (for new ledgers)
+            $stmt->bind_param("iii", $hq_id, $hq_id, $mr_id);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
+            
+            $mrc_balance = $res['mrc_total'] ? (float)$res['mrc_total'] : 0.00;
+            $drc_balance = $res['drc_total'] ? (float)$res['drc_total'] : 0.00;
+            
+            $stmt->close();
         }
         
         return [
