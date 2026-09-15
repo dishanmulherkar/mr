@@ -44,7 +44,7 @@ private $db;
     {
         // 1. Base query without the date filter
            $query = "
-           SELECT COALESCE(SUM(si.sub_total), 0) AS primary_sale
+           SELECT COALESCE(SUM(si.business_value), 0) AS primary_sale
         FROM stock_inward si
         INNER JOIN stockists st
             ON si.stockist_id = st.stockist_id

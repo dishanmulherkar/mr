@@ -103,6 +103,7 @@ $message = $invoice['remarks'] ?? 'Message :';
 if (strpos($message, ':') === false) {
     $message = 'Message : ' . $message;
 }
+$total_business_value = $invoice['business_value'] ?? 0; // Assuming this is passed from the controller
 
 function convertNumberToWords($number) {
     $no = floor($number);
@@ -256,7 +257,7 @@ table { border-collapse: collapse; width: 100%; }
                             <td colspan="3" style="border: none;  border-bottom: 1px solid #000; padding: 1px 3px; width: 70%; font-size: 8pt;">: <?= htmlspecialchars($dispatchTo) ?></td>
                         </tr>
                         <tr>
-                            <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Terms</td>
+                            <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Payment Terms</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">: <?= htmlspecialchars($invoice['credit_days'] ?? '30') ?> Days</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Due Date</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">: <?= htmlspecialchars($dueDate) ?></td>
@@ -381,7 +382,7 @@ table { border-collapse: collapse; width: 100%; }
             <!-- EXTRA BLANK ROWS -->
             <?php
             $itemCount = count($items);
-            $minimumRows = 10;
+            $minimumRows = 15;
             $columnCount = ($gstType === 'IGST' || $gstType === 'VAT') ? 13 : 15;
 
             for ($i = $itemCount; $i < $minimumRows; $i++):
@@ -395,25 +396,25 @@ table { border-collapse: collapse; width: 100%; }
 
             <!-- TOTALS ROW -->
             <tr style="font-weight: bold;">
-                <td colspan="7" style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;">Total</td>
-                <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 2px solid #000;"><?= $dbTotalQty > 0 ? $dbTotalQty : $totalRenderedQty ?></td>
-                <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 2px solid #000;"></td>
-                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;"><?= number_format($dbSubTotal, 2) ?></td>
-                
+                <td colspan="7" style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;">Total</td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"><?= $dbTotalQty > 0 ? $dbTotalQty : $totalRenderedQty ?></td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($dbSubTotal, 2) ?></td>
+
                 <?php if ($gstType === 'IGST'): ?>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 2px solid #000;"></td>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;"><?= number_format($dbIgst, 2) ?></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($dbIgst, 2) ?></td>
                 <?php elseif ($gstType === 'VAT'): ?>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 2px solid #000;"></td>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;"><?= number_format($dbVat, 2) ?></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($dbVat, 2) ?></td>
                 <?php else: ?>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 2px solid #000;"></td>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;"><?= number_format($dbSgst, 2) ?></td>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 2px solid #000;"></td>
-                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;"><?= number_format($dbCgst, 2) ?></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($dbSgst, 2) ?></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($dbCgst, 2) ?></td>
                 <?php endif; ?>
 
-                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 2px solid #000;"><?= number_format($calculatedGrandTotal, 2) ?></td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($calculatedGrandTotal, 2) ?></td>
             </tr>
         </tbody>
     </table>
@@ -426,8 +427,8 @@ table { border-collapse: collapse; width: 100%; }
                
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 0px;">
                      <tr style="">
-                        <td style=" border-left: 1px  #000;">
-                            <div style="font-weight: bold; font-size: 8pt; margin-bottom: 2px; ">Company GSTin: <?= htmlspecialchars($companyGst) ?></div>
+                        <td style=" border-left: 1px  #9c5959;">
+                            <div style="font-weight: bold; font-size: 8pt; margin-bottom: 2px; margin-left: 5px;">Company GSTin: <?= htmlspecialchars($companyGst) ?></div>
                         </td>
                         <td style="">
                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 0px;">
@@ -459,7 +460,8 @@ table { border-collapse: collapse; width: 100%; }
                         </td>
                       </tr>
                 </table>
-                 <div style="font-weight: bold; font-size: 8pt; margin-top: 10px;"><?= htmlspecialchars($message) ?></div>
+                 <div style="font-weight: bold; font-size: 8pt; margin-top: 10px; margin-left: 5px;"><?= htmlspecialchars($message) ?></div>
+                 <div style="font-weight: bold; font-size: 8pt; margin-top: 25px; margin-left: 5px;">business value: <?= number_format($total_business_value, 2) ?></div>
             </td>
             
             <!-- RIGHT: Totals Column (CORRECTED) -->
@@ -530,15 +532,6 @@ table { border-collapse: collapse; width: 100%; }
                         <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;"><?= $dbOther > 0 ? '+' : '' ?> <?= number_format($dbOther, 2) ?></td>
                     </tr>
                     <?php endif; ?>
-                    
-                    <!-- <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Freight</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">+ 0.00</td>
-                    </tr>
-                    <tr>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: left;">Credit Note</td>
-                        <td style="border: none; padding: 1px 3px; font-size: 8pt; text-align: right;">- 0.00</td>
-                    </tr> -->
 
                      <!-- Additional Discount (Invoice Level) -->
                     <?php if ($additionalDiscount > 0): ?>
@@ -558,8 +551,8 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 75%;">
                 <table>
                     <tr style="font-weight: bold; ">
-                        <td style="border: none;  font-size: 8pt; ">
-                            <div>Amount in Words: <span> </span></div>
+                        <td style="border: none;  font-size: 8pt; margin-left: 5px;">
+                            <div style="margin-left: 5px;">Amount in Words: <span> </span></div>
                         </td>
                         <td style="border: none; padding: 0px 0px; font-size: 8pt; "> <?= htmlspecialchars($amountInWords ?? 'Total Amount In Words') ?></td>
                     </tr>
@@ -568,14 +561,14 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 25%; ">
                 <table>
                     <tr style="font-weight: bold; border-left: 1px solid #000;  ">
-                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: left;">Net Amount</td>
+                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: left;"> <span style="margin-left: 5px;"> Net Amount </span></td>
                         <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: right;"><?= number_format($netAmountRounded, 2) ?></td>
                     </tr>
                 </table>
             </td>
         </tr>
         <tr>
-            <td style="width: 75%; height: 10px; padding-bottom: 50px;"><strong>Terms & Conditions:</strong>
+            <td style="width: 75%; height: 10px; padding-bottom: 50px; "> <span style="margin-left: 5px;"><strong>Terms & Conditions:</strong></span>
                 <div style="margin-left: 25px; margin-top: 0px;">
                     <?= $term_and_condition ?>
                 </div>

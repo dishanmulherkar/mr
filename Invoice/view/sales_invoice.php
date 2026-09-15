@@ -241,7 +241,7 @@ table { border-collapse: collapse; width: 100%; }
                             <td colspan="3" style="border: none;  border-bottom: 1px solid #000; padding: 1px 3px; width: 70%; font-size: 8pt;">: <?= htmlspecialchars($dispatchTo) ?></td>
                         </tr>
                         <tr>
-                            <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Terms</td>
+                            <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Payment Terms</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">:</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Due Date</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">:</td>

@@ -40,7 +40,10 @@ class InvoiceModel
                 ss.address AS company_address,
                 ss.gst_no AS company_gst,
                 ss.district AS company_district,
-                ss.state AS company_state,
+                
+                ss.state AS company_state_id,              -- The numerical ID
+                company_st.state_name AS company_state,    -- NEW: The actual string name
+                
                 ss.pincode AS company_pincode,
                 ss.term_and_condition
 
@@ -57,6 +60,9 @@ class InvoiceModel
                 
             LEFT JOIN super_stockist ss 
                 ON ss.super_stockist_id = si.super_stockist_id
+                
+            LEFT JOIN state company_st 
+                ON company_st.state_id = ss.state          -- NEW: Joining state table again for the company
                 
             INNER JOIN orders o
                 ON o.order_id = si.order_id

@@ -63,12 +63,12 @@ class Commission_mdl {
                 si.inward_no,
                 DATE(si.created_at) as bill_date,
                 s.stockist_name,
-                si.sub_total AS taxable_amount,
+                si.business_value AS taxable_amount,
                 si.grand_total,
                 si.paid_amt,
                 UPPER(si.pay_status) AS pay_status,
                 $rate AS commission_percent,
-                ROUND((si.sub_total * ($rate / 100)), 2) AS commission_amount
+                ROUND((si.business_value * ($rate / 100)), 2) AS commission_amount
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE s.hq_id = $hq_id 
@@ -239,7 +239,7 @@ class Commission_mdl {
         $details = ['bills' => [], 'adjustments' => []];
 
         $sql1 = "
-            SELECT si.inward_no, si.inward_date, s.stockist_name, si.sub_total, si.commission_amount 
+            SELECT si.inward_no, si.inward_date, s.stockist_name, si.business_value, si.commission_amount 
             FROM stock_inward si 
             LEFT JOIN stockists s ON si.stockist_id = s.stockist_id 
             WHERE si.commission_payout_id = ?

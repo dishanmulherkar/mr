@@ -504,3 +504,10 @@ ADD COLUMN gst_no VARCHAR(15) DEFAULT NULL AFTER qualification;
 ALTER TABLE stockists 
 ADD COLUMN credit_days INT(11) DEFAULT 0 AFTER `number`; 
 /* You can change 'AFTER mobile' to place it after any column you prefer */
+
+ALTER TABLE stock_inward 
+ADD COLUMN business_value DECIMAL(10,2) NOT NULL DEFAULT 0.00 after grand_total;
+
+UPDATE stock_inward 
+SET business_value = sub_total 
+WHERE business_value = 0.00;

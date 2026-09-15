@@ -407,7 +407,9 @@ class OrderModel
             $igst = (float)($data['igst'] ?? 0);
             $remarks = $data['remarks'] ?? '';
 
-            $sub_total = 0;
+           $sub_total = 0;
+            $total_business_value = 0; // 1. ADD THIS LINE
+            
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
                     $qty = (int)$raw_qty;
@@ -415,7 +417,10 @@ class OrderModel
                         $rate = (float)($rates[$key] ?? 0);
                         $disc = (float)($discs[$key] ?? 0);
                         $base = $qty * $rate;
-                        $first_disc = $base - ($base * ($disc / 100));
+                        $first_disc = $base - ($base * ($disc / 100)); // This is your business value per item
+                        
+                        $total_business_value += $first_disc; // 2. ADD THIS LINE
+                        
                         $taxable = $first_disc - ($first_disc * ($cd_percent / 100)); 
                         $sub_total += $taxable;
                     }
@@ -466,23 +471,25 @@ class OrderModel
                     lr_no, eway_bill_no, vehicle_no, transport_name, credit_days, 
                     admin_id, fy_id, inward_date, 
                     total_qty, sub_total, discount, gst_amount, other_charges, grand_total, round_off, 
-                    cgst_amount, sgst_amount, igst_amount, remarks, cd_percent
+                    cgst_amount, sgst_amount, igst_amount, remarks, cd_percent, business_value
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, 
                     ?, ?, ?, ?, ?, 
                     ?, ?, ?, 
                     ?, ?, ?, ?, ?, ?, ?, 
-                    ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?
                 )
             ");
             
+            // Note: Added 'd' at the end of the string for the new decimal value, 
+            // and added $total_business_value at the end of the variables.
             $stmt2->bind_param(
-                "siissiissssiiisddddddddddsd", 
+                "siissiissssiiisddddddddddsdd", 
                 $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $admin_id, $fy_id, $current_date,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $rounded_net_amount, $round_off,
-                $cgst, $sgst, $igst, $remarks, $cd_percent
+                $cgst, $sgst, $igst, $remarks, $cd_percent, $total_business_value
             );
 
             $stmt2->execute();
@@ -508,8 +515,11 @@ class OrderModel
             }
             $check_ledger->close();
 
-            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, amt = ?, net_total = ? WHERE detail_id = ?");
-            $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+           // ADDED `disc` and `tax` to the UPDATE query
+            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, discount = ?, gst = ?, amt = ?, net_total = ? WHERE detail_id = ?");
+
+            // ADDED `disc` and `tax` to the INSERT query
+            $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, discount, gst, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt_inward_det  = $this->con->prepare("
                 INSERT INTO stock_inward_details 
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
@@ -545,11 +555,13 @@ class OrderModel
                     $net_total        = $amt + $gst_amount_item;
                     $qty_float        = (float)$qty; 
 
-                    if (!empty($detail_id)) {
-                        $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
+                   if (!empty($detail_id)) {
+                        // Added $discount_percent and $gst_percent (2 new 'd's)
+                        $stmt_update_item->bind_param("iidddddi", $qty, $batch_id, $rate, $discount_percent, $gst_percent, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
                     } else {
-                        $stmt_insert_item->bind_param("iiiiiddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
+                        // Added $discount_percent and $gst_percent (2 new 'd's)
+                        $stmt_insert_item->bind_param("iiiiiddddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $discount_percent, $gst_percent, $amt, $net_total);
                         $stmt_insert_item->execute();
                     }
 
@@ -649,8 +661,9 @@ class OrderModel
             } else {
                 $this->con->query("DELETE FROM order_details WHERE order_id = $order_id");
             }
-
             $sub_total = 0;
+            $total_business_value = 0; // NEW: Initialize business value tracker
+            
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
                     $qty = (int)$raw_qty;
@@ -658,7 +671,10 @@ class OrderModel
                         $rate = (float)($rates[$key] ?? 0);
                         $disc = (float)($discs[$key] ?? 0);
                         $base = $qty * $rate;
-                        $first_disc = $base - ($base * ($disc / 100));
+                        $first_disc = $base - ($base * ($disc / 100)); // (rate * qty) - discount %
+                        
+                        $total_business_value += $first_disc; // NEW: Accumulate business value
+                        
                         $taxable = $first_disc - ($first_disc * ($cd_percent / 100));
                         $sub_total += $taxable;
                     }
@@ -670,18 +686,20 @@ class OrderModel
             $stmt1->execute();
             $stmt1->close();
 
+            // NEW: Added business_value=? to the SET clause
             $stmt2 = $this->con->prepare("
                 UPDATE stock_inward SET 
                 lr_no=?, eway_bill_no=?, vehicle_no=?, transport_name=?, credit_days=?, 
                 total_qty=?, sub_total=?, discount=?, gst_amount=?, other_charges=?, 
-                grand_total=?, round_off=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?
+                grand_total=?, round_off=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?, business_value=?
                 WHERE order_id=?
             ");
             
-            $stmt2->bind_param("ssssiddddddddddsdi", 
+            // NEW: Added 'd' to the bind_param string and inserted $total_business_value before $order_id
+            $stmt2->bind_param("ssssiddddddddddsddi", 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, 
-                $rounded_net_amount, $round_off, $cgst_amount, $sgst_amount, $igst_amount, $remarks, $cd_percent,
+                $rounded_net_amount, $round_off, $cgst_amount, $sgst_amount, $igst_amount, $remarks, $cd_percent, $total_business_value,
                 $order_id
             );
             $stmt2->execute();
@@ -708,8 +726,11 @@ class OrderModel
                 $check_ledger->close();
             }
 
-            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, amt = ?, net_total = ? WHERE detail_id = ?");
-            $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+           // Added `disc` and `tax` 
+            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, discount = ?, gst = ?, amt = ?, net_total = ? WHERE detail_id = ?");
+
+            // Added `disc` and `tax` 
+            $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, discount, gst, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt_inward_det  = $this->con->prepare("
                 INSERT INTO stock_inward_details 
                 (inward_id, p_id, batch_id, mrp, qty, rate, discount_percent, amt, gst_percent, gst_amount, net_total) 
@@ -746,10 +767,12 @@ class OrderModel
                     $qty_float        = (float)$qty; 
 
                     if (!empty($detail_id)) {
-                        $stmt_update_item->bind_param("iidddi", $qty, $batch_id, $rate, $amt, $net_total, $detail_id);
+                        // Added $discount_percent and $gst_percent
+                        $stmt_update_item->bind_param("iidddddi", $qty, $batch_id, $rate, $discount_percent, $gst_percent, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
                     } else {
-                        $stmt_insert_item->bind_param("iiiiiddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $amt, $net_total);
+                        // Added $discount_percent and $gst_percent
+                        $stmt_insert_item->bind_param("iiiiiddddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $discount_percent, $gst_percent, $amt, $net_total);
                         $stmt_insert_item->execute();
                     }
 

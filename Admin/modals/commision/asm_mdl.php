@@ -72,12 +72,12 @@ class asm_com_mdl {
                 si.inward_no,
                 DATE(si.created_at) as bill_date,
                 s.stockist_name,
-                si.sub_total AS taxable_amount,
+                si.business_value AS taxable_amount,
                 si.grand_total,
                 si.paid_amt,
                 UPPER(si.pay_status) AS pay_status,
                 $rate AS commission_percent,
-                ROUND((si.sub_total * ($rate / 100)), 2) AS commission_amount
+                ROUND((si.business_value * ($rate / 100)), 2) AS commission_amount
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
