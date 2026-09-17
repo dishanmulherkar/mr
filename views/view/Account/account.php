@@ -132,10 +132,10 @@ include 'view/layout/header.php';
                 </div>
               </div>
               <div class="form-row">
-                <div class="form-field">
+                <!-- <div class="form-field">
                   <label>Email</label>
                   <input type="email" id="email" value="<?php echo htmlspecialchars($mr['email']); ?>" placeholder="email@example.com"/>
-                </div>
+                </div> -->
                 <div class="form-field">
                   <label>Mobile</label>
                   <input type="tel"
