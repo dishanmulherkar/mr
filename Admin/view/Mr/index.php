@@ -262,7 +262,7 @@ include 'view/layout/header.php';
                                     <th class="text-center">Mobile</th>
                                     <th class="text-center">Email</th>
                                     <th class="text-center">Pincode</th>
-                                    <th class="text-center">Address</th>
+                                    <!-- <th class="text-center">Address</th> -->
                                     <th class="text-center">Password</th>
                                     <th class="text-center">Action</th>
                                     <th class="text-center">Status</th>
@@ -307,9 +307,9 @@ include 'view/layout/header.php';
                                     <?= htmlspecialchars($row['pincode']); ?>
                                 </td>
 
-                                <td class="text-center">
+                                <!-- <td class="text-center">
                                     <?= htmlspecialchars($row['address']); ?>
-                                </td>
+                                </td> -->
 
                                 <td class="text-center">
                                     <?= htmlspecialchars($row['password']); ?>

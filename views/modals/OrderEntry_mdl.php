@@ -616,4 +616,56 @@ public function saveOrderRecord($data)
         return $orders;
     }
 
+ // ==========================================
+    // DELETE ORDER LOGIC (MODEL)
+    // ==========================================
+
+    public function deleteOrder($order_id)
+    {
+        $order_id = (int)$order_id;
+        
+        if ($order_id <= 0) {
+            return ['success' => false, 'message' => 'Invalid Order ID.'];
+        }
+
+        $this->con->begin_transaction();
+
+        try {
+            // 1. Delete the order items (child records)
+            // Updated to 'order_details' to match your saveOrderRecord logic
+            $stmt_items = $this->con->prepare("DELETE FROM order_details WHERE order_id = ?");
+            $stmt_items->bind_param("i", $order_id);
+            
+            if (!$stmt_items->execute()) {
+                throw new Exception("Failed to delete order details: " . $stmt_items->error);
+            }
+            $stmt_items->close();
+
+            // Note: If you do end up creating stock_ledger entries during order creation 
+            // in the future, you will need to add the DELETE FROM stock_ledger query here.
+
+            // 2. Delete the order header
+            $stmt_order = $this->con->prepare("DELETE FROM orders WHERE order_id = ?");
+            $stmt_order->bind_param("i", $order_id);
+            
+            if (!$stmt_order->execute()) {
+                throw new Exception("Failed to delete order header: " . $stmt_order->error);
+            }
+            
+            // Verify that the order actually existed and was deleted
+            if ($stmt_order->affected_rows === 0) {
+                $stmt_order->close();
+                throw new Exception("Order not found or already deleted.");
+            }
+            $stmt_order->close();
+
+            $this->con->commit();
+
+            return ['success' => true, 'message' => 'Order deleted successfully.'];
+
+        } catch (Exception $e) {
+            $this->con->rollback();
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
 }

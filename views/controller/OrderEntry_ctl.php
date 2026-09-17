@@ -218,7 +218,44 @@ public function previewAllocation()
     exit; 
 }
 
-// Add this inside your Payment Controller routing logic
-   // Inside PaymentController.php
+// ==========================================
+    // DELETE ORDER (CONTROLLER for AJAX/Fetch)
+    // ==========================================
+
+    public function delete($order_id = 0)
+    {
+        // Set header to return JSON
+        header('Content-Type: application/json');
+
+        // Ensure the request is POST as per your JS fetch configuration
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'msg' => 'Invalid request method.']);
+            exit;
+        }
+
+        // Capture the order_id from the URL segment or POST parameter
+        $order_id = (int)$order_id;
+        if ($order_id <= 0 && isset($_POST['id'])) {
+            $order_id = (int)$_POST['id'];
+        }
+
+        if ($order_id > 0) {
+            
+            // Call the model to execute the deletion
+            $result = $this->model->deleteOrder($order_id);
+            
+            // Note: The model returns 'message', but your JS expects 'msg'
+            // We map it here so the frontend alert works correctly if it fails
+            echo json_encode([
+                'success' => $result['success'],
+                'msg'     => $result['message']
+            ]);
+            exit;
+
+        } else {
+            echo json_encode(['success' => false, 'msg' => 'Invalid Order ID provided.']);
+            exit;
+        }
+    }
   
 }

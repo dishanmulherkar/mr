@@ -127,6 +127,16 @@
                                 <i class="fa-solid fa-list-check" style="width: 20px;"></i> Purchase List
                             </a>
                         </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>purchase/adjustment" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-cart-shopping" style="width: 20px;"></i> Adjustment Entry
+                            </a>
+                        </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>purchase/adjlist" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-list-check" style="width: 20px;"></i> Adjustment List
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </li>

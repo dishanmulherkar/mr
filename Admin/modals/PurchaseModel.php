@@ -535,4 +535,329 @@ class PurchaseEntryModel
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
+
+    public function getCurrentStock($product_id, $batch_id, $stockist_id)
+    {
+        $product_id = (int)$product_id;
+        $batch_id = (int)$batch_id;
+        $stockist_id = (int)$stockist_id;
+
+        $query = mysqli_query($this->con, "
+            SELECT (SUM(qty_in) - SUM(qty_out)) as available_stock 
+            FROM stock_ledger 
+            WHERE p_id = '$product_id' 
+            AND batch_id = '$batch_id' 
+            AND stockist_id = '$stockist_id'
+            AND stockist_type = 'Super-Stockist'
+        ");
+        
+        $result = mysqli_fetch_assoc($query);
+        return $result['available_stock'] ?? 0;
+    }
+
+    public function getBatchesForAdjustment($product_id, $stockist_id)
+{
+    $product_id = (int)$product_id;
+    // Returns batches that exist in the system for this product.
+    // If you only want batches that CURRENTLY have stock for this stockist, join with stock_ledger.
+    $query = mysqli_query($this->con, "
+        SELECT batch_id, batch_no, expiry_date 
+        FROM product_batches 
+        WHERE product_id = '$product_id' AND status = 'Active'
+    ");
+    
+    $html = '<option value="">Select Batch</option>';
+    while ($row = mysqli_fetch_assoc($query)) {
+        $html .= '<option value="'.$row['batch_id'].'">'.$row['batch_no'].' (Exp: '.$row['expiry_date'].')</option>';
+    }
+    return $html;
+}
+
+// ============================================================
+    // DYNAMIC STOCK ADJUSTMENT DROPDOWNS (MODEL)
+    // ============================================================
+
+    // 1. Get Products only available in this Stockist's inventory
+    public function getProductsByStockist($stockist_id)
+    {
+        $stockist_id = (int)$stockist_id;
+        $query = mysqli_query($this->con, "
+            SELECT p.p_id, p.product_name 
+            FROM stock_ledger sl
+            INNER JOIN products p ON sl.p_id = p.p_id
+            WHERE sl.stockist_id = '$stockist_id' 
+              AND sl.stockist_type = 'Super-Stockist'
+            GROUP BY sl.p_id
+            HAVING (SUM(sl.qty_in) - SUM(sl.qty_out)) > 0
+            ORDER BY p.product_name ASC
+        ");
+
+        $html = '<option value="">Select Product</option>';
+        while ($row = mysqli_fetch_assoc($query)) {
+            $html .= '<option value="'.$row['p_id'].'">'.$row['product_name'].'</option>';
+        }
+        return $html;
+    }
+
+    // 2. Get Batches only available for this Product in this Stockist's inventory
+    public function getBatchesByStockistProduct($product_id, $stockist_id)
+    {
+        $product_id = (int)$product_id;
+        $stockist_id = (int)$stockist_id;
+
+        $query = mysqli_query($this->con, "
+            SELECT pb.batch_id, pb.batch_no, pb.expiry_date, 
+                   (SUM(sl.qty_in) - SUM(sl.qty_out)) as available_stock
+            FROM stock_ledger sl
+            INNER JOIN product_batches pb ON sl.batch_id = pb.batch_id
+            WHERE sl.p_id = '$product_id' 
+              AND sl.stockist_id = '$stockist_id' 
+              AND sl.stockist_type = 'Super-Stockist'
+            GROUP BY sl.batch_id
+            HAVING available_stock > 0
+            ORDER BY pb.batch_no ASC
+        ");
+
+        $html = '<option value="">Select Batch</option>';
+        while ($row = mysqli_fetch_assoc($query)) {
+            // Optional: You can show the available stock inside the dropdown label for better UI
+            $html .= '<option value="'.$row['batch_id'].'">'.$row['batch_no'].' (Stock: '.$row['available_stock'].')</option>';
+        }
+        return $html;
+    }
+
+public function adjustmentstore($post)
+    {
+        $stockist_id = (int)($post['stockist_id'] ?? 0);
+        $adj_date = mysqli_real_escape_string($this->con, $post['adj_date'] ?? date('Y-m-d'));
+        $general_remarks = mysqli_real_escape_string($this->con, $post['general_remarks'] ?? '');
+        $admin_id = $_SESSION['admin_id'] ?? 1; 
+
+        // Generate next Adjustment Number (e.g., ADJ-0001)
+        $max_id_query = mysqli_query($this->con, "SELECT MAX(adj_id) as max_id FROM stock_adjustments");
+        $max_id_row = mysqli_fetch_assoc($max_id_query);
+        $next_id = ($max_id_row['max_id'] ?? 0) + 1;
+        $adj_no = 'ADJ-' . str_pad($next_id, 4, '0', STR_PAD_LEFT);
+
+        mysqli_begin_transaction($this->con);
+
+        try {
+            // 1. Insert Header
+            $header_query = "
+                INSERT INTO stock_adjustments (
+                    adj_no, stockist_id, adj_date, remarks, created_by, created_at
+                ) VALUES (
+                    '$adj_no', '$stockist_id', '$adj_date', '$general_remarks', '$admin_id', NOW()
+                )
+            ";
+
+            if (!mysqli_query($this->con, $header_query)) {
+                throw new Exception("Failed to insert adjustment header: " . mysqli_error($this->con));
+            }
+
+            $adj_id = mysqli_insert_id($this->con);
+
+            // 2. Loop through products
+            if (isset($post['product_id']) && is_array($post['product_id'])) {
+                foreach ($post['product_id'] as $key => $product_id) {
+                    $product_id = (int)$product_id;
+                    $batch_id = (int)($post['batch_id'][$key] ?? 0);
+                    $adj_type = mysqli_real_escape_string($this->con, $post['adj_type'][$key] ?? 'ADD');
+                    $qty = (float)($post['qty'][$key] ?? 0);
+                    $line_remarks = mysqli_real_escape_string($this->con, $post['line_remarks'][$key] ?? '');
+
+                    if ($qty <= 0) continue;
+
+                    $qty_in = ($adj_type === 'ADD') ? $qty : 0;
+                    $qty_out = ($adj_type === 'DEDUCT') ? $qty : 0;
+
+                    // Insert Details
+                    $detail_query = "
+                        INSERT INTO stock_adjustment_details (
+                            adj_id, product_id, batch_id, adj_type, qty, remarks
+                        ) VALUES (
+                            '$adj_id', '$product_id', '$batch_id', '$adj_type', '$qty', '$line_remarks'
+                        )
+                    ";
+
+                    if (!mysqli_query($this->con, $detail_query)) {
+                        throw new Exception("Failed to insert adjustment details: " . mysqli_error($this->con));
+                    }
+
+                    // Insert into Stock Ledger (UPDATED WITH REFERENCE_TABLE)
+                    $ledger_query = "
+                        INSERT INTO stock_ledger (
+                            reference_table, reference_id, p_id, batch_id, trans_type, 
+                            qty_in, qty_out, trans_date, trans_datetime, 
+                            admin_id, stockist_id, stockist_type
+                        ) VALUES (
+                            'stock_adjustments', '$adj_id', '$product_id', '$batch_id', 'ADJUSTMENT', 
+                            '$qty_in', '$qty_out', '$adj_date', NOW(), 
+                            '$admin_id', '$stockist_id', 'Super-Stockist'
+                        )
+                    ";
+
+                    if (!mysqli_query($this->con, $ledger_query)) {
+                        throw new Exception("Failed to update stock ledger: " . mysqli_error($this->con));
+                    }
+                }
+            } else {
+                throw new Exception("No products provided for adjustment.");
+            }
+
+            mysqli_commit($this->con);
+            return ['success' => true, 'message' => 'Adjustment saved successfully!'];
+
+        } catch (Exception $e) {
+            mysqli_rollback($this->con);
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function adjustmentupdate($post)
+    {
+        $adj_id = (int)($post['adj_id'] ?? 0);
+        
+        if ($adj_id <= 0) {
+            return ['success' => false, 'message' => 'Invalid Adjustment ID for update.'];
+        }
+
+        $stockist_id = (int)($post['stockist_id'] ?? 0);
+        $adj_date = mysqli_real_escape_string($this->con, $post['adj_date'] ?? date('Y-m-d'));
+        $general_remarks = mysqli_real_escape_string($this->con, $post['general_remarks'] ?? '');
+        $admin_id = $_SESSION['admin_id'] ?? 1;
+
+        mysqli_begin_transaction($this->con);
+
+        try {
+            // 1. Update Header
+            $header_query = "
+                UPDATE stock_adjustments SET 
+                    stockist_id = '$stockist_id',
+                    adj_date = '$adj_date',
+                    remarks = '$general_remarks'
+                WHERE adj_id = '$adj_id'
+            ";
+
+            if (!mysqli_query($this->con, $header_query)) {
+                throw new Exception("Failed to update adjustment header: " . mysqli_error($this->con));
+            }
+
+            // 2. Clear old child rows & ledger entries to reverse cleanly
+            if (!mysqli_query($this->con, "DELETE FROM stock_adjustment_details WHERE adj_id = '$adj_id'")) {
+                throw new Exception("Failed to clear old adjustment details: " . mysqli_error($this->con));
+            }
+            
+            // UPDATED: Added reference_table to the DELETE query for stricter safety
+            if (!mysqli_query($this->con, "DELETE FROM stock_ledger WHERE reference_table = 'stock_adjustments' AND reference_id = '$adj_id' AND trans_type = 'ADJUSTMENT'")) {
+                throw new Exception("Failed to clear old stock ledger: " . mysqli_error($this->con));
+            }
+
+            // 3. Process New Entries
+            if (isset($post['product_id']) && is_array($post['product_id'])) {
+                foreach ($post['product_id'] as $key => $product_id) {
+                    
+                    $product_id = (int)$product_id;
+                    $batch_id = (int)($post['batch_id'][$key] ?? 0);
+                    $adj_type = mysqli_real_escape_string($this->con, $post['adj_type'][$key] ?? 'ADD');
+                    $qty = (float)($post['qty'][$key] ?? 0);
+                    $line_remarks = mysqli_real_escape_string($this->con, $post['line_remarks'][$key] ?? '');
+
+                    if ($qty <= 0) continue;
+
+                    $qty_in = ($adj_type === 'ADD') ? $qty : 0;
+                    $qty_out = ($adj_type === 'DEDUCT') ? $qty : 0;
+
+                    // Insert Details
+                    $detail_query = "
+                        INSERT INTO stock_adjustment_details (
+                            adj_id, product_id, batch_id, adj_type, qty, remarks
+                        ) VALUES (
+                            '$adj_id', '$product_id', '$batch_id', '$adj_type', '$qty', '$line_remarks'
+                        )
+                    ";
+
+                    if (!mysqli_query($this->con, $detail_query)) {
+                        throw new Exception("Failed to insert new adjustment details: " . mysqli_error($this->con));
+                    }
+
+                    // Insert into Stock Ledger (UPDATED WITH REFERENCE_TABLE)
+                    $ledger_query = "
+                        INSERT INTO stock_ledger (
+                            reference_table, reference_id, p_id, batch_id, trans_type, 
+                            qty_in, qty_out, trans_date, trans_datetime, 
+                            admin_id, stockist_id, stockist_type
+                        ) VALUES (
+                            'stock_adjustments', '$adj_id', '$product_id', '$batch_id', 'ADJUSTMENT', 
+                            '$qty_in', '$qty_out', '$adj_date', NOW(), 
+                            '$admin_id', '$stockist_id', 'Super-Stockist'
+                        )
+                    ";
+
+                    if (!mysqli_query($this->con, $ledger_query)) {
+                        throw new Exception("Failed to insert new stock ledger: " . mysqli_error($this->con));
+                    }
+                }
+            } else {
+                throw new Exception("No products provided for adjustment.");
+            }
+
+            mysqli_commit($this->con);
+            return ['success' => true, 'message' => 'Adjustment updated successfully!'];
+
+        } catch (Exception $e) {
+            mysqli_rollback($this->con);
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    // Fetch all adjustments for the list page
+    public function getAdjustmentList()
+    {
+        $query = "
+            SELECT 
+                a.adj_id, 
+                a.adj_no, 
+                a.adj_date, 
+                a.remarks, 
+                s.ss_name 
+            FROM stock_adjustments a
+            LEFT JOIN super_stockist s ON a.stockist_id = s.super_stockist_id
+            ORDER BY a.adj_date DESC, a.adj_id DESC
+        ";
+        
+        return mysqli_query($this->con, $query);
+    }
+
+    // ==========================================
+    // FETCH ADJUSTMENT FOR EDIT (MODEL)
+    // ==========================================
+
+    // Fetch the main header record
+    public function getAdjustmentById($adj_id)
+    {
+        $adj_id = (int)$adj_id;
+        $query = mysqli_query($this->con, "
+            SELECT * FROM stock_adjustments 
+            WHERE adj_id = '$adj_id' LIMIT 1
+        ");
+        
+        return mysqli_fetch_assoc($query);
+    }
+
+    // Fetch the child records and join with product/batch data
+    public function getAdjustmentDetails($adj_id)
+    {
+        $adj_id = (int)$adj_id;
+        return mysqli_query($this->con, "
+            SELECT 
+                d.*, 
+                p.product_name, 
+                pb.batch_no 
+            FROM stock_adjustment_details d
+            LEFT JOIN products p ON d.product_id = p.p_id
+            LEFT JOIN product_batches pb ON d.batch_id = pb.batch_id
+            WHERE d.adj_id = '$adj_id'
+        ");
+    }
 }

@@ -511,3 +511,29 @@ ADD COLUMN business_value DECIMAL(10,2) NOT NULL DEFAULT 0.00 after grand_total;
 UPDATE stock_inward 
 SET business_value = sub_total 
 WHERE business_value = 0.00;
+
+-- 16/09/26
+
+CREATE TABLE `stock_adjustments` (
+  `adj_id` int(11) NOT NULL AUTO_INCREMENT,
+  `adj_no` varchar(50) NOT NULL,
+  `stockist_id` int(11) NOT NULL,
+  `adj_date` date NOT NULL,
+  `remarks` text DEFAULT NULL,
+  `created_by` int(11) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`adj_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `stock_adjustment_details` (
+  `detail_id` int(11) NOT NULL AUTO_INCREMENT,
+  `adj_id` int(11) NOT NULL,
+  `product_id` int(11) NOT NULL,
+  `batch_id` int(11) NOT NULL,
+  `adj_type` enum('ADD','DEDUCT') NOT NULL,
+  `qty` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `remarks` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`detail_id`),
+  KEY `adj_id` (`adj_id`),
+  CONSTRAINT `fk_adj_details` FOREIGN KEY (`adj_id`) REFERENCES `stock_adjustments` (`adj_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

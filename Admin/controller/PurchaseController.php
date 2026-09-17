@@ -181,4 +181,136 @@ class PurchaseController
             }
         }
     }
+
+   // ============================================================
+    // STOCK ADJUSTMENT MODULE (CONTROLLER)
+    // ============================================================
+
+    public function adjustment()
+    {
+        // Fetch products and stockists using your existing model functions
+        $Products = $this->model->getProducts();
+        $getStockist  = $this->model->getStockist();
+
+        // Include the view file directly like in your index method
+        include 'view/Adjustment/entry.php';
+    }
+
+    public function getCurrentStock()
+    {
+        if (isset($_POST['product_id']) && isset($_POST['batch_id']) && isset($_POST['stockist_id'])) {
+            $product_id = (int)$_POST['product_id'];
+            $batch_id = (int)$_POST['batch_id'];
+            $stockist_id = (int)$_POST['stockist_id'];
+            
+            echo $this->model->getCurrentStock($product_id, $batch_id, $stockist_id);
+        }
+    }
+
+ public function adjustmentstore() 
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            
+            // Check if any products were added
+            if (empty($_POST['product_id'])) {
+                header("Location: " . BASE_URL . "/purchase/adjlist?error=1");
+                exit;
+            }
+
+            $result = $this->model->adjustmentstore($_POST);
+
+            if ($result['success'] === true) {
+                header("Location: " . BASE_URL . "purchase/adjlist?success=1");
+                exit;
+            } else {
+                echo "<h3>Debug Error:</h3>";
+                die("<pre>" . $result['message'] . "</pre>");
+            }
+        }
+    }
+
+    public function adjustmentupdate() 
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            
+            // Check if any products were added
+            if (empty($_POST['product_id'])) {
+                header("Location: " . BASE_URL . "purchase/adjlist?error=1");
+                exit;
+            }
+
+            $result = $this->model->adjustmentupdate($_POST);
+
+            if ($result['success'] === true) {
+                header("Location: " . BASE_URL . "purchase/adjlist?success=1");
+                exit;
+            } else {
+                echo "<h3>Debug Error:</h3>";
+                die("<pre>" . $result['message'] . "</pre>");
+            }
+        }
+    }
+
+    // ============================================================
+    // DYNAMIC STOCK ADJUSTMENT DROPDOWNS (CONTROLLER)
+    // ============================================================
+
+    // 1. AJAX: Fetch Products by Stockist
+    public function getAdjustmentProducts()
+    {
+        if (isset($_POST['stockist_id'])) {
+            $stockist_id = (int)$_POST['stockist_id'];
+            echo $this->model->getProductsByStockist($stockist_id);
+        }
+    }
+
+    // 2. AJAX: Fetch Batches by Product and Stockist
+    // (Replace your previous getBatches function for adjustments with this)
+    public function getAdjustmentBatches()
+    {
+        if (isset($_POST['product_id']) && isset($_POST['stockist_id'])) {
+            $product_id = (int)$_POST['product_id'];
+            $stockist_id = (int)$_POST['stockist_id'];
+            echo $this->model->getBatchesByStockistProduct($product_id, $stockist_id);
+        }
+    }
+
+    // Load the List Page
+    public function adjlist()
+    {
+        // Fetch the list of adjustments
+        $Adjustments = $this->model->getAdjustmentList();
+        
+        // Include the view file
+        include 'view/Adjustment/list.php';
+    }
+
+    // ==========================================
+    // EDIT ADJUSTMENT (CONTROLLER)
+    // ==========================================
+    
+    public function edit_adj($adj_id = 0)
+    {
+        // Depending on your router, the ID might come from the URL segment or $_GET
+        $adj_id = (int)$adj_id;
+        if ($adj_id <= 0 && isset($_GET['id'])) {
+            $adj_id = (int)$_GET['id'];
+        }
+
+        if ($adj_id <= 0) {
+            header("Location: " . BASE_URL . "purchase/adjustment_list?error=1");
+            exit;
+        }
+
+        // 1. Fetch the Adjustment Header and Details
+        $ROW = $this->model->getAdjustmentById($adj_id);
+        $ROW_DETAILS = $this->model->getAdjustmentDetails($adj_id);
+
+        // 2. Fetch dropdowns (Using your existing model methods)
+        $getStockist = $this->model->getStockist();
+        $Products = $this->model->getProducts(); // Or getActiveProducts() depending on your setup
+
+        // 3. Load the View (Change the path if your folder structure differs)
+        include 'view/Adjustment/entry.php'; 
+    }
 }

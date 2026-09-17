@@ -1,4 +1,5 @@
 // Order List Code 
+// alert('orderlist.js loaded'); // Debugging line to confirm the script is loaded
 
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -41,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     </li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
-                        <a class="dropdown-item text-danger del-order" href="#" data-id="${o.order_id}" title="Delete Order">
+                        <a class="dropdown-item text-danger del-order" href="${BASE_URL}OrderEntry/delete/${o.order_id}" data-id="${o.order_id}" title="Delete Order">
                             <i class="fa fa-trash text-danger me-2 pointer-events-none"></i> Delete
                         </a>
                     </li>
@@ -140,7 +141,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 if (!confirm('Are you sure you want to delete this order?')) return;
                 
-                fetch(`${BASE_URL}Order/delete/${id}`, { method: 'POST' })
+                fetch(`${BASE_URL}OrderEntry/delete/${id}`, { method: 'POST' })
                     .then(res => res.json())
                     .then(res => {
                         if (res.success) loadOrders();

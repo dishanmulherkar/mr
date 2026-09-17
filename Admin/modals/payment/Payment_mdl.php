@@ -56,10 +56,9 @@ class PaymentApproval_mdl {
         return $payments;
     }
 
-    // Secure Transaction to Approve or Reject a Payment
    // Secure Transaction to Approve or Reject a Payment
     
-public function processApproval($payment_id, $admin_id, $action_status) 
+    public function processApproval($payment_id, $admin_id, $action_status) 
     {
         try {
             $this->con->begin_transaction();
@@ -617,9 +616,6 @@ public function submitManualEntry($data, $admin_id)
             return ['success' => false, 'msg' => 'Error: ' . $e->getMessage()];
         }
     }
-// ==========================================
-    // NEW: Calculate total available balance for an HQ
-    // ==========================================
    // ==========================================
     // Calculate total available balance for an HQ
     // ==========================================
