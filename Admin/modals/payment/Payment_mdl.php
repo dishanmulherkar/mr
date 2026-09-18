@@ -360,7 +360,7 @@ public function submitManualEntry($data, $admin_id)
             // Extract the Entity ID (MR or ASM). 
             // In the ASM form, the ASM ID is passed as 'hq_id'. 
             // For MRC/DRC forms, it might be passed as 'mr_id'.
-            $mr_id = (!empty($data['mr_id']) ? (int)$data['mr_id'] : 0);
+           $mr_id = !empty($data['mr_id']) ? (int)$data['mr_id'] : (!empty($data['asm_id']) ? (int)$data['asm_id'] : 0);
 
             $commission_type = strtoupper($data['commission_type'] ?? ''); 
             $payment_type = $data['payment_type'] ?? ''; 

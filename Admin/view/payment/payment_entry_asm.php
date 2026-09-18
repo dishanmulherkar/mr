@@ -46,7 +46,7 @@ include 'view/layout/header.php';
                         <div class="form-group">
                             <label class="fw-bold">ASM</label>
                             <!-- Note: ID is hq_id but it actually holds the ASM ID based on your flow -->
-                            <select name="hq_id" id="hq_id" class="form-control select2" required>
+                            <select name="asm_id" id="asm_id" class="form-control select2" required>
                                 <option value="">-- Select State First --</option>
                             </select>
                         </div>
@@ -227,17 +227,17 @@ $(document).ready(function() {
         $('#stockist_id').html('<option value="">-- Select ASM First --</option>');
 
         if (stateId) {
-            $('#hq_id').html('<option value="">Loading...</option>');
+            $('#asm_id').html('<option value="">Loading...</option>');
             $.post(BASE_URL + 'payment/getAsmByStateAjax', { state_id: stateId }, function(res) {
-                $('#hq_id').html(res).trigger('change');
+                $('#asm_id').html(res).trigger('change');
             });
         } else {
-            $('#hq_id').html('<option value="">-- Select State First --</option>').trigger('change');
+            $('#asm_id').html('<option value="">-- Select State First --</option>').trigger('change');
         }
     });
 
     // 2. Load Headquarters and Stockists based on ASM Selection
-    $('#hq_id').change(function() {
+    $('#asm_id').change(function() {
         let asmId = $(this).val();
         
         if (asmId) {
@@ -266,7 +266,7 @@ $(document).ready(function() {
 
     // 3. Filter Stockists when a specific Headquarter is selected
     $('#filter_hq_id').change(function() {
-        let asmId = $('#hq_id').val();
+        let asmId = $('#asm_id').val();
         let specificHqId = $(this).val();
         fetchStockists(asmId, specificHqId);
     });
@@ -305,9 +305,9 @@ $(document).ready(function() {
     });
 
     // Fetch Balance when Commission Type or ASM changes
-    $('#commission_type, #hq_id').change(function() {
+    $('#commission_type, #asm_id').change(function() {
         let type = $('#commission_type').val();
-        let asmId = $('#hq_id').val(); // hq_id dropdown holds ASM ID
+        let asmId = $('#asm_id').val(); // hq_id dropdown holds ASM ID
         
         if(editData !== null) return; 
 
@@ -480,16 +480,16 @@ $(document).ready(function() {
         $('#payment_type').val(paymentAction).prop('disabled', true).trigger('change');
 
         // Lock all dropdowns immediately
-        $('#state_id, #hq_id, #filter_hq_id, #stockist_id, #settlement_date').prop('disabled', true);
+        $('#state_id, #asm_id, #filter_hq_id, #stockist_id, #settlement_date').prop('disabled', true);
 
         // 2. Force the ASM ID (Stored in mr_id column)
         let asmId = editData.mr_id; // ASM ID
         if (asmId && asmId != 0) {
             let asmName = editData.asm_name || ('Linked ASM'); 
-            if ($('#hq_id').find("option[value='" + asmId + "']").length === 0) {
-                $('#hq_id').append(new Option(asmName, asmId, true, true));
+            if ($('#asm_id').find("option[value='" + asmId + "']").length === 0) {
+                $('#asm_id').append(new Option(asmName, asmId, true, true));
             }
-            $('#hq_id').val(asmId).trigger('change');
+            $('#asm_id').val(asmId).trigger('change');
         }
 
         // 3. Force the Headquarter ID (Retrieved from Stockist)

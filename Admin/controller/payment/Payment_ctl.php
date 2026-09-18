@@ -126,7 +126,7 @@ class PaymentApproval_ctl {
         exit;
     }
 
-    public function submit_manual_entry() {
+  public function submit_manual_entry() {
         header('Content-Type: application/json');
         
         if (!isset($_SESSION['admin_id'])) {
@@ -137,8 +137,10 @@ class PaymentApproval_ctl {
         $admin_id = $_SESSION['admin_id'];
         $data = $_POST;
         
-        // Basic validation
-        if (empty($data['hq_id']) || empty($data['commission_type']) || empty($data['payment_type']) || empty($data['amount'])) {
+        // FIX: Check if EITHER asm_id OR mr_id exists
+        $has_valid_user_id = !empty($data['asm_id']) || !empty($data['mr_id']);
+        
+        if (!$has_valid_user_id || empty($data['commission_type']) || empty($data['payment_type']) || empty($data['amount'])) {
             echo json_encode(['success' => false, 'msg' => 'Please fill in all required fields.']);
             exit;
         }
@@ -146,7 +148,7 @@ class PaymentApproval_ctl {
         $result = $this->model->submitManualEntry($data, $admin_id);
         echo json_encode($result);
         exit;
-    }
+}
 
     // ==========================================
     // NEW: AJAX Endpoint to fetch MR/HQ Balance
