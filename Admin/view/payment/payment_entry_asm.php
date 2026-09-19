@@ -581,7 +581,7 @@ $(document).ready(function() {
         $.post(BASE_URL + 'payment/reverse_manual_entry', { payment_id: paymentId }, function(res) {
             if (res.success) {
                 showAlert(res.msg, 'success');
-                setTimeout(() => { window.location.href = BASE_URL + 'payment/payment_list'; }, 2000); 
+                setTimeout(() => { window.location.href = BASE_URL + 'payment/asm_payment_list'; }, 2000); 
             } else {
                 showAlert(res.msg, 'danger');
                 btn.html('<i class="fa fa-undo"></i> Reverse Payment').prop('disabled', false);

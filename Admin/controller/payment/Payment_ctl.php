@@ -313,6 +313,47 @@ public function get_payment_allocations() {
         include 'view/payment/payment_entry_asm_list.php';
     }
 
+    public function asm_pay_ledger()
+{
+    $asm_id = $_SESSION['admin_id'];
+    $hq = $this->model->getHQbyAsm($asm_id);
+    
+    // Get filter inputs from URL
+    $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
+    $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+    $start_date  = $_GET['start_date'] ?? '';
+    $end_date    = $_GET['end_date'] ?? '';
+    
+    $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
+    $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
+
+    $isEdit = false;
+    $order_data = ['stockist_id' => ''];
+    $hq_name = '';
+    $stockist_name = '';
+    $query = null;
+    $opening_balance = 0;
+    
+    // Initialize empty array to prevent errors
+    $stockists = []; 
+
+    // REQUIRED: Fetch the stockists for the selected HQ so the dropdown populates
+    if ($hq_id > 0) {
+        // NOTE: Replace 'getStockistsByHq' with your actual model method for fetching stockists by HQ ID
+        $stockists = $this->model->getStockistsByHq($hq_id); 
+    }
+
+    if ($stockist_id > 0) {
+        // Get opening balance calculated before the start date
+        $opening_balance = $this->model->getOpeningBalance($stockist_id, $from_date);
+        
+        // Get the actual ledger rows for the date range
+        $query = $this->model->getReport($stockist_id, $from_date, $to_date);
+    }
+    
+    include 'view/Asm/report/payment_ledger.php';
+}
+
 
 }
 ?>

@@ -286,7 +286,7 @@ class OrderModel
         return $rows;
     }
 
-/**
+    /**
      * Generates a unique, gapless INVOICE sequence using your existing 'order_' columns
      * Call this ONLY when an order is Approved.
      */
@@ -840,5 +840,181 @@ class OrderModel
             $gst = "IGST";
         }
         return $gst;
+    }
+
+    public function getHQbyAsm($asm_id)
+    {
+        return mysqli_query(
+            $this->con,
+            "SELECT * FROM headquarter where asm_id = '$asm_id'"
+        );
+    }
+
+    public function getStockistsByHQ($hq_id)
+    {
+        // Prevent SQL Injection
+        $hq_id = mysqli_real_escape_string($this->con, $hq_id);
+        
+        // Adjust 'stockist' table name and column names to match your actual database schema
+        return mysqli_query(
+            $this->con,
+            "SELECT stockist_id,stockist_name 
+            FROM stockists 
+            WHERE hq_id = '$hq_id' 
+            ORDER BY stockist_name ASC"
+        );
+    }
+
+public function getOrdersByHQ($hq_id = 0, $stockist_id = 0,$from_date = '')
+{
+    $asm_id =$_SESSION['admin_id'];
+    
+    // Base SQL joining mr_user and restricting to the logged-in ASM's HQs
+    $sql = "
+        SELECT 
+            o.order_id,
+            o.order_date,
+            o.total_amt,
+            o.status,
+            s.stockist_name,
+            mr.mr_name,
+            hq.hq_name,
+            COALESCE(od.total_qty, 0) AS total_qty,
+            CASE 
+                WHEN o.status = 'approved' 
+                    THEN COALESCE(si.grand_total, o.total_amt)
+                ELSE o.total_amt
+            END AS display_total
+        FROM orders o
+        INNER JOIN stockists s 
+            ON s.stockist_id = o.stockist_id
+        INNER JOIN `mr_users` mr 
+            ON mr.m_id = o.mr_id
+        INNER JOIN headquarter hq 
+            ON mr.hq_id = hq.headquarter_id 
+        LEFT JOIN (
+            SELECT order_id, SUM(qty) AS total_qty
+            FROM order_details
+            GROUP BY order_id
+        ) od 
+            ON od.order_id = o.order_id
+        LEFT JOIN (
+            SELECT order_id, MAX(grand_total) AS grand_total
+            FROM stock_inward
+            GROUP BY order_id
+        ) si 
+            ON si.order_id = o.order_id
+        WHERE mr.status = 1 
+        AND hq.asm_id = ?  /* <--- STRICTLY LIMIT TO THIS ASM'S HQs */
+    ";
+
+    // Bind the ASM ID by default so they can never see other ASMs' orders
+    $types = "i";
+    $params = [$asm_id];
+
+    // Filter by HQ ID if provided
+    if (!empty($hq_id)) {$sql .= " AND mr.hq_id = ? "; 
+        $types .= "i";
+        $params[] =$hq_id;
+    }
+
+    // Filter by Stockist if provided
+    if (!empty($stockist_id)) {$sql .= " AND o.stockist_id = ? ";
+        $types .= "i";
+        $params[] =$stockist_id;
+    }
+
+    // Filter by Exact Date if provided (Changed to = instead of >=)
+    if (!empty($from_date)) {$sql .= " AND o.order_date = ? ";
+        $types .= "s";
+        $params[] =$from_date;
+    }
+
+    $sql .= " ORDER BY o.order_date DESC, o.order_id DESC ";
+
+    $stmt = $this->con->prepare($sql);
+
+    if (!$stmt) {
+        return [];
+    }
+
+    // Bind parameters dynamically
+    $stmt->bind_param($types, ...$params);
+
+    $stmt->execute();$result = $stmt->get_result();$orders = [];
+
+    while ($row = $result->fetch_assoc()) {$orders[] = [
+            'order_id'      => (int)$row['order_id'],
+            'order_no'      => 'O' . str_pad($row['order_id'], 3, '0', STR_PAD_LEFT),
+            'order_date'    => date('d-m', strtotime($row['order_date'])),
+            'stockist_name' => $row['stockist_name'],
+            'total_qty'     => (int)$row['total_qty'],
+            'total_amt'     => (float)$row['total_amt'],
+            'grand_total'   => (float)$row['display_total'],
+            'status'        => $row['status'] ?? 'Pending',
+            'hq_name'       => $row['hq_name'],
+        ];
+    }
+
+    $stmt->close();
+    return $orders;
+}
+
+ public function getOrderById_asm($order_id)
+    {
+        $order_id = (int)$order_id;
+        
+
+        $stmt = $this->con->prepare("SELECT o.*, s.stockist_name,si.inward_no,si.inward_date FROM orders o 
+                                        LEFT JOIN `stock_inward` si ON si.order_id = o.order_id
+                                        LEFT JOIN stockists s ON o.stockist_id = s.stockist_id
+                                         WHERE o.order_id = ? ");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $order = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$order) return null;
+
+        // UPDATED: Added approved_qty to the select statement
+        $stmt = $this->con->prepare("
+            SELECT 
+                od.product_id,
+                p.product_name AS name,
+                SUM(od.qty) AS qty,
+                SUM(od.approved_qty) AS approved_qty,
+                MAX(od.rate) AS pts,
+                MAX(od.gst) AS tax,
+                MAX(od.discount) AS discount,
+                SUM(od.amt) AS amt,
+                SUM(od.net_total) AS net_total
+            FROM order_details od
+            INNER JOIN products p ON p.p_id = od.product_id
+            WHERE od.order_id = ?
+            GROUP BY od.product_id
+        ");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $items = [];
+        while ($row = $result->fetch_assoc()) {
+            $items[] = [
+                'id'           => (int)$row['product_id'],
+                'product_id'   => (int)$row['product_id'],
+                'name'         => $row['name'],
+                'qty'          => (int)$row['qty'],
+                'approved_qty' => $row['approved_qty'] !== null ? (int)$row['approved_qty'] : null, // Null means not reviewed yet
+                'pts'          => (float)$row['pts'],
+                'tax'          => (float)$row['tax'],
+                'discount'     => (float)$row['discount'],
+                'amt'          => (float)$row['amt'],
+                'net_total'    => (float)$row['net_total']
+            ];
+        }
+        $stmt->close();
+
+        $order['items'] = $items;
+        return $order;
     }
 }

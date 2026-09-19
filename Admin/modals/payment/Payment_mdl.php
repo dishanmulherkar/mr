@@ -1179,5 +1179,91 @@ public function getPaymentAllocations($payment_id) {
         
         return $payments;
     }
+
+    //   public function getHQbyAsm($asm_id)
+    // {
+    //     return mysqli_query(
+    //         $this->con,
+    //         "SELECT * FROM headquarter where asm_id = '$asm_id'"
+    //     );
+    // }
+
+    // public function getStockistsByHQ($hq_id)
+    // {
+    //     // Prevent SQL Injection
+    //     $hq_id = mysqli_real_escape_string($this->con, $hq_id);
+        
+    //     // Adjust 'stockist' table name and column names to match your actual database schema
+    //     return mysqli_query(
+    //         $this->con,
+    //         "SELECT stockist_id,stockist_name 
+    //         FROM stockists 
+    //         WHERE hq_id = '$hq_id' 
+    //         ORDER BY stockist_name ASC"
+    //     );
+    // }
+
+
+      public function getReport($stockist_id, $from_date, $to_date)
+    {
+        $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id, s.stockist_name, pd.payment_method, b.bank_name
+                FROM payment_ledgers pl 
+                LEFT JOIN stock_inward si ON si.inward_id = pl.reference_id 
+                LEFT JOIN payment_details pd ON pd.id = pl.reference_id 
+                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
+                LEFT JOIN banks b ON b.bank_id = pd.bank_id
+                WHERE pl.stockist_id = ? 
+                AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
+                
+                -- Kept 'settled_to_bill' for legacy data, and ensured 'asm_settlement' is included
+                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+                AND DATE(pl.created_at) >= ? 
+                AND DATE(pl.created_at) <= ?
+                ORDER BY pl.created_at ASC, pl.id ASC";
+                
+        // Secured with Prepared Statements
+        $stmt = $this->con->prepare($sql);
+        $stmt->bind_param("iss", $stockist_id, $from_date, $to_date);
+        $stmt->execute();
+        
+        return $stmt->get_result();
+    }
+
+    // Opening balance calculation filtered for the same transaction types
+    public function getOpeningBalance($stockist_id, $from_date)
+    {
+        // FIX: Using 'balance_action' instead of hardcoding transaction types! 
+        // This guarantees that any 'decrease' (payment) or 'increase' (bill) is perfectly calculated.
+        $sql = "SELECT 
+                    SUM(CASE WHEN balance_action = 'increase' THEN amount ELSE 0 END) as total_inc,
+                    SUM(CASE WHEN balance_action = 'decrease' THEN amount ELSE 0 END) as total_dec
+                FROM payment_ledgers 
+                WHERE stockist_id = ? 
+                AND ledger_type = 'debt' 
+                
+                -- FIX: Added 'asm_settlement' here so it matches the getReport query exactly!
+                AND transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+                AND DATE(created_at) < ?";
+        
+        // Secured with Prepared Statements
+        $stmt = $this->con->prepare($sql);
+        $stmt->bind_param("is", $stockist_id, $from_date);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        if ($res && $row = $res->fetch_assoc()) {
+            $inc = (float)$row['total_inc'];
+            $dec = (float)$row['total_dec'];
+            
+            $stmt->close();
+            return $inc - $dec; // Positive = Debt Balance, Negative = Credit Balance
+        }
+        
+        if (isset($stmt)) {
+            $stmt->close();
+        }
+        
+        return 0.00;
+    }
 }
 ?>

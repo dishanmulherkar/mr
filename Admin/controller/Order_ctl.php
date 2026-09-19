@@ -180,6 +180,56 @@ public function Approved()
         }
     }
 
-   
+    public function asm_order_list()
+    {
+        $asm_id = $_SESSION['admin_id'];
+        $hq = $this->model->getHQbyAsm($asm_id);
+
+        // $stockists = $this->model->getStockists($mr_id);
+        include 'view/Asm/order/order_list.php';
+    }
+   public function get_stockists_by_hq()
+    {
+        if (isset($_POST['hq_id']) && !empty($_POST['hq_id'])) {
+            $hq_id = $_POST['hq_id'];
+            
+            // Fetch stockists from the model
+            $stockists = $this->model->getStockistsByHQ($hq_id);
+            
+            $data = [];
+            while ($row = mysqli_fetch_assoc($stockists)) {
+                $data[] = $row;
+            }
+
+            echo json_encode(['success' => true, 'data' => $data]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'HQ ID is required']);
+        }
+        exit;
+    }
+
+public function list_orders()
+{
+    header('Content-Type: application/json');
+
+    // Fetch filters from the GET request
+    $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
+    $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+    $from_date   =$_GET['from_date'] ?? '';
+
+    // Pass the parameters to the model (to_date removed)
+    $orders = $this->model->getOrdersByHQ($hq_id, $stockist_id,$from_date);
+
+    echo json_encode(['success' => true, 'data' => $orders]);
+    exit;
+}
+
+  public function details($order_id = 0)
+    {
+     
+        $order_data = $this->model->getOrderById_asm($order_id);
+
+        include 'view/Asm/order/details.php';
+    }
 
 }

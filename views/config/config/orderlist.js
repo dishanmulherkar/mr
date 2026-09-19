@@ -1,5 +1,4 @@
-// Order List Code 
-// alert('orderlist.js loaded'); // Debugging line to confirm the script is loaded
+
 
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -53,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 menuItems += `
                    <li>
                     <a class="dropdown-item" href="${BASE_URL}invoice/pdf/${o.order_id}" target="_blank" title="Download Invoice">
-                        <i class="fa fa-file-text-o text-info me-2"></i> Invoice
+                        <i class="fa fa-download text-info me-2"></i> Invoice
                     </a>
                 </li>
                 `;

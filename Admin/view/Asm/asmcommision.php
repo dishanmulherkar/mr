@@ -81,7 +81,7 @@ include 'view/layout/header-asm.php';
 
 <div class="page-content">
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
-        <h3>My drc</h3> Current Balance <?php echo $asm_balance;   ?>
+        <strong>Current Balance :  <?php echo $asm_balance;   ?></strong> 
     </div>
 
     <div class="filter-bar">
