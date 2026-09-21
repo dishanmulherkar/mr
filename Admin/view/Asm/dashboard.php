@@ -28,6 +28,33 @@ include 'view/layout/header-asm.php';
         <div class="stats-grid">
           
         
+        <div class="stat-card">
+            <div class="stat-icon violet">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <circle cx="12" cy="12" r="2"/>
+                </svg>
+            </div>
+            <div class="stat-label">Target </div>
+            <div class="stat-val"><?php 
+            //   echo number_format($target_amount, 2); 
+             ?></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+            </div>
+            <div class="stat-label">Total Primary Sales</div>
+            <div class="stat-val"><?php  
+             echo number_format($primary_sale, 2);  
+             ?></div>
+          </div>
           <div class="stat-card">
            <div class="stat-icon orange">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -40,7 +67,7 @@ include 'view/layout/header-asm.php';
             </div>
             <div class="stat-label">Total Headquarters</div>
             <div class="stat-val"><?php  
-            //  echo $total_customers; 
+             echo $total_hq; 
               ?></div>
           </div>
           <!-- <div class="stat-card">

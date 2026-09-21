@@ -226,6 +226,12 @@ switch($page)
     $controller = new asm_ctl($con);
     break;
 
+    case 'salereport':
+    include 'controller/report/primary_sales_ctl.php';
+    $controller = new primary_sale_ctl($con);
+    break;
+
+
     case 'dashboard':
     default:
         include 'controller/DashboardController.php'; 

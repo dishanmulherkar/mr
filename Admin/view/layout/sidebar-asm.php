@@ -62,10 +62,16 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
 
 <div class="nav-section">Reports</div>
 
-<a href="#"
-   class="nav-item <?php echo ($current_page == 'salesreport') ? 'active' : ''; ?>">
+<a href="<?= BASE_URL ?>salereport/asm_primary_sale"
+   class="nav-item <?= ($current_controller == 'salereport' && $current_action == 'asm_primary_sale') ? 'active' : ''; ?>">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-   -----
+    Primary Sales
+</a>
+
+<a href="<?= BASE_URL ?>salereport/asm_secondary_sale"
+   class="nav-item <?= ($current_controller == 'salereport' && $current_action == 'asm_secondary_sale') ? 'active' : ''; ?>">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+    Secondary Sales
 </a>
 
 <a href="<?= BASE_URL ?>payment/asm_pay_ledger"
