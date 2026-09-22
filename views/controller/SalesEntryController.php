@@ -28,12 +28,13 @@ class SalesEntryController
     public function get_customer()
     {
         header('Content-Type: application/json');
+         $hq_id = $_SESSION['hq_id'];
 
         $mr_id = isset($_GET['mr_id']) ? intval($_GET['mr_id']) : 0;
         $type  = isset($_GET['type']) ? trim($_GET['type']) : '';
 
         echo json_encode(
-            $this->model->getCustomer($mr_id, $type)
+            $this->model->getCustomer($hq_id, $type)
         );
     }
 

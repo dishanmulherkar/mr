@@ -92,7 +92,7 @@ private $db;
             $data['state'],
             $data['pincode'],
             $data['customer_img'],
-            $data['mr_id']
+            $data['hq_id']
         );
 
         return mysqli_stmt_execute($stmt);

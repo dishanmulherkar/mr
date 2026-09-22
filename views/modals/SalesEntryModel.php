@@ -39,7 +39,7 @@ class SalesModel
         return $stockists;
     }
 
-    public function getCustomer($mr_id, $type = '')
+    public function getCustomer($hq_id, $type = '')
     {
         $status = 1;
 
@@ -54,7 +54,7 @@ class SalesModel
                 AND status = ?
                 ORDER BY customer_name
             ");
-            $stmt->bind_param("isi", $mr_id, $type, $status);
+            $stmt->bind_param("isi", $hq_id, $type, $status);
         } else {
             $stmt = $this->con->prepare("
                 SELECT
@@ -65,7 +65,7 @@ class SalesModel
                 AND status = ?
                 ORDER BY customer_name
             ");
-            $stmt->bind_param("ii", $mr_id, $status);
+            $stmt->bind_param("ii", $hq_id, $status);
         }
 
         $stmt->execute();

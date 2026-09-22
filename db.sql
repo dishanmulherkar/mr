@@ -537,3 +537,8 @@ CREATE TABLE `stock_adjustment_details` (
   KEY `adj_id` (`adj_id`),
   CONSTRAINT `fk_adj_details` FOREIGN KEY (`adj_id`) REFERENCES `stock_adjustments` (`adj_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- 22-09-26    - - -- - -  -- - - - - - - -- -- - - -
+ALTER TABLE commission_payouts 
+ADD COLUMN mr_id INT NULL AFTER payout_id,
+ADD INDEX idx_mr_id (mr_id);

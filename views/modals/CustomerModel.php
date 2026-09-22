@@ -8,10 +8,10 @@ private $db;
     }
 
     // Financial Year / Target
-    public function getCustomers($mr_id)
+    public function getCustomers($hq_id)
     {
         $query = "
-           SELECT c.*,s.state_name FROM customers c LEFT JOIN state s ON c.state = s.state_id WHERE c.hq_id = '$mr_id' ORDER BY created_at DESC
+           SELECT c.*,s.state_name FROM customers c LEFT JOIN state s ON c.state = s.state_id WHERE c.hq_id = '$hq_id' ORDER BY created_at DESC
         ";
 
         $result = mysqli_query($this->db, $query);

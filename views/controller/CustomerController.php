@@ -14,7 +14,8 @@ class CustomerController
     public function index()
     {
         $mr_id = $_SESSION['mr_id'];
-         $customers = $this->model->getCustomers($mr_id);
+        $hq_id = $_SESSION['hq_id'];
+         $customers = $this->model->getCustomers($hq_id);
         include 'view/customer/index.php';
     }
 

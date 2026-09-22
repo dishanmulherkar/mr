@@ -52,6 +52,7 @@ class AddCustomerController
         // $district      = mysqli_real_escape_string($this->con, $data['district']);
 
         $data['mr_id']           = $_SESSION['mr_id'];
+        $data['hq_id']           = $_SESSION['hq_id'];
         $data['customer_name']   = trim($_POST['customer_name']);
         $data['customer_type']   = trim($_POST['customer_type']);
         $data['qualification']   = trim($_POST['qualification']);
