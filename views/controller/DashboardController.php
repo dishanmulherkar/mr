@@ -39,7 +39,7 @@ class DashboardController
             $hq_id
         );
 
-        $total_customers = $this->model->getTotalCustomers($mr_id);
+        $total_customers = $this->model->getTotalCustomers($hq_id);
 
         $total_sales_amount = $this->model->getSecondarySale(
             $mr_id,

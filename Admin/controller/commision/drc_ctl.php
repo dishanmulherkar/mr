@@ -85,19 +85,22 @@ class drc_ctl {
     // ==========================================
     // 4. AJAX: Save New Payout
     // ==========================================
-    public function claim_drc() {
+   public function claim_drc() {
         header('Content-Type: application/json');
-        if (!isset($_SESSION['admin_id'])) exit;
+        if (!isset($_SESSION['admin_id'])) {
+            echo json_encode(['success' => false, 'msg' => 'Unauthorized']);
+            exit;
+        }
 
-        $hq_id = isset($_POST['hq_id']) ? (int)$_POST['hq_id'] : 0;
-        $bill_ids = isset($_POST['bill_ids']) ? $_POST['bill_ids'] : '[]';
-        $adjustments = isset($_POST['adjustments']) ? $_POST['adjustments'] : '[]';
+        $hq_id        = isset($_POST['hq_id']) ? (int)$_POST['hq_id'] : 0;
+        $bill_ids     = isset($_POST['bill_ids']) ? $_POST['bill_ids'] : '[]';
+        $adjustments  = isset($_POST['adjustments']) ? $_POST['adjustments'] : '[]';
         $final_payout = isset($_POST['final_payout']) ? (float)$_POST['final_payout'] : 0.00;
-        
-        // Capture the status (defaults to 'Pending' if not set)
-        $status = isset($_POST['status']) ? $_POST['status'] : 'Pending';
+        $status       = isset($_POST['status']) ? $_POST['status'] : 'Pending';
 
-        $result = $this->commissionModel->claimMrCommission($hq_id, $bill_ids, $adjustments, $final_payout, $status);
+        // FIX: Call claimDrCommission instead of claimMrCommission
+        $result = $this->commissionModel->claimDrCommission($hq_id, $bill_ids, $adjustments, $final_payout, $status);
+        
         echo json_encode($result);
     }
 

@@ -18,24 +18,23 @@ class FinancialController
         include 'view/FinancialYear/financial.php';
     }
 
-     public function edit($id)
+    public function edit($id)
     {
         $ROW = $this->model->getById($id);
 
-         $state_id = '';
+        $state_id = '';
 
-        if($ROW)
-        {
-            $hq = $this->model->getStateByHQ($ROW['hq_id']);
+        if ($ROW && !empty($ROW['hq_id'])) {
+            $hqData = $this->model->getStateByHQ($ROW['hq_id']);
 
-            if($hq)
-            {
-                $state_id = $hq['state'];
+            if ($hqData) {
+                $state_id = !empty($hqData['state_id']) ? $hqData['state_id'] : (!empty($hqData['state']) ? $hqData['state'] : '');
+                $ROW['state_id'] = $state_id;
             }
         }
         
-        $states  = $this->model->getStates();
-        $query = $this->model->getAll();
+        $states = $this->model->getStates();
+        $query  = $this->model->getAll();
 
         include 'view/FinancialYear/financial.php';
     }
@@ -76,6 +75,28 @@ class FinancialController
         exit;
     }
 
+    public function getMRs()
+{
+    $hq_id = isset($_POST['hq_id']) ? intval($_POST['hq_id']) : 0;
+    $selected_id = isset($_POST['selected_id']) ? $_POST['selected_id'] : '';
+
+    $mrs = $this->model->getMrByHq($hq_id);
+
+    if (ob_get_length()) {
+        ob_clean();
+    }
+
+    echo '<option value="">Select MR</option>';
+    while ($row = mysqli_fetch_assoc($mrs)) 
+    {
+        $selected = ($row['m_id'] == $selected_id) ? 'selected' : '';
+        echo '<option value="'.$row['m_id'].'" '.$selected.'>';
+        echo htmlspecialchars($row['mr_name']);
+        echo '</option>';
+    }
+    
+    exit;
+}
    
     
 }

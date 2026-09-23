@@ -96,7 +96,7 @@ class payment_ledger_mdl
     public function getReportmrc($hq_id, $from_date, $to_date)
     {
         // 1. Fetch the corresponding MR ID (m_id) for this HQ
-        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
+        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? AND status = '1' LIMIT 1 ");
         $stmt_mr->bind_param("i", $hq_id);
         $stmt_mr->execute();
         $res_mr = $stmt_mr->get_result()->fetch_assoc();
@@ -231,7 +231,7 @@ class payment_ledger_mdl
     {
         // 1. Fetch the corresponding MR ID (m_id) to ensure we don't drop direct wallet earnings
         $mr_id = 0;
-        $mr_query = mysqli_query($this->con, "SELECT m_id FROM mr_users WHERE hq_id = '$hq_id' LIMIT 1");
+        $mr_query = mysqli_query($this->con, "SELECT m_id FROM mr_users WHERE hq_id = '$hq_id' AND status = '1' LIMIT 1");
         if ($mr_query && $mr_row = mysqli_fetch_assoc($mr_query)) {
             $mr_id = (int)$mr_row['m_id'];
         }

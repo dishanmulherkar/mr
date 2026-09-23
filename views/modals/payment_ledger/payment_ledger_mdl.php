@@ -113,18 +113,10 @@ class payment_ledger_mdl
    // ==========================================
     // MR Commission (MRC) Report (Grouped by Ref ID)
     // ==========================================
-    public function getReportmrc($hq_id, $from_date, $to_date)
+    public function getReportmrc($mr_id, $from_date, $to_date)
     {
-        // 1. Fetch the corresponding MR ID (m_id) for this HQ
-        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
-        $stmt_mr->bind_param("i", $hq_id);
-        $stmt_mr->execute();
-        $res_mr = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
-        
-        $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
+        $mr_id = (int)$mr_id;
 
-        // 2. Run the main report query
         $sql = "SELECT 
                     MIN(p.id) AS id,
                     MIN(p.created_at) AS created_at,
@@ -133,7 +125,7 @@ class payment_ledger_mdl
                     p.balance_action,
                     MAX(p.notes) AS notes,
                     
-                    -- Safely fetch ALL settled bill numbers for this transaction
+                    -- Fetch settled bill numbers for this transaction
                     (
                         SELECT GROUP_CONCAT(DISTINCT si.inward_no SEPARATOR ', ')
                         FROM payment_ledgers pd
@@ -146,15 +138,13 @@ class payment_ledger_mdl
                     IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name
                     
                 FROM payment_ledgers p
-                
-                -- Only join the stockist table
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 
-                -- FIX: Check stockist HQ, OR check if user_id matches legacy HQ ID or new MR ID
-                WHERE (s.hq_id = ? OR p.user_id IN (?, ?))
-                  AND p.ledger_type = 'mrc_wallet'
-                  AND DATE(p.created_at) >= ? 
-                  AND DATE(p.created_at) <= ?
+                -- Strict MR Isolation: user_id only
+                WHERE p.user_id = ?
+                AND p.ledger_type = 'mrc_wallet'
+                AND DATE(p.created_at) >= ? 
+                AND DATE(p.created_at) <= ?
                 
                 GROUP BY 
                     DATE(p.created_at), 
@@ -165,8 +155,7 @@ class payment_ledger_mdl
                 ORDER BY MIN(p.created_at) ASC, MIN(p.id) ASC";
                 
         $stmt = $this->con->prepare($sql);
-        // Bind 5 parameters: HQ ID (for stockist), HQ ID (for legacy bank), MR ID (for new bank), From Date, To Date
-        $stmt->bind_param("iiiss", $hq_id, $hq_id, $mr_id, $from_date, $to_date);
+        $stmt->bind_param("iss", $mr_id, $from_date, $to_date);
         $stmt->execute();
         
         return $stmt->get_result();
@@ -175,37 +164,21 @@ class payment_ledger_mdl
    // ==========================================
     // Opening balance calculation for MRC Wallet
     // ==========================================
-    public function getOpeningBalancemrc($hq_id, $from_date)
+  public function getOpeningBalancemrc($mr_id, $from_date)
     {
-        // 1. Fetch the corresponding MR ID (m_id) for this HQ
-        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
-        $stmt_mr->bind_param("i", $hq_id);
-        $stmt_mr->execute();
-        $res_mr = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
-        
-        $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
+        $mr_id = (int)$mr_id;
 
-        // 2. Calculate Opening Balance
-        // Safely uses 'balance_action' to determine adding or subtracting from the wallet
+        // Calculate Opening Balance strictly for this MR's user_id before $from_date
         $sql = "SELECT 
-                    SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
+                    SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) AS total_inc,
+                    SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) AS total_dec
                 FROM payment_ledgers p
-                
-                -- LEFT JOIN so we don't lose 'Bank / General' transactions (0)
-                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-                
-                -- FIX: Check stockist HQ, OR check if user_id matches legacy HQ ID or new MR ID
-                WHERE (s.hq_id = ? OR p.user_id IN (?, ?))
+                WHERE p.user_id = ?
                 AND p.ledger_type = 'mrc_wallet'
                 AND DATE(p.created_at) < ?";
 
-        // Use prepared statements for maximum security
         $stmt = $this->con->prepare($sql);
-        
-        // Bind 4 parameters: HQ ID (for stockist), HQ ID (for legacy bank), MR ID (for new bank), From Date
-        $stmt->bind_param("iiis", $hq_id, $hq_id, $mr_id, $from_date);
+        $stmt->bind_param("is", $mr_id, $from_date);
         $stmt->execute();
         
         $res = $stmt->get_result();
@@ -213,11 +186,9 @@ class payment_ledger_mdl
         if ($res && $row = $res->fetch_assoc()) {
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
-            
             $stmt->close();
             
-            // For a wallet, Increase (Earned) - Decrease (Settled) = Current Balance
-            return $inc - $dec; 
+            return round($inc - $dec, 2);
         }
         
         if (isset($stmt)) {
@@ -229,18 +200,10 @@ class payment_ledger_mdl
    // ==========================================
     // MR Commission (DRC) Report (Grouped by Ref ID)
     // ==========================================
-    public function getReportdrc($hq_id, $from_date, $to_date)
+    public function getReportdrc($mr_id, $from_date, $to_date)
     {
-        // 1. Fetch the corresponding MR ID (m_id) for this HQ
-        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
-        $stmt_mr->bind_param("i", $hq_id);
-        $stmt_mr->execute();
-        $res_mr = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
-        
-        $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
+        $mr_id = (int)$mr_id;
 
-        // 2. Run the main report query
         $sql = "SELECT 
                     MIN(p.id) AS id,
                     MIN(p.created_at) AS created_at,
@@ -249,6 +212,7 @@ class payment_ledger_mdl
                     p.balance_action,
                     MAX(p.notes) AS notes,
                     
+                    -- Fetch settled bill numbers for this transaction
                     (
                         SELECT GROUP_CONCAT(DISTINCT si.inward_no SEPARATOR ', ')
                         FROM payment_ledgers pd
@@ -261,14 +225,13 @@ class payment_ledger_mdl
                     IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name
                     
                 FROM payment_ledgers p
-                
                 LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
                 
-                -- FIX: Check HQ from stockist, OR check if user_id matches legacy HQ ID or new MR ID
-                WHERE (s.hq_id = ? OR p.user_id IN (?, ?))
-                  AND p.ledger_type = 'drc_wallet'
-                  AND DATE(p.created_at) >= ? 
-                  AND DATE(p.created_at) <= ?
+                -- Strict MR Isolation: user_id only
+                WHERE p.user_id = ?
+                AND p.ledger_type = 'drc_wallet'
+                AND DATE(p.created_at) >= ? 
+                AND DATE(p.created_at) <= ?
                 
                 GROUP BY 
                     DATE(p.created_at), 
@@ -279,8 +242,7 @@ class payment_ledger_mdl
                 ORDER BY MIN(p.created_at) ASC, MIN(p.id) ASC";
                 
         $stmt = $this->con->prepare($sql);
-        // Bind 5 parameters: HQ ID (for stockist), HQ ID (for legacy bank), MR ID (for new bank), From Date, To Date
-        $stmt->bind_param("iiiss", $hq_id, $hq_id, $mr_id, $from_date, $to_date);
+        $stmt->bind_param("iss", $mr_id, $from_date, $to_date);
         $stmt->execute();
         
         return $stmt->get_result();
@@ -289,33 +251,21 @@ class payment_ledger_mdl
 // ==========================================
     // Opening balance calculation for DRC Wallet
     // ==========================================
-    public function getOpeningBalancedrc($hq_id, $from_date)
+    public function getOpeningBalancedrc($mr_id, $from_date)
     {
-        // 1. Fetch the corresponding MR ID (m_id) for this HQ
-        $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
-        $stmt_mr->bind_param("i", $hq_id);
-        $stmt_mr->execute();
-        $res_mr = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
-        
-        $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
+        $mr_id = (int)$mr_id;
 
-        // 2. Calculate Opening Balance
+        // Calculate Opening Balance strictly for this MR's user_id before $from_date
         $sql = "SELECT 
-                    SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) as total_dec
+                    SUM(CASE WHEN p.balance_action = 'increase' THEN p.amount ELSE 0 END) AS total_inc,
+                    SUM(CASE WHEN p.balance_action = 'decrease' THEN p.amount ELSE 0 END) AS total_dec
                 FROM payment_ledgers p
-                
-                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-                
-                -- FIX: Check HQ from stockist, OR check if user_id matches legacy HQ ID or new MR ID
-                WHERE (s.hq_id = ? OR p.user_id IN (?, ?))
+                WHERE p.user_id = ?
                 AND p.ledger_type = 'drc_wallet'
                 AND DATE(p.created_at) < ?";
 
         $stmt = $this->con->prepare($sql);
-        // Bind 4 parameters: HQ ID (for stockist), HQ ID (for legacy bank), MR ID (for new bank), From Date
-        $stmt->bind_param("iiis", $hq_id, $hq_id, $mr_id, $from_date);
+        $stmt->bind_param("is", $mr_id, $from_date);
         $stmt->execute();
         
         $res = $stmt->get_result();
@@ -323,9 +273,9 @@ class payment_ledger_mdl
         if ($res && $row = $res->fetch_assoc()) {
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
-            
             $stmt->close();
-            return $inc - $dec; 
+            
+            return round($inc - $dec, 2);
         }
         
         if (isset($stmt)) {

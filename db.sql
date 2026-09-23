@@ -542,3 +542,9 @@ CREATE TABLE `stock_adjustment_details` (
 ALTER TABLE commission_payouts 
 ADD COLUMN mr_id INT NULL AFTER payout_id,
 ADD INDEX idx_mr_id (mr_id);
+
+-- 23-09-26    
+
+ALTER TABLE financial_year 
+ADD COLUMN mr_id INT(11) NULL DEFAULT 0,
+ADD INDEX idx_fy_mr_id (mr_id);

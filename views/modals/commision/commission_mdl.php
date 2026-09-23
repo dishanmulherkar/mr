@@ -42,63 +42,63 @@ class commission_mdl
     // NEW: Fetch Commission Payouts for the Logged In MR
     // ========================================================
    public function getMrCommissionsList($mr_id, $stockist_id = 0, $from_date = '')
-    {
-        // 1. SELECT AND FROM
-        $sql = "
-            SELECT DISTINCT
-                cp.payout_id, 
-                cp.total_payout, 
-                cp.status, 
-                DATE_FORMAT(cp.created_at, '%d %b %Y') AS date_paid,
-                cp.created_at
-            FROM commission_payouts cp
-            INNER JOIN mr_users m ON m.hq_id = cp.hq_id 
-        ";
-        
-        // 2. ALL JOINS MUST HAPPEN BEFORE THE 'WHERE' CLAUSE
-        if ($stockist_id > 0) {
-            $sql .= " INNER JOIN stock_inward si ON si.commission_payout_id = cp.payout_id ";
-        }
+{
+    $mr_id = (int)$mr_id;
 
-        // 3. START THE SINGLE 'WHERE' CLAUSE
-        $sql .= " WHERE cp.commission_type = 'MRC' AND m.m_id = ?";
-        
-        $params = [$mr_id];
-        $types = "i";
-
-        // 4. APPEND ADDITIONAL CONDITIONS WITH 'AND'
-        if ($stockist_id > 0) {
-            $sql .= " AND si.stockist_id = ?";
-            $params[] = $stockist_id;
-            $types .= "i";
-        }
-
-        if (!empty($from_date)) {
-            $sql .= " AND DATE(cp.created_at) = ?";
-            $params[] = $from_date;
-            $types .= "s";
-        }
-        
-        $sql .= " ORDER BY cp.created_at DESC";
-
-        $stmt = $this->con->prepare($sql);
-        
-        // Dynamic binding
-        if (!empty($params)) {
-            $stmt->bind_param($types, ...$params);
-        }
-        
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        $data = [];
-        while ($row = $result->fetch_assoc()) {
-            $data[] = $row;
-        }
-        
-        $stmt->close();
-        return $data;
+    // 1. Query directly from commission_payouts (no HQ join)
+    $sql = "
+        SELECT DISTINCT
+            cp.payout_id, 
+            cp.total_payout, 
+            cp.status, 
+            DATE_FORMAT(cp.created_at, '%d %b %Y') AS date_paid,
+            cp.created_at
+        FROM commission_payouts cp
+    ";
+    
+    // 2. Stockist filter join
+    if ($stockist_id > 0) {
+        $sql .= " INNER JOIN stock_inward si ON si.commission_payout_id = cp.payout_id ";
     }
+
+    // 3. Strict MR-level security filter
+    $sql .= " WHERE cp.commission_type = 'MRC' AND cp.mr_id = ?";
+    
+    $params = [$mr_id];
+    $types  = "i";
+
+    // 4. Optional filters
+    if ($stockist_id > 0) {
+        $sql .= " AND si.stockist_id = ?";
+        $params[] = (int)$stockist_id;
+        $types   .= "i";
+    }
+
+    if (!empty($from_date)) {
+        $sql .= " AND DATE(cp.created_at) = ?";
+        $params[] = $from_date;
+        $types   .= "s";
+    }
+    
+    $sql .= " ORDER BY cp.created_at DESC";
+
+    $stmt = $this->con->prepare($sql);
+    
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $data = [];
+    while ($row = $result->fetch_assoc()) {
+        $data[] = $row;
+    }
+    
+    $stmt->close();
+    return $data;
+}
 
   // ========================================================
     // Fetch Detailed View Data for a specific Payout (MR/DRC)
@@ -191,127 +191,96 @@ class commission_mdl
      // ========================================================
     // NEW: Fetch Commission Payouts for the Logged In MR
     // ========================================================
-   public function getDrCommissionsList($mr_id, $stockist_id = 0, $from_date = '')
-    {
-        // 1. SELECT AND FROM (No WHERE clause here)
-        $sql = "
-            SELECT DISTINCT
-                cp.payout_id, 
-                cp.total_payout, 
-                cp.status, 
-                DATE_FORMAT(cp.created_at, '%d %b %Y') AS date_paid,
-                cp.created_at
-            FROM commission_payouts cp
-            INNER JOIN mr_users m ON m.hq_id = cp.hq_id 
-        ";
-        
-        // 2. ALL JOINS MUST HAPPEN BEFORE THE 'WHERE' CLAUSE
-        if ($stockist_id > 0) {
-            $sql .= " INNER JOIN stock_inward si ON si.commission_payout_id = cp.payout_id ";
-        }
+public function getDrCommissionsList($mr_id, $stockist_id = 0, $from_date = '')
+{
+    $mr_id = (int)$mr_id;
 
-        // 3. START THE SINGLE 'WHERE' CLAUSE
-        $sql .= " WHERE cp.commission_type = 'DRC' AND m.m_id = ?";
-        
-        $params = [$mr_id];
-        $types = "i";
-
-        // 4. APPEND ADDITIONAL CONDITIONS WITH 'AND'
-        if ($stockist_id > 0) {
-            $sql .= " AND si.stockist_id = ?";
-            $params[] = $stockist_id;
-            $types .= "i";
-        }
-
-        if (!empty($from_date)) {
-            // Using DATE() to match only the specific day
-            $sql .= " AND DATE(cp.created_at) = ?";
-            $params[] = $from_date;
-            $types .= "s";
-        }
-        
-        $sql .= " ORDER BY cp.created_at DESC";
-
-        $stmt = $this->con->prepare($sql);
-        
-        // Dynamic binding
-        if (!empty($params)) {
-            $stmt->bind_param($types, ...$params);
-        }
-        
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        $data = [];
-        while ($row = $result->fetch_assoc()) {
-            $data[] = $row;
-        }
-        
-        $stmt->close();
-        return $data;
+    $sql = "
+        SELECT DISTINCT
+            cp.payout_id, 
+            cp.total_payout, 
+            cp.status, 
+            DATE_FORMAT(cp.created_at, '%d %b %Y') AS date_paid,
+            cp.created_at
+        FROM commission_payouts cp
+        INNER JOIN mr_users m ON m.m_id = cp.mr_id
+    ";
+    
+    if ($stockist_id > 0) {
+        $sql .= " INNER JOIN stock_inward si ON si.commission_payout_id = cp.payout_id ";
     }
+
+    $sql .= " WHERE cp.commission_type = 'DRC' AND m.m_id = ?";
+    
+    $params = [$mr_id];
+    $types  = "i";
+
+    if ($stockist_id > 0) {
+        $sql .= " AND si.stockist_id = ?";
+        $params[] = (int)$stockist_id;
+        $types   .= "i";
+    }
+
+    if (!empty($from_date)) {
+        $sql .= " AND DATE(cp.created_at) = ?";
+        $params[] = $from_date;
+        $types   .= "s";
+    }
+    
+    $sql .= " ORDER BY cp.created_at DESC";
+
+    $stmt = $this->con->prepare($sql);
+    
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $data = [];
+    while ($row = $result->fetch_assoc()) {
+        $data[] = $row;
+    }
+    
+    $stmt->close();
+    return $data;
+}
 
 // ========================================================
     // Fetch Live Wallet Balances (Using Trusted Query Format)
     // ========================================================
-    public function getWalletBalances($mr_id)
-    {
-        $mr_id = (int)$mr_id;
-        
-        // 1. Get the HQ ID for this MR
-        $stmt_hq = $this->con->prepare("SELECT hq_id FROM mr_users WHERE m_id = ?");
-        $stmt_hq->bind_param("i", $mr_id);
-        $stmt_hq->execute();
-        $res_hq = $stmt_hq->get_result()->fetch_assoc();
-        $stmt_hq->close();
-        
-        $hq_id = $res_hq ? (int)$res_hq['hq_id'] : 0;
-        
-        $mrc_balance = 0.00;
-        $drc_balance = 0.00;
-        
-        if ($hq_id > 0) {
-            // 2. Fetch BOTH MRC and DRC balances safely
-            $query = "
-                SELECT 
-                    SUM(CASE 
-                        WHEN pl.ledger_type = 'mrc_wallet' AND pl.balance_action = 'increase' THEN pl.amount 
-                        WHEN pl.ledger_type = 'mrc_wallet' AND pl.balance_action != 'increase' THEN -pl.amount 
-                        ELSE 0 
-                    END) as mrc_total,
-                    
-                    SUM(CASE 
-                        WHEN pl.ledger_type = 'drc_wallet' AND pl.balance_action = 'increase' THEN pl.amount 
-                        WHEN pl.ledger_type = 'drc_wallet' AND pl.balance_action != 'increase' THEN -pl.amount 
-                        ELSE 0 
-                    END) as drc_total
+public function getWalletBalances($mr_id)
+{
+    $mr_id = (int)$mr_id;
 
-                FROM payment_ledgers pl
-                
-                -- Only join stockists to trace bill settlements
-                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
-                
-                -- FIX: Check HQ from stockist OR check if user_id matches either the legacy HQ ID or the new MR ID
-                WHERE (s.hq_id = ? OR pl.user_id IN (?, ?))
-                  AND pl.ledger_type IN ('mrc_wallet', 'drc_wallet')
-            ";
+    $query = "
+        SELECT 
+            SUM(CASE 
+                WHEN pl.ledger_type = 'mrc_wallet' AND pl.balance_action = 'increase' THEN pl.amount 
+                WHEN pl.ledger_type = 'mrc_wallet' AND pl.balance_action != 'increase' THEN -pl.amount 
+                ELSE 0 
+            END) AS mrc_total,
+            
+            SUM(CASE 
+                WHEN pl.ledger_type = 'drc_wallet' AND pl.balance_action = 'increase' THEN pl.amount 
+                WHEN pl.ledger_type = 'drc_wallet' AND pl.balance_action != 'increase' THEN -pl.amount 
+                ELSE 0 
+            END) AS drc_total
+        FROM payment_ledgers pl
+        WHERE pl.user_id = ?
+          AND pl.ledger_type IN ('mrc_wallet', 'drc_wallet')
+    ";
 
-            $stmt = $this->con->prepare($query);
-            
-            // Bind three parameters: HQ ID (for stockist), HQ ID (for legacy ledgers), MR ID (for new ledgers)
-            $stmt->bind_param("iii", $hq_id, $hq_id, $mr_id);
-            $stmt->execute();
-            $res = $stmt->get_result()->fetch_assoc();
-            
-            $mrc_balance = $res['mrc_total'] ? (float)$res['mrc_total'] : 0.00;
-            $drc_balance = $res['drc_total'] ? (float)$res['drc_total'] : 0.00;
-            
-            $stmt->close();
-        }
-        
-        return [
-            'mrc_balance' => $mrc_balance,
-            'drc_balance' => $drc_balance
-        ];
-    }
+    $stmt = $this->con->prepare($query);
+    $stmt->bind_param("i", $mr_id);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return [
+        'mrc_balance' => $res && $res['mrc_total'] !== null ? round((float)$res['mrc_total'], 2) : 0.00,
+        'drc_balance' => $res && $res['drc_total'] !== null ? round((float)$res['drc_total'], 2) : 0.00
+    ];
+}
 }

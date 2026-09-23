@@ -80,7 +80,6 @@ class primary_sale_mdl
             WHERE m.hq_id = '$hq_id'
               AND DATE(si.inward_date) >= '$from_date' 
               AND DATE(si.inward_date) <= '$to_date'$stockist_condition
-              AND  m.status = '1'
             ORDER BY si.inward_date ASC, si.inward_id ASC";
 
     return mysqli_query($this->con,$sql);

@@ -616,11 +616,13 @@ public function submitManualEntry($data, $admin_id)
             return ['success' => false, 'msg' => 'Error: ' . $e->getMessage()];
         }
     }
-   // ==========================================
+      // ==========================================
     // Calculate total available balance for an HQ
     // ==========================================
-    public function getAvailableBalance($hq_id, $type) 
+   public function getAvailableBalance($hq_id, $type) 
     {
+        $hq_id = (int)$hq_id;
+
         // Define ledger type dynamically
         $ledger_type = match($type) {
             'MRC' => 'mrc_wallet',
@@ -632,23 +634,23 @@ public function submitManualEntry($data, $admin_id)
             // For ASM: The $hq_id passed is actually the Admin ID (asm_id).
             $stmt = $this->con->prepare("
                 SELECT 
-                    SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
+                    SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) AS total_balance
                 FROM payment_ledgers pl
-                
-                -- Trace standard stockist commissions to the headquarter table to find the asm_id
                 LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
                 LEFT JOIN headquarter h ON s.hq_id = h.headquarter_id
-                
-                -- Safely match ASM: Either through the stockist's HQ, OR directly via user_id
                 WHERE (h.asm_id = ? OR pl.user_id = ?) AND pl.ledger_type = ?
             ");
             
-            // Bind 3 parameters for ASM ("iis")
             $stmt->bind_param("iis", $hq_id, $hq_id, $ledger_type);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
             
+            return $res && $res['total_balance'] !== null ? round((float)$res['total_balance'], 2) : 0.00;
+
         } else {
-            // 1. Fetch the corresponding MR ID (m_id) for this HQ to catch new bank transfers
-            $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? LIMIT 1");
+            // 1. Fetch ONLY the CURRENT ACTIVE MR for this HQ
+            $stmt_mr = $this->con->prepare("SELECT m_id FROM mr_users WHERE hq_id = ? AND status = '1' LIMIT 1");
             $stmt_mr->bind_param("i", $hq_id);
             $stmt_mr->execute();
             $res_mr = $stmt_mr->get_result()->fetch_assoc();
@@ -656,29 +658,31 @@ public function submitManualEntry($data, $admin_id)
             
             $mr_id = $res_mr ? (int)$res_mr['m_id'] : 0;
 
-            // 2. Standard Logic for MRC/DRC (Matches your optimized report logic!)
+            if ($mr_id <= 0) {
+                return 0.00;
+            }
+
+            // 2. Strict User-Level calculation (No HQ/Stockist bleeding)
             $stmt = $this->con->prepare("
                 SELECT 
-                    SUM(CASE WHEN pl.balance_action = 'increase' THEN pl.amount ELSE -pl.amount END) as total_balance
+                    SUM(CASE 
+                        WHEN pl.balance_action = 'increase' THEN pl.amount 
+                        ELSE -pl.amount 
+                    END) AS total_balance
                 FROM payment_ledgers pl
-                
-                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
-                
-                -- Match HQ using OR: Check stockist HQ, or check if user_id matches legacy HQ ID or new MR ID
-                WHERE (s.hq_id = ? OR pl.user_id IN (?, ?)) 
+                WHERE pl.user_id = ? 
                 AND pl.ledger_type = ?
             ");
             
-            // Bind 4 parameters for MRC/DRC ("iiis")
-            $stmt->bind_param("iiis", $hq_id, $hq_id, $mr_id, $ledger_type);
+            $stmt->bind_param("is", $mr_id, $ledger_type);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            
+            return $res && $res['total_balance'] !== null ? round((float)$res['total_balance'], 2) : 0.00;
         }
-        
-        $stmt->execute();
-        $res = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-        
-        return $res['total_balance'] ? (float)$res['total_balance'] : 0.00;
     }
+
     // ==========================================
     // NEW: Calculate unpaid bill total for a stockist
     // ==========================================

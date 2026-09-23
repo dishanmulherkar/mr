@@ -79,6 +79,7 @@ class payment_ledger_ctl
         }
 
         $hq_id = $_SESSION['hq_id'] ?? 0;
+        $mr_id = $_SESSION['mr_id'] ?? 0;
 
         // Get filter inputs
         $start_date  = $_GET['start_date'] ?? '';
@@ -92,8 +93,8 @@ class payment_ledger_ctl
 
         // Fetch data if HQ ID exists
         if ($hq_id > 0) {
-            $opening_balance = $this->model->getOpeningBalancemrc($hq_id, $from_date);
-            $query = $this->model->getReportmrc($hq_id, $from_date, $to_date);
+            $opening_balance = $this->model->getOpeningBalancemrc($mr_id, $from_date);
+            $query = $this->model->getReportmrc($mr_id, $from_date, $to_date);
         }
 
         // Load the view
@@ -111,6 +112,7 @@ class payment_ledger_ctl
         }
 
         $hq_id = $_SESSION['hq_id'] ?? 0;
+        $mr_id = $_SESSION['mr_id'] ?? 0;
 
         // Get filter inputs
         $start_date  = $_GET['start_date'] ?? '';
@@ -124,8 +126,8 @@ class payment_ledger_ctl
 
         // Fetch data if HQ ID exists
         if ($hq_id > 0) {
-            $opening_balance = $this->model->getOpeningBalancedrc($hq_id, $from_date);
-            $query = $this->model->getReportdrc($hq_id, $from_date, $to_date);
+            $opening_balance = $this->model->getOpeningBalancedrc($mr_id, $from_date);
+            $query = $this->model->getReportdrc($mr_id, $from_date, $to_date);
         }
 
         // Load the view

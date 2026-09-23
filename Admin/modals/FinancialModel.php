@@ -3,22 +3,40 @@ class FinancialModel
 {
     private $con;
 
-    public function __construct($con)
-    {
-        $this->con = $con;
-    }
-    public function getHQ()
-    {
-        return mysqli_query($this->con,"
-            SELECT m_id,hq_name
-            FROM mr_users
-            ORDER BY hq_name
-        ");
-    }
+        public function __construct($con)
+        {
+            $this->con = $con;
+        }
+        public function getHQ()
+        {
+            return mysqli_query($this->con,"
+                SELECT m_id,hq_name
+                FROM mr_users
+                ORDER BY hq_name
+            ");
+        }
 
-        public function getAll()
-    {
-        if ($_SESSION['admin_role'] == 'Super Admin') {
+       public function getAll()
+        {
+            if ($_SESSION['admin_role'] == 'Super Admin') {
+                return mysqli_query(
+                    $this->con,
+                    "SELECT
+                        fy.*,
+                        h.mr_name,
+                        s.state_name
+                    FROM financial_year fy
+                    INNER JOIN mr_users h 
+                        ON fy.mr_id = h.m_id
+                    INNER JOIN headquarter hq 
+                        ON hq.headquarter_id = fy.hq_id
+                    INNER JOIN state s 
+                        ON hq.state_id = s.state_id
+                    ORDER BY fy.created_at DESC"
+                );
+            }
+
+            $admin_id = (int)$_SESSION['admin_id'];
 
             return mysqli_query(
                 $this->con,
@@ -27,35 +45,18 @@ class FinancialModel
                     h.mr_name,
                     s.state_name
                 FROM financial_year fy
-                INNER JOIN headquarter hq
+                INNER JOIN mr_users h 
+                    ON fy.mr_id = h.m_id
+                INNER JOIN headquarter hq 
                     ON hq.headquarter_id = fy.hq_id
-                LEFT JOIN mr_users h
-                    ON hq.headquarter_id = h.hq_id
-                INNER JOIN state s
-                    ON h.state = s.state_id
+                INNER JOIN state s 
+                    ON hq.state_id = s.state_id
+                INNER JOIN admin_state ast 
+                    ON s.state_id = ast.state_id
+                WHERE ast.admin_id = $admin_id
                 ORDER BY fy.created_at DESC"
             );
         }
-
-        $admin_id = (int)$_SESSION['admin_id'];
-
-        return mysqli_query(
-            $this->con,
-            "SELECT
-                fy.*,
-                h.hq_name,
-                s.state_name
-            FROM financial_year fy
-            INNER JOIN mr_users h
-                ON fy.hq_id = h.m_id
-            INNER JOIN state s
-                ON h.state = s.state_id
-            INNER JOIN admin_state ast
-                ON h.state = ast.state_id
-            WHERE ast.admin_id = $admin_id
-            ORDER BY fy.created_at DESC"
-        );
-    }
        public function getStates()
         {
             // Super Admin can see all states
@@ -90,10 +91,10 @@ class FinancialModel
         {
             $hq_id = (int)$hq_id;
 
-            $query = mysqli_query($this->con,"
-                SELECT state
-                FROM mr_users
-                WHERE m_id='$hq_id'
+            $query = mysqli_query($this->con, "
+                SELECT state_id
+                FROM headquarter
+                WHERE headquarter_id = '$hq_id'
                 LIMIT 1
             ");
 
@@ -113,41 +114,31 @@ class FinancialModel
 
             return mysqli_fetch_assoc($query);
         }
-        public function store($post)
+       public function store($post)
         {
             $hq_id         = (int)$post['hq_id'];
-            $fy_name       = mysqli_real_escape_string($this->con,$post['fy_name']);
-            $start_date    = $post['start_date'];
-            $end_date      = $post['end_date'];
-            $target_amount = $post['target_amount'];
+            $mr_id         = (int)$post['mr_id'];
+            $fy_name       = mysqli_real_escape_string($this->con, trim($post['fy_name']));
+            $start_date    = mysqli_real_escape_string($this->con, $post['start_date']);
+            $end_date      = mysqli_real_escape_string($this->con, $post['end_date']);
+            $target_amount = (float)$post['target_amount'];
             $status        = (int)$post['status'];
 
-            // Duplicate Check
-            $check = mysqli_query($this->con,"
-                SELECT fy_id
-                FROM financial_year
-                WHERE hq_id='$hq_id'
-                AND fy_name='$fy_name'
-            ");
-
-            if(mysqli_num_rows($check))
-            {
-                return "duplicate";
-            }
-
-            if($status == 1)
-            {
-                mysqli_query($this->con,"
+            // If setting this FY to Active (1), deactivate only the previous FYs for this specific MR
+            if ($status == 1) {
+                mysqli_query($this->con, "
                     UPDATE financial_year
-                    SET status='0'
-                    WHERE hq_id='$hq_id'
+                    SET status = '0'
+                    WHERE mr_id = '$mr_id'
                 ");
             }
 
-            $insert = mysqli_query($this->con,"
+            // Direct insert without blocking duplicate names
+            $insert = mysqli_query($this->con, "
                 INSERT INTO financial_year
                 (
                     hq_id,
+                    mr_id,
                     fy_name,
                     start_date,
                     end_date,
@@ -157,6 +148,7 @@ class FinancialModel
                 VALUES
                 (
                     '$hq_id',
+                    '$mr_id',
                     '$fy_name',
                     '$start_date',
                     '$end_date',
@@ -168,38 +160,49 @@ class FinancialModel
             return $insert;
         }
 
-        public function update($id,$post)
+        public function update($id, $post)
         {
-            $id             = (int)$id;
-            $hq_id          = (int)$post['hq_id'];
-            $fy_name        = mysqli_real_escape_string($this->con,$post['fy_name']);
-            $start_date     = $post['start_date'];
-            $end_date       = $post['end_date'];
-            $target_amount  = $post['target_amount'];
-            $status         = (int)$post['status'];
+            $id            = (int)$id;
+            $hq_id         = (int)$post['hq_id'];
+            $mr_id         = (int)$post['mr_id'];
+            $fy_name       = mysqli_real_escape_string($this->con, trim($post['fy_name']));
+            $start_date    = mysqli_real_escape_string($this->con, $post['start_date']);
+            $end_date      = mysqli_real_escape_string($this->con, $post['end_date']);
+            $target_amount = (float)$post['target_amount'];
+            $status        = (int)$post['status'];
 
-            if($status == 1)
-            {
-                mysqli_query($this->con,"
+            // If setting this FY to Active (1), deactivate other FYs for this MR
+            if ($status == 1) {
+                mysqli_query($this->con, "
                     UPDATE financial_year
-                    SET status='0'
-                    WHERE hq_id='$hq_id'
-                    AND fy_id!='$id'
+                    SET status = '0'
+                    WHERE mr_id = '$mr_id'
+                    AND fy_id != '$id'
                 ");
             }
 
-            return mysqli_query($this->con,"
+            // Direct update
+            return mysqli_query($this->con, "
                 UPDATE financial_year
                 SET
-                    hq_id='$hq_id',
-                    fy_name='$fy_name',
-                    start_date='$start_date',
-                    end_date='$end_date',
-                    target_amount='$target_amount',
-                    status='$status'
-                WHERE fy_id='$id'
+                    hq_id         = '$hq_id',
+                    mr_id         = '$mr_id',
+                    fy_name       = '$fy_name',
+                    start_date    = '$start_date',
+                    end_date      = '$end_date',
+                    target_amount = '$target_amount',
+                    status        = '$status'
+                WHERE fy_id       = '$id'
             ");
         }
-    
+
+        public function getMrByHq($hq_id)
+        {
+            $hq_id = intval($hq_id);
+            return mysqli_query(
+                $this->con, 
+                "SELECT m_id, mr_name FROM mr_users WHERE hq_id = '$hq_id' AND status = '1' ORDER BY mr_name ASC"
+            );
+        }
 
 }
