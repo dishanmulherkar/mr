@@ -136,5 +136,28 @@ class payment_manage_ctl {
         }
         exit;
     }
+
+    // Action: Return JSON payment & settlement breakdown for a specific bill
+public function get_bill_breakdown() {
+    header('Content-Type: application/json');
+    
+    try {
+        $inward_id = isset($_GET['inward_id']) ? (int)$_GET['inward_id'] : 0;
+        
+        if ($inward_id <= 0) {
+            echo json_encode(['success' => false, 'msg' => 'Invalid Inward Bill ID']);
+            exit;
+        }
+
+        // Fetch payment breakdown from model
+        $data = $this->model->getBillPaymentBreakdown($inward_id);
+        echo json_encode($data);
+        exit;
+
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'msg' => 'Error: ' . $e->getMessage()]);
+        exit;
+    }
+}
 }
 ?>

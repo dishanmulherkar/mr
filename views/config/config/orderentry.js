@@ -288,11 +288,14 @@ function renderCart() {
     cart = cart.filter(item => item !== null && typeof item === 'object' && (item.product_id || item.id));
 
     if (!cart.length) {
-        tbody.innerHTML = '<tr id="empty-row"><td colspan="7" style="text-align:center;color:var(--txt-muted);padding:22px 0;">No items added yet</td></tr>';
+        tbody.innerHTML = '<tr id="empty-row"><td colspan="5" style="text-align:center;color:var(--txt-muted);padding:22px 0;">No items added yet</td></tr>';
         document.getElementById('total-amount').textContent = '₹ 0.00';
         if (document.getElementById('gst-amount')) document.getElementById('gst-amount').textContent = '₹ 0.00';
         if (document.getElementById('sub-total')) document.getElementById('sub-total').textContent = '₹ 0.00';
         document.getElementById('btn-submit').disabled = true;
+
+        // Reset limit to base available when cart is emptied
+        updateLiveLimit(0);
         return;
     }
 
@@ -300,7 +303,6 @@ function renderCart() {
     let totalTax = 0;
 
     cart.forEach((item, idx) => {
-        // We now rely on exact_amt and exact_tax calculated by the backend!
         const taxableAmt = parseFloat(item.exact_amt) || 0;
         const taxAmt     = parseFloat(item.exact_tax) || 0;
 
@@ -327,6 +329,27 @@ function renderCart() {
     
     document.getElementById('total-amount').textContent = '₹ ' + grandTotal.toFixed(2);
     document.getElementById('btn-submit').disabled = false;
+
+    // Recalculate remaining limit against the current Grand Total
+    updateLiveLimit(grandTotal);
+}
+
+// Helper to update the mobile limit strip
+function updateLiveLimit(currentGrandTotal) {
+    const limitEl = document.getElementById('mr-live-limit');
+    if (!limitEl || typeof baseAvailLimit === 'undefined') return;
+
+    const remaining = baseAvailLimit - currentGrandTotal;
+
+    if (remaining < 0) {
+        // Exceeded: Show negative deficit in red
+        limitEl.textContent = '- ₹ ' + Math.abs(remaining).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        limitEl.classList.add('exceeded');
+    } else {
+        // Within limit: Show positive remaining balance in normal green
+        limitEl.textContent = '₹ ' + remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        limitEl.classList.remove('exceeded');
+    }
 }
 function removeItem(idx) {
     cart.splice(idx, 1);

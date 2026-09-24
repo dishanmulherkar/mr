@@ -197,18 +197,26 @@ class Payment_model {
             $cond .= " AND DATE(si.created_at) = '$safe_date'";
         }
 
-        $query = "
+       $query = "
             SELECT 
+                si.inward_id,
                 si.inward_id AS record_id,
                 si.created_at,
                 s.stockist_name,
                 si.stockist_id,
                 si.order_id,
                 si.inward_no AS reference_no,
-                ROUND(si.grand_total) AS original_amount,
-                GREATEST(0, ROUND(si.grand_total) - ROUND(si.paid_amt)) AS pending_amount,
-                UPPER(si.pay_status) AS status,
-                si.inward_no
+                si.inward_no,
+                ROUND(si.grand_total, 2) AS original_amount,
+                GREATEST(
+                    0, 
+                    ROUND(
+                        (COALESCE(si.grand_total, 0) + COALESCE(si.cd_penalty_amt, 0)) - 
+                        (COALESCE(si.paid_amt, 0) + COALESCE(si.cd_earned_amt, 0)), 
+                        2
+                    )
+                ) AS pending_amount,
+                UPPER(si.pay_status) AS status
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE $cond
@@ -518,6 +526,86 @@ public function getStockistOutstandingWithCD($stockist_id)
         $stmt->close();
         
         return $banks;
+    }
+
+    public function getBillPaymentBreakdown($inward_id)
+    {
+        $inward_id = (int)$inward_id;
+
+        // 1. Fetch Inward Bill Details
+        $stmt_bill = $this->con->prepare("
+            SELECT 
+                inward_id, inward_no, inward_date, grand_total, paid_amt, 
+                cd_earned_amt, cd_penalty_amt, pay_status
+            FROM stock_inward 
+            WHERE inward_id = ?
+            LIMIT 1
+        ");
+        $stmt_bill->bind_param("i", $inward_id);
+        $stmt_bill->execute();
+        $bill = $stmt_bill->get_result()->fetch_assoc();
+        $stmt_bill->close();
+
+        if (!$bill) {
+            return ['success' => false, 'msg' => 'Bill not found'];
+        }
+
+        // 2. Fetch Direct Cash Allocations (payment_allocations)
+        $stmt_alloc = $this->con->prepare("
+            SELECT 
+                pa.amount_allocated,
+                pl.created_at,
+                pl.transaction_type,
+                pl.notes,
+                pd.payment_method,
+                b.bank_name
+            FROM payment_allocations pa
+            INNER JOIN payment_ledgers pl ON pa.ledger_id = pl.id
+            LEFT JOIN payment_details pd ON pd.id = pl.reference_id
+            LEFT JOIN banks b ON b.bank_id = pd.bank_id
+            WHERE pa.inward_id = ?
+            ORDER BY pl.created_at ASC
+        ");
+        $stmt_alloc->bind_param("i", $inward_id);
+        $stmt_alloc->execute();
+        $alloc_res = $stmt_alloc->get_result();
+        
+        $allocations = [];
+        while ($row = $alloc_res->fetch_assoc()) {
+            $allocations[] = $row;
+        }
+        $stmt_alloc->close();
+
+        // 3. Fetch CD and Commission Adjustments (DRC, MRC, ASM)
+        // 3. Fetch CD and Commission Adjustments (DRC, MRC, ASM, Settlements)
+            $stmt_adj = $this->con->prepare("
+                SELECT 
+                    amount,
+                    created_at,
+                    transaction_type,
+                    notes
+                FROM payment_ledgers
+                WHERE reference_id = ? 
+                AND transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
+                AND balance_action = 'decrease'
+                ORDER BY created_at ASC
+            ");
+            $stmt_adj->bind_param("i", $inward_id);
+            $stmt_adj->execute();
+            $adj_res = $stmt_adj->get_result();
+
+            $adjustments = [];
+            while ($row = $adj_res->fetch_assoc()) {
+                $adjustments[] = $row;
+            }
+            $stmt_adj->close();
+
+        return [
+            'success'     => true,
+            'bill'        => $bill,
+            'allocations' => $allocations,
+            'adjustments' => $adjustments
+        ];
     }
 }
 ?>

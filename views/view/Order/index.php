@@ -1,11 +1,34 @@
 <?php 
-// Check if we are in Edit Mode
 $isEdit = isset($order_data) && $order_data;
 $pageTitle = $isEdit ? "Edit Order (ORD" . str_pad($order_data['order_id'], 4, '0', STR_PAD_LEFT) . ")" : "Order Entry";
 
 include 'view/layout/header.php'; 
 ?>
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/salesentry.css">
+
+<style>
+    /* Mobile-optimized single limit strip */
+    .mr-limit-strip {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 14px;
+        margin: 10px 0;
+        font-size: 14px;
+    }
+    .mr-limit-strip .limit-val {
+        font-size: 16px;
+        font-weight: 700;
+        color: #16a34a; /* Default safe green */
+    }
+    .mr-limit-strip .limit-val.exceeded {
+        color: #dc2626 !important; /* Exceeded red */
+    }
+</style>
+
 <div class="page-content">
 
     <!-- Hidden fields for Edit Mode -->
@@ -26,9 +49,14 @@ include 'view/layout/header.php';
             <?php endforeach; ?>
         </select>
         <?php if($isEdit): ?>
-            <!-- Keep a hidden input for stockist if the select is disabled so it still submits -->
             <input type="hidden" id="hidden-stockist" value="<?= $order_data['stockist_id'] ?>">
         <?php endif; ?>
+    </div>
+
+    <!-- ── Mobile Single Available Limit Display ────────── -->
+    <div class="mr-limit-strip">
+        <span class="text-muted fw-bold">Avail Limit</span>
+        <span id="mr-live-limit" class="limit-val">₹ <?= number_format($base_avail_limit ?? 0, 2); ?></span>
     </div>
 
     <!-- ── Medicine search row ──────────────────────── -->
@@ -64,7 +92,7 @@ include 'view/layout/header.php';
             </thead>
             <tbody id="cart-tbody">
                 <tr id="empty-row">
-                    <td colspan="6" style="text-align:center;color:var(--txt-muted);padding:22px 0;">
+                    <td colspan="5" style="text-align:center;color:var(--txt-muted);padding:22px 0;">
                         No items added yet
                     </td>
                 </tr>
@@ -98,14 +126,10 @@ include 'view/layout/header.php';
 </div><!-- /.page-content -->
 
 <script>
-    const mr_id = <?= $mr_id ?>;
-    // Pass the existing order data to JavaScript so your JS file can load the cart
+    const mr_id = <?= (int)$mr_id ?>;
+    const baseAvailLimit = <?= (float)($base_avail_limit ?? 0) ?>;
     const existingOrderData = <?= $isEdit ? json_encode($order_data) : 'null' ?>;
 </script>
 
-<?php 
-// 3. Include the bottom layout and scripts
-include 'view/layout/footer.php'; 
-?>
-
+<?php include 'view/layout/footer.php'; ?>
 <script src="<?= BASE_URL ?>config/config/orderentry.js"></script>

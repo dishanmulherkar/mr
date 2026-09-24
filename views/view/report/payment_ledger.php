@@ -6,7 +6,6 @@ include 'view/layout/header.php';
 <style>
 /* ─── Responsive ─────────────────────────────────── */
 
-/* 1. Base / Desktop Layout (Everything in one row, flexible widths) */
 .rpt-filter-bar { 
     display: flex;
     flex-wrap: wrap;
@@ -22,7 +21,7 @@ include 'view/layout/header.php';
 .rpt-filter-bar select,
 .rpt-filter-bar input[type="date"] {  
     font-size: 13px;
-    flex: 1 1 auto; /* Allows inputs to grow and shrink smoothly */
+    flex: 1 1 auto;
     min-width: 130px; 
 }
 
@@ -32,11 +31,34 @@ include 'view/layout/header.php';
     text-align: center; 
 }
 
-/* 2. Table Responsiveness */
 .rpt-table-wrap { overflow-x: auto; }
 .rpt-table-wrap table { min-width: 250px; }
 
-/* 3. Mobile Layout (Stacks everything vertically) */
+/* ─── Paid Bill Color Highlights ─────────────────── */
+.bill-paid-row {
+    background-color: #f0fdf4 !important; /* Soft green tint */
+}
+.badge-bill-paid {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #166534;
+    background-color: #bbf7d0;
+    border-radius: 4px;
+    margin-left: 5px;
+}
+.badge-bill-partial {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #854d0e;
+    background-color: #fef08a;
+    border-radius: 4px;
+    margin-left: 5px;
+}
+
 @media (max-width: 768px) {
     .rpt-filter-bar {
         flex-direction: column;
@@ -44,44 +66,32 @@ include 'view/layout/header.php';
     }
     
     .rpt-filter-bar label {
-        margin-bottom: -5px; /* Pulls label closer to the input */
+        margin-bottom: -5px;
     }
 
     .rpt-filter-bar select,
     .rpt-filter-bar input[type="date"],
     .btn-search {
-        width: 100% !important; /* Full width for easy thumb tapping */
+        width: 100% !important;
         min-width: 100% !important;
     }
 }
 
-/* ─── Utilities (Kept from your original code) ─── */
 @media (max-width: 480px) {
-  .avatar_name {
-    cursor: pointer;
-    border: 1px solid #b1b5ca;
-    border-radius: 9px;
-    padding-right: 51px;
-    padding-left: 44px;
-    margin-left: 60px;
-    font-size: small;
-    color: #767b94;
-  }
-
   .rpt-table-wrap tbody td {
     padding: 1px 9px !important;
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
     color: var(--txt);
-}
+  }
 
-.rpt-table-wrap table {
+  .rpt-table-wrap table {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px !important;
-}
+  }
 
-.rpt-table-wrap thead th {
+  .rpt-table-wrap thead th {
     padding: 5px 7px !important;
     background: var(--surface2);
     font-size: 10px !important;
@@ -89,9 +99,9 @@ include 'view/layout/header.php';
     text-transform: uppercase;
     letter-spacing: .5px;
     color: var(--txt-muted);
-    border-bottom: 1px solid var(--border)
+    border-bottom: 1px solid var(--border);
     white-space: normal;
-}
+  }
 }
 
 .text-right { text-align: right !important; }
@@ -108,7 +118,7 @@ include 'view/layout/header.php';
         <label>End Date</label>
         <input type="date" id="end_date" value="<?= htmlspecialchars($to_date) ?>">
 
-         <select id="stockist-select" class="filter-pill" >
+        <select id="stockist-select" class="filter-pill">
             <option value="">— Select Stockist —</option>
             <?php 
             $selected_stockist = isset($_GET['stockist_id']) ? $_GET['stockist_id'] : (isset($order_data['stockist_id']) ? $order_data['stockist_id'] : '');
@@ -125,17 +135,6 @@ include 'view/layout/header.php';
 
         <button class="btn-search" onclick="loadReport()">Search</button>
     </div>
-
-    <!-- ── Customer / Stockist row ──────────────────── -->
-    <!-- <div class="filter-bar entry-row">
-        <label for="stockist-select">Stockist</label>
-       
-       
-    </div> -->
-
-    <!-- <div class="rpt-filter-bar search" style="align-items: baseline;">
-        <button class="btn-search" onclick="downloadPDFs()" style="width: 30%;">Download PDF</button>
-    </div> -->
 
     <!-- ── Report Table ───────────────────────────────── -->
     <div class="rpt-table-wrap">
@@ -182,20 +181,28 @@ include 'view/layout/header.php';
 
                     while($row = mysqli_fetch_assoc($query)) {
                         $date = date('d-M', strtotime($row['created_at']));
-                        
-                        // Fetch basic variables used by both blocks
                         $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "";
                         $vch_no = htmlspecialchars($row['inward_no'] ?? '');
                         
+                        $row_class = "";
+                        $status_badge = "";
+
                         if ($row['transaction_type'] == 'bill_added') {
-                            // 1. Check if this is a CD Reversal saved as a bill
                             if (stripos($raw_notes, 'CD Reversed') !== false) {
-                                $particulars = $raw_notes; // Shows "CD Reversed for T-127"
+                                $particulars = $raw_notes;
                                 $vch_type = "Adjustment";
                             } else {
-                                // Normal Sales Bill
                                 $particulars = "Sales Bill";
                                 $vch_type = "Tax Invoice";
+
+                                // Check payment status from stock_inward
+                                $pay_status = strtolower($row['pay_status'] ?? '');
+                                if ($pay_status === 'paid') {
+                                    $row_class = "bill-paid-row";
+                                    $status_badge = "<span class='badge-bill-paid'>✓ PAID</span>";
+                                } elseif ($pay_status === 'partial') {
+                                    $status_badge = "<span class='badge-bill-partial'>PARTIAL</span>";
+                                }
                             }
                             
                             $debit = round((float)$row['amount'], 2);
@@ -203,17 +210,13 @@ include 'view/layout/header.php';
                             $total_debit += $debit;
                             
                         } else {
-                            // 2. Credits (Payments & Commission Settlements)
+                            // Credits (Payments & Settlements)
                             $vch_no = htmlspecialchars($row['pay_id'] ?? '');
                             if (empty($raw_notes)) $raw_notes = "By Receipt";
                             
                             $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
                             $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
                             
-                            $stockist_name = htmlspecialchars($row['stockist_name'] ?? 'Unknown');
-                            $stockist_badge = "<br><button type='button' class='btn btn-sm btn-light' style='font-size: 10px; padding: 2px 6px; margin-top: 3px; border: 1px solid #dee2e6;'><i class='fa fa-user text-primary'></i> {$stockist_name}</button>";
-                            
-                            // Particulars Logic
                             if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
                                 if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z]+-\d+)/i', $raw_notes, $matches)) {
                                     $particulars = $matches[1] . " on " . $matches[2];
@@ -221,7 +224,6 @@ include 'view/layout/header.php';
                                     $particulars = explode(':', $raw_notes)[0]; 
                                 }
                             } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
-                                // Failsafe in case transaction_type was somehow set to something else
                                 $particulars = $raw_notes;
                             } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
                                 $particulars = "CD Applied";
@@ -231,10 +233,9 @@ include 'view/layout/header.php';
                                 $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
                             } elseif ($row['transaction_type'] === 'settled_to_bill') {
                                 $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
-                            }elseif ($row['transaction_type'] === 'asm_settlement') {
+                            } elseif ($row['transaction_type'] === 'asm_settlement') {
                                 $particulars = "<span style='font-weight: 600;'>ASM Settlement</span>";
                             } else {
-                                // Proper fallback for payments
                                 if (!empty($payment_method) && !empty($bank_name)) {
                                     $particulars = "{$payment_method} - {$bank_name}";
                                 } elseif (!empty($payment_method)) {
@@ -244,8 +245,7 @@ include 'view/layout/header.php';
                                 }
                             }
 
-                            // Differentiate Voucher Type
-                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill','asm_settlement'])) {
+                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement'])) {
                                 $vch_type = "Adjustment"; 
                             } else {
                                 $vch_type = "Receipt";    
@@ -254,7 +254,6 @@ include 'view/layout/header.php';
                             $raw_amount = (float)$row['amount'];
                             $debit = 0;
                             
-                            // ROUND OFF CD AMOUNTS
                             if (stripos($raw_notes, 'CD') !== false) {
                                 $credit = round($raw_amount); 
                             } else {
@@ -264,13 +263,20 @@ include 'view/layout/header.php';
                             $total_credit += $credit;
                         }
                     ?>
-                        <tr>
+                        <tr class="<?= $row_class ?>">
                             <td><?= $date ?></td>
                             <td><?= $particulars ?></td>
                             <td><?= $vch_type ?></td>
-                            <td><?= $vch_no ?></td>
-                            <td class="text-right"><?= $debit > 0 ? number_format($debit, 2) : '' ?></td>
-                            <td class="text-right" style="color: #5cb85c;"><?= $credit > 0 ? number_format($credit, 2) : '' ?></td>
+                            <td>
+                                <?= $vch_no ?>
+                                <?= $status_badge ?>
+                            </td>
+                            <td class="text-right" <?= ($row_class ? 'style="color: #166534; font-weight: 600;"' : '') ?>>
+                                <?= $debit > 0 ? number_format($debit, 2) : '' ?>
+                            </td>
+                            <td class="text-right" style="color: #5cb85c;">
+                                <?= $credit > 0 ? number_format($credit, 2) : '' ?>
+                            </td>
                         </tr>
                     <?php
                     }
@@ -297,10 +303,10 @@ include 'view/layout/header.php';
                     </tr>
                 <?php endif; ?>
             </tbody>
+
             <!-- Balancing Footer -->
             <?php if (isset($query) && $query && mysqli_num_rows($query) > 0): ?>
             <?php
-                // Explicitly Round to avoid floating point math errors
                 $total_debit = round($total_debit, 2);
                 $total_credit = round($total_credit, 2);
                 
@@ -335,13 +341,11 @@ include 'view/layout/header.php';
 <script>
     const mr_id = <?= isset($mr_id) ? $mr_id : 0 ?>; 
 
-    // Function to reload the page with URL parameters for the controller
     function loadReport() {
         const startDate = document.getElementById('start_date').value;
         const endDate = document.getElementById('end_date').value;
         let stockistId = document.getElementById('stockist-select').value;
         
-        // Fallback for hidden input if dropdown is disabled
         if (!stockistId) {
             const hiddenInput = document.getElementById('hidden-stockist');
             if(hiddenInput) stockistId = hiddenInput.value;
@@ -352,17 +356,11 @@ include 'view/layout/header.php';
             return;
         }
 
-        // Build the URL using GET parameters to hit your controller logic
         const url = new URL(window.location.href);
         url.searchParams.set('stockist_id', stockistId);
         url.searchParams.set('start_date', startDate);
         url.searchParams.set('end_date', endDate);
 
         window.location.href = url.toString();
-    }
-
-    function downloadPDFs() {
-        // Implement your PDF download logic here
-        alert("PDF download triggered.");
     }
 </script>

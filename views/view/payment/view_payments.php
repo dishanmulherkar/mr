@@ -266,6 +266,44 @@ include 'view/layout/header.php';
 </div>
 
 
+<!-- =========================================
+     PAYMENT BREAKDOWN POPUP MODAL
+     ========================================= -->
+<div id="breakdownModal" class="proof-modal">
+    <div class="proof-modal-content" style="max-width: 520px;">
+        <div class="proof-modal-header" style="background: #f8f9fa;">
+            <h5><i class="fa fa-receipt text-primary"></i> Bill Payment History: <span id="bd-bill-no"></span></h5>
+            <button class="proof-close-btn" id="closeBreakdownModal">&times;</button>
+        </div>
+        <div style="padding: 15px; background: #fff;">
+            <!-- Summary Bar -->
+            <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; font-size: 13px;">
+                <div><span style="color:#64748b;">Total Bill:</span> <strong id="bd-bill-total">₹0.00</strong></div>
+                <div><span style="color:#64748b;">Paid:</span> <strong style="color:#16a34a;" id="bd-bill-paid">₹0.00</strong></div>
+                <div><span style="color:#64748b;">Pending:</span> <strong style="color:#dc2626;" id="bd-bill-pending">₹0.00</strong></div>
+            </div>
+
+            <!-- Items Table -->
+            <div style="max-height: 350px; overflow-y: auto;">
+                <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f1f5f9; text-align: left;">
+                            <th style="padding: 6px 8px; border-bottom: 1px solid #cbd5e1;">Date</th>
+                            <th style="padding: 6px 8px; border-bottom: 1px solid #cbd5e1;">Payment Source</th>
+                            <th style="padding: 6px 8px; border-bottom: 1px solid #cbd5e1; text-align: right;">Amount (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bd-tbody">
+                        <tr>
+                            <td colspan="3" style="text-align: center; padding: 15px; color: #94a3b8;">Loading breakdown...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     const mr_id = <?= isset($mr_id) ? $mr_id : (isset($_SESSION['mr_id']) ? $_SESSION['mr_id'] : 0) ?>; 
     const BASE_URL = "<?= BASE_URL ?>";

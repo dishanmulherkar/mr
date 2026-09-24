@@ -139,9 +139,9 @@ class commission_mdl
         // (Removed the INNER JOIN to mr_users here since we don't need the live rate anymore)
         $sql = "
             SELECT si.inward_no, DATE_FORMAT(si.created_at, '%d %b %Y') as bill_date, 
-                   s.stockist_name, si.sub_total as taxable_amount,
+                   s.stockist_name, si.business_value as taxable_amount,
                    ? as pts,
-                   ROUND((si.sub_total * (? / 100)), 2) as commission_amount
+                   ROUND((si.business_value * (? / 100)), 2) as commission_amount
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE si.{$payout_column} = ?

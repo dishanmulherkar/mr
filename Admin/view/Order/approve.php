@@ -63,7 +63,52 @@ include 'view/layout/header.php';
             <i class="fa fa-exclamation-circle"></i> <?= $_GET['error']; ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-    <?php endif; ?>
+    <?php endif; 
+    ?>
+
+<?php 
+$credit_limit      = isset($credit_info['credit_limit']) ? (float)$credit_info['credit_limit'] : 0.00;
+$pending_debt      = isset($credit_info['pending_amount']) ? (float)$credit_info['pending_amount'] : 0.00;
+$available_to_bill = isset($credit_info['available_to_bill']) ? (float)$credit_info['available_to_bill'] : 0.00;
+if ($ROW['status'] !== 'Processed'){ ?>
+
+
+<!-- Live Financial & Credit Status Bar -->
+<div class="row my-3 py-2 bg-light border rounded">
+    <!-- Credit Limit -->
+    <div class="col-md-2 col-6 text-center border-end">
+        <small class="text-muted d-block">Credit Limit</small>
+        <span class="fs-5 fw-bold text-dark">₹<?= number_format($credit_limit, 2); ?></span>
+    </div>
+
+    <!-- Pending Debt -->
+    <div class="col-md-2 col-6 text-center border-end">
+        <small class="text-muted d-block">Pending Debt</small>
+        <span class="fs-5 fw-bold text-secondary">₹<?= number_format($pending_debt, 2); ?></span>
+    </div>
+
+    <!-- Live Current Bill (Updates on input) -->
+    <div class="col-md-2 col-6 text-center border-end">
+        <small class="text-muted d-block">Current Bill</small>
+        <span class="fs-5 fw-bold text-primary" id="credit_card_bill">₹0.00</span>
+    </div>
+
+    <!-- Available Capacity Before Current Bill -->
+    <div class="col-md-3 col-6 text-center border-end">
+        <small class="text-muted d-block">Available Capacity</small>
+        <span class="fs-5 fw-bold <?= $available_to_bill <= 0 ? 'text-danger' : 'text-success'; ?>">
+            ₹<?= number_format($available_to_bill, 2); ?>
+        </span>
+    </div>
+
+    <!-- Live Decision Badge (Recalculates Live) -->
+    <div class="col-md-3 col-12 text-center" id="credit_decision_box">
+        <small class="text-muted d-block">Approval Evaluation</small>
+        <span class="fs-5 fw-bold text-muted">Calculating...</span>
+    </div>
+</div>
+<hr>
+<?php } ?>
 
    <form action="<?= BASE_URL ?>Order/Approved" method="POST" id="orderApprovalForm">
         <input type="hidden" name="order_id" value="<?= $ROW['order_id']; ?>">
@@ -896,6 +941,42 @@ $(document).ready(function(){
         $('#input_sgst').val(sgst.toFixed(2));
         $('#input_igst').val(igst.toFixed(2));
         $('#input_vat').val(vat.toFixed(2));
+        // ============================================================
+        // LIVE MR CREDIT LIMIT CHECK (Runs dynamically with Grand Total)
+        // ============================================================
+        let creditLimit     = <?= json_encode((float)($credit_info['credit_limit'] ?? 0)); ?>;
+        let availableToBill = <?= json_encode((float)($credit_info['available_to_bill'] ?? 0)); ?>;
+
+        // 1. Update the live bill figure in the top strip
+        $('#credit_card_bill').text('₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+        // 2. Net Difference after subtracting the current dynamic invoice
+        let netDifference = availableToBill - grandTotal;
+        let decisionHtml  = '';
+
+        if (creditLimit > 0 && netDifference < 0) {
+            // EXCEEDED: Show exact exceeded amount, notify admin override is allowed
+            let exceededAmount = Math.abs(netDifference).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            decisionHtml = `
+                <small class="text-danger fw-bold d-block">⚠️ Limit Exceeded By</small>
+                <span class="fs-5 fw-bold text-danger">₹${exceededAmount}</span>
+                <span class="badge bg-warning text-dark d-block mt-1" title="Credit limit exceeded, but administrative override is active">
+                    <i class="fa fa-info-circle"></i> ADMIN CAN STILL APPROVE
+                </span>
+            `;
+        } else {
+            // WITHIN LIMIT / SURPLUS
+            let surplusAmount = Math.max(0, netDifference).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            decisionHtml = `
+                <small class="text-success fw-bold d-block">✓ Surplus / Advance</small>
+                <span class="fs-5 fw-bold text-success">₹${surplusAmount}</span>
+                <span class="badge bg-success d-block mt-1">SAFE TO APPROVE</span>
+            `;
+        }
+
+        $('#credit_decision_box').html(decisionHtml);
     }
 
     calculateTotals();

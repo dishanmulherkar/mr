@@ -34,17 +34,34 @@ class OrderController
 
        
 
-    public function approve($order_id)
-    {
-        // Fetch master order data & associated stockist/MR info
-        $ROW = $this->model->getOrderById($order_id);
-        $Products = $this->model->getProductsBySuperStockist($ROW['super_stockist_id']);
-        // Fetch order line items pre-populated
-        $ROW_DETAILS = $this->model->getOrderDetails($order_id);
-        $gst = $this->model->getgst($ROW['super_stockist_state'],$ROW['stockist_state']);
+public function approve($order_id)
+{
+    $order_id = (int)$order_id;
 
-        include 'view/Order/approve.php';
+    $ROW = $this->model->getOrderById($order_id);
+
+    if (!$ROW) {
+        header("Location: " . BASE_URL . "Order?error=" . urlencode("Order not found."));
+        exit;
     }
+
+    $mr_id = !empty($ROW['mr_id']) ? (int)$ROW['mr_id'] : 0;
+    if ($mr_id <= 0 && !empty($ROW['stockist_id'])) {
+        $mr_id = $this->model->getActiveMrByStockist($ROW['stockist_id']);
+        $ROW['mr_id'] = $mr_id;
+    }
+
+    // EXCLUDE THIS ORDER ID: prevents double counting already-approved edits
+    $credit_info = ($mr_id > 0) 
+        ? $this->model->getMrCreditLimitDetails($mr_id, $order_id) 
+        : ['success' => false, 'credit_limit' => 0.00, 'pending_amount' => 0.00, 'available_to_bill' => 0.00];
+
+    $Products    = $this->model->getProductsBySuperStockist($ROW['super_stockist_id']);
+    $ROW_DETAILS = $this->model->getOrderDetails($order_id);
+    $gst         = $this->model->getgst($ROW['super_stockist_state'], $ROW['stockist_state']);
+
+    include 'view/Order/approve.php';
+}
 
 public function Approved()
     {
@@ -232,4 +249,23 @@ public function list_orders()
         include 'view/Asm/order/details.php';
     }
 
+
+    public function checkCredit()
+    {
+        header('Content-Type: application/json');
+
+        $stockist_id = isset($_POST['stockist_id']) ? (int)$_POST['stockist_id'] : 0;
+
+        if ($stockist_id <= 0) {
+            echo json_encode([
+                'success' => false, 
+                'msg' => 'Invalid Stockist ID'
+            ]);
+            exit;
+        }
+
+        $details = $this->model->getCreditLimitDetails($stockist_id);
+        echo json_encode($details);
+        exit;
+    }
 }

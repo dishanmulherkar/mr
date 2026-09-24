@@ -81,11 +81,27 @@ class PaymentApproval_mdl {
             }
             
             $payment = $result->fetch_assoc();
-            $stockist_id = (int)($payment['stockist_id'] ?? 0);
-            $mr_id = (int)($payment['mr_id'] ?? 0); // ADDED: Fetch the MR ID
-            $amount_paid = (float)($payment['amount_paid'] ?? 0);
+            $stockist_id    = (int)($payment['stockist_id'] ?? 0);
+            $mr_id          = (int)($payment['mr_id'] ?? 0);
+            $amount_paid    = (float)($payment['amount_paid'] ?? 0);
             $payment_method = $payment['payment_method'] ?? 'Unknown';
             $stmt->close();
+
+            // Fallback: If mr_id is 0, resolve to the current active MR for this stockist's HQ
+            if ($mr_id <= 0 && $stockist_id > 0) {
+                $stmt_mrfb = $this->con->prepare("
+                    SELECT m.m_id 
+                    FROM mr_users m
+                    INNER JOIN stockists s ON s.hq_id = m.hq_id
+                    WHERE s.stockist_id = ? AND m.status = '1'
+                    LIMIT 1
+                ");
+                $stmt_mrfb->bind_param("i", $stockist_id);
+                $stmt_mrfb->execute();
+                $mr_row = $stmt_mrfb->get_result()->fetch_assoc();
+                $mr_id  = $mr_row ? (int)$mr_row['m_id'] : 0;
+                $stmt_mrfb->close();
+            }
 
             // ==========================================
             // STEP 2: Update Payment Status
@@ -104,8 +120,8 @@ class PaymentApproval_mdl {
                 // ==========================================
                 // STEP 3: Get CD Rules for This Stockist
                 // ==========================================
-                $cd_4_days = 10;  // Default
-                $cd_2_days = 30;  // Default
+                $cd_4_days = 10;
+                $cd_2_days = 30;
                 
                 $stmt_rules = $this->con->prepare("
                     SELECT r.cd_4_percent_days, r.cd_2_percent_days
@@ -129,14 +145,12 @@ class PaymentApproval_mdl {
                 // ==========================================
                 // STEP 4: Create Main Payment Ledger Entry
                 // ==========================================
-                // ADDED: user_id to columns and values
                 $stmt = $this->con->prepare("
                     INSERT INTO payment_ledgers 
                     (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
                     VALUES (?, ?, 'debt', 'payment_made', ?, ?, 'decrease', ?)
                 ");
                 $notes = "Payment Approved: " . $payment_method;
-                // ADDED: 'i' for mr_id binding
                 $stmt->bind_param("iiids", $stockist_id, $mr_id, $payment_id, $amount_paid, $notes);
                 $stmt->execute();
                 $ledger_id = $this->con->insert_id; 
@@ -149,11 +163,11 @@ class PaymentApproval_mdl {
                 
                 $stmt_bills = $this->con->prepare("
                     SELECT inward_id, grand_total, paid_amt, inward_no, sub_total, 
-                           COALESCE(gst_amount, 0) as gst_amount, 
-                           COALESCE(other_charges, 0) as other_charges, 
-                           COALESCE(discount, 0) as discount,
-                           COALESCE(cd_percent, 0) as cd_percent,
-                           DATEDIFF(CURDATE(), inward_date) AS age_days
+                        COALESCE(gst_amount, 0) AS gst_amount, 
+                        COALESCE(other_charges, 0) AS other_charges, 
+                        COALESCE(discount, 0) AS discount,
+                        COALESCE(cd_percent, 0) AS cd_percent,
+                        DATEDIFF(CURDATE(), inward_date) AS age_days
                     FROM stock_inward 
                     WHERE stockist_id = ? AND pay_status != 'paid' 
                     ORDER BY inward_date ASC
@@ -166,23 +180,26 @@ class PaymentApproval_mdl {
 
                 if ($unpaid_bills->num_rows > 0) {
                     
-                    // ----------------------------------------------------
-                    // SAFELY PREPARE AND BIND ONCE TO AVOID LOOP BUGS
-                    // ----------------------------------------------------
                     $stmt_alloc = $this->con->prepare("INSERT INTO payment_allocations (ledger_id, inward_id, amount_allocated) VALUES (?, ?, ?)");
                     $alloc_ledger_id = 0; $alloc_inward_id = 0; $alloc_amount = 0;
                     $stmt_alloc->bind_param("iid", $alloc_ledger_id, $alloc_inward_id, $alloc_amount);
 
-                    $stmt_update = $this->con->prepare("UPDATE stock_inward SET paid_amt = ?, pay_status = ?, cd_percent = ?, cd_penalty_amt = cd_penalty_amt + ?, cd_earned_amt = cd_earned_amt + ? WHERE inward_id = ?");
+                    $stmt_update = $this->con->prepare("
+                        UPDATE stock_inward 
+                        SET paid_amt = ?, 
+                            pay_status = ?, 
+                            cd_percent = ?, 
+                            cd_penalty_amt = cd_penalty_amt + ?, 
+                            cd_earned_amt = cd_earned_amt + ? 
+                        WHERE inward_id = ?
+                    ");
                     $upd_paid_amt = 0; $upd_status = ""; $upd_cd_percent = 0; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
                     $stmt_update->bind_param("dsiddi", $upd_paid_amt, $upd_status, $upd_cd_percent, $upd_penalty, $upd_earned, $upd_inward_id);
 
-                    // ADDED: user_id to CD Ledger
                     $stmt_cd = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', 'payment_made', ?, ?, 'decrease', ?)");
                     $cd_stockist_id = 0; $cd_inward_id = 0; $cd_amount = 0; $cd_notes = "";
                     $stmt_cd->bind_param("iiids", $cd_stockist_id, $mr_id, $cd_inward_id, $cd_amount, $cd_notes);
                     
-                    // ADDED: user_id to Penalty Ledger
                     $stmt_penalty = $this->con->prepare("INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) VALUES (?, ?, 'debt', 'bill_added', ?, ?, 'increase', ?)");
                     $pen_stockist_id = 0; $pen_inward_id = 0; $pen_amount = 0; $pen_notes = "";
                     $stmt_penalty->bind_param("iiids", $pen_stockist_id, $mr_id, $pen_inward_id, $pen_amount, $pen_notes);
@@ -193,88 +210,79 @@ class PaymentApproval_mdl {
                     while ($bill = $unpaid_bills->fetch_assoc()) {
                         if ($remaining_payment <= 0) break;
 
-                        $inward_id = (int)$bill['inward_id'];
-                        $grand_total = (float)$bill['grand_total']; // Original Immutable Total
-                        $paid_amt = (float)$bill['paid_amt'];
-                        $sub_total = (float)$bill['sub_total'];
-                        $gst_amount = (float)$bill['gst_amount'];
-                        $other_charges = (float)$bill['other_charges'];
-                        $discount = (float)$bill['discount'];
+                        $inward_id          = (int)$bill['inward_id'];
+                        $grand_total        = (float)$bill['grand_total'];
+                        $paid_amt           = (float)$bill['paid_amt'];
+                        $sub_total          = (float)$bill['sub_total'] <= 0 ? $grand_total : (float)$bill['sub_total'];
+                        $gst_amount         = (float)$bill['gst_amount'];
+                        $other_charges      = (float)$bill['other_charges'];
+                        $discount           = (float)$bill['discount'];
                         $current_cd_percent = (int)$bill['cd_percent'];
-                        $inward_no = $bill['inward_no'];
-                        $bill_age_days = (int)$bill['age_days'];
+                        $inward_no          = $bill['inward_no'];
+                        $bill_age_days      = (int)$bill['age_days'];
                         
-                        if ($sub_total <= 0) { $sub_total = $grand_total; }
-                        
-                        $applied_penalty = 0;
-                        $applied_earned_cd = 0;
+                        $applied_penalty    = 0.00;
+                        $applied_earned_cd  = 0.00;
 
-                        // A. HANDLE PENALTIES FOR LATE PAYMENTS
+                        // A. PENALTIES FOR LATE PAYMENTS
                         if ($current_cd_percent == 4) {
                             if ($bill_age_days > $cd_4_days && $bill_age_days <= $cd_2_days) {
-                                // Target total if 2% was given instead of 4%
-                                $target_grand = round(($sub_total * (98/96)) + ($gst_amount * (98/96)) + $other_charges - $discount);
-                                $applied_penalty = max(0, $target_grand - $grand_total);
+                                $target_grand = round(($sub_total * (98/96)) + ($gst_amount * (98/96)) + $other_charges - $discount, 2);
+                                $applied_penalty = max(0, round($target_grand - $grand_total, 2));
                                 $current_cd_percent = 2; 
                             } elseif ($bill_age_days > $cd_2_days) {
-                                // Target total if NO CD was given
-                                $target_grand = round(($sub_total * (100/96)) + ($gst_amount * (100/96)) + $other_charges - $discount);
-                                $applied_penalty = max(0, $target_grand - $grand_total);
+                                $target_grand = round(($sub_total * (100/96)) + ($gst_amount * (100/96)) + $other_charges - $discount, 2);
+                                $applied_penalty = max(0, round($target_grand - $grand_total, 2));
                                 $current_cd_percent = 0; 
                             }
                         } elseif ($current_cd_percent == 2) {
                             if ($bill_age_days > $cd_2_days) {
-                                // Target total if NO CD was given
-                                $target_grand = round(($sub_total * (100/98)) + ($gst_amount * (100/98)) + $other_charges - $discount);
-                                $applied_penalty = max(0, $target_grand - $grand_total);
+                                $target_grand = round(($sub_total * (100/98)) + ($gst_amount * (100/98)) + $other_charges - $discount, 2);
+                                $applied_penalty = max(0, round($target_grand - $grand_total, 2));
                                 $current_cd_percent = 0;
                             }
                         }
 
                         if ($applied_penalty > 0) {
-                            // Deduct the penalty from the cash pool so it doesn't spill over to the next invoice
-                            $remaining_payment = round($remaining_payment - $applied_penalty, 2);
-                            if ($remaining_payment < 0) $remaining_payment = 0; 
+                            $remaining_payment = round(max(0, $remaining_payment - $applied_penalty), 2);
                             
                             $pen_stockist_id = $stockist_id;
-                            $pen_inward_id = $inward_id;
-                            $pen_amount = $applied_penalty;
-                            $pen_notes = "CD Reversed for " . $inward_no;
+                            $pen_inward_id   = $inward_id;
+                            $pen_amount      = $applied_penalty;
+                            $pen_notes       = "CD Reversed for " . $inward_no;
                             $stmt_penalty->execute();
                         }
 
-                        // B. HANDLE NEW CD FOR TIMELY PAYMENTS
+                        // B. NEW CD FOR TIMELY PAYMENTS
                         if ($current_cd_percent == 0 && $applied_penalty == 0) {
-                            $potential_cd = 0;
+                            $potential_cd  = 0.00;
                             $potential_pct = 0;
 
                             if ($bill_age_days <= $cd_4_days) {
-                                $target_grand = round(($sub_total * 0.96) + ($gst_amount * 0.96) + $other_charges - $discount);
-                                $potential_cd = max(0, $grand_total - $target_grand); 
+                                $target_grand  = round(($sub_total * 0.96) + ($gst_amount * 0.96) + $other_charges - $discount, 2);
+                                $potential_cd  = max(0, round($grand_total - $target_grand, 2)); 
                                 $potential_pct = 4;
                             } elseif ($bill_age_days <= $cd_2_days) {
-                                $target_grand = round(($sub_total * 0.98) + ($gst_amount * 0.98) + $other_charges - $discount);
-                                $potential_cd = max(0, $grand_total - $target_grand); 
+                                $target_grand  = round(($sub_total * 0.98) + ($gst_amount * 0.98) + $other_charges - $discount, 2);
+                                $potential_cd  = max(0, round($grand_total - $target_grand, 2)); 
                                 $potential_pct = 2;
                             }
 
-                            // Check if remaining cash can clear the bill AFTER discount is theoretically applied
                             $required_cash_to_clear = round($grand_total - $paid_amt - $potential_cd, 2);
 
                             if ($potential_cd > 0 && round($remaining_payment, 2) >= $required_cash_to_clear) {
-                                $applied_earned_cd = $potential_cd;
+                                $applied_earned_cd  = $potential_cd;
                                 $current_cd_percent = $potential_pct;
                                 
                                 $cd_stockist_id = $stockist_id;
-                                $cd_inward_id = $inward_id;
-                                $cd_amount = $applied_earned_cd;
-                                $cd_notes = "{$potential_pct}% CD on Invoice {$inward_no}: ₹" . number_format($applied_earned_cd, 2);
+                                $cd_inward_id   = $inward_id;
+                                $cd_amount      = $applied_earned_cd;
+                                $cd_notes       = "{$potential_pct}% CD on Invoice {$inward_no}: ₹" . number_format($applied_earned_cd, 2);
                                 $stmt_cd->execute();
                             }
                         }
 
                         // C. ALLOCATE CASH PAYMENT
-                        // Required Cash = (Original Total + Penalties) - (Already Paid Cash + Earned CD)
                         $required_cash_balance = round(($grand_total + $applied_penalty) - $paid_amt - $applied_earned_cd, 2);
 
                         if ($required_cash_balance > 0) {
@@ -282,28 +290,27 @@ class PaymentApproval_mdl {
                             
                             $alloc_ledger_id = $ledger_id;
                             $alloc_inward_id = $inward_id;
-                            $alloc_amount = $allocate_amount;
+                            $alloc_amount    = $allocate_amount;
                             $stmt_alloc->execute();
 
-                            $new_paid_amt = round($paid_amt + $allocate_amount, 2);
+                            $new_paid_amt      = round($paid_amt + $allocate_amount, 2);
                             $remaining_payment = round($remaining_payment - $allocate_amount, 2);
                         } else {
                             $new_paid_amt = $paid_amt;
                         }
 
                         // D. UPDATE INVOICE RECORD
-                        // Bill is fully paid if (Cash Paid + Earned CD) >= (Original Total + Penalties)
-                        $total_cleared_value = round($new_paid_amt + $applied_earned_cd, 2);
+                        $total_cleared_value  = round($new_paid_amt + $applied_earned_cd, 2);
                         $total_bill_liability = round($grand_total + $applied_penalty, 2);
                         
                         $new_status = ($total_cleared_value >= $total_bill_liability) ? 'paid' : 'partial';
 
-                        $upd_paid_amt = $new_paid_amt;
-                        $upd_status = $new_status;
+                        $upd_paid_amt   = $new_paid_amt;
+                        $upd_status     = $new_status;
                         $upd_cd_percent = $current_cd_percent;
-                        $upd_penalty = $applied_penalty; // Adds to cd_penalty_amt tracking
-                        $upd_earned = $applied_earned_cd; // Adds to cd_earned_amt tracking
-                        $upd_inward_id = $inward_id;
+                        $upd_penalty    = $applied_penalty;
+                        $upd_earned     = $applied_earned_cd;
+                        $upd_inward_id  = $inward_id;
                         $stmt_update->execute();
                     }
 
@@ -322,6 +329,7 @@ class PaymentApproval_mdl {
             return ['success' => false, 'msg' => 'Error: ' . $e->getMessage()];
         }
     }
+
     // ==========================================
     // NEW METHODS FOR PAYMENT ENTRY LOGIC
     // ==========================================

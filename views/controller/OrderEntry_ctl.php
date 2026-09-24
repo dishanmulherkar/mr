@@ -10,19 +10,22 @@ class orderentry_ctl
         $this->model = new orderentry_mdl();
     }
 
-    public function index()
-    {
-
-        if (!isset($_SESSION['mr_id'])) {
-            header('Location: index');
-            exit;
-        }
-
-        $mr_id = $_SESSION['mr_id'];
-        $stockists = $this->model->getStockists($mr_id);
-
-        include 'view/Order/index.php';
+   public function index($order_id = 0)
+{
+    if (!isset($_SESSION['mr_id'])) {
+        header('Location: index');
+        exit;
     }
+
+    $mr_id = (int)$_SESSION['mr_id'];
+    $stockists = $this->model->getStockists($mr_id);
+
+    // Calculate baseline available limit before cart additions
+    $credit_info = $this->model->getMrCreditLimitDetails($mr_id, (int)$order_id);
+    $base_avail_limit = (float)($credit_info['available_to_bill'] ?? 0.00);
+
+    include 'view/Order/index.php';
+}
 
       public function details($order_id = 0)
     {

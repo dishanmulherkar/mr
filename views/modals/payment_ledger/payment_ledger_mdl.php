@@ -49,30 +49,42 @@ class payment_ledger_mdl
     }
 
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
-    public function getReport($stockist_id, $from_date, $to_date)
-    {
-        $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id, s.stockist_name, pd.payment_method, b.bank_name
-                FROM payment_ledgers pl 
-                LEFT JOIN stock_inward si ON si.inward_id = pl.reference_id 
-                LEFT JOIN payment_details pd ON pd.id = pl.reference_id 
-                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
-                LEFT JOIN banks b ON b.bank_id = pd.bank_id
-                WHERE pl.stockist_id = ? 
-                AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                
-                -- Kept 'settled_to_bill' for legacy data, and ensured 'asm_settlement' is included
-                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
-                AND DATE(pl.created_at) >= ? 
-                AND DATE(pl.created_at) <= ?
-                ORDER BY pl.created_at ASC, pl.id ASC";
-                
-        // Secured with Prepared Statements
-        $stmt = $this->con->prepare($sql);
-        $stmt->bind_param("iss", $stockist_id, $from_date, $to_date);
-        $stmt->execute();
-        
-        return $stmt->get_result();
-    }
+public function getReport($stockist_id, $from_date, $to_date)
+{
+    // Added si.pay_status to the SELECT list
+    // Fixed JOIN conditions to be transaction_type specific
+    $sql = "SELECT 
+                pl.*, 
+                si.inward_no, 
+                si.pay_status,
+                pd.id AS pay_id, 
+                s.stockist_name, 
+                pd.payment_method, 
+                b.bank_name
+            FROM payment_ledgers pl 
+            LEFT JOIN stock_inward si 
+                ON si.inward_id = pl.reference_id 
+                AND pl.transaction_type = 'bill_added'
+            LEFT JOIN payment_details pd 
+                ON pd.id = pl.reference_id 
+                AND pl.transaction_type = 'payment_made'
+            LEFT JOIN stockists s 
+                ON pl.stockist_id = s.stockist_id
+            LEFT JOIN banks b 
+                ON b.bank_id = pd.bank_id
+            WHERE pl.stockist_id = ? 
+              AND pl.ledger_type = 'debt'
+              AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+              AND DATE(pl.created_at) >= ? 
+              AND DATE(pl.created_at) <= ?
+            ORDER BY pl.created_at ASC, pl.id ASC";
+            
+    $stmt = $this->con->prepare($sql);
+    $stmt->bind_param("iss", $stockist_id, $from_date, $to_date);
+    $stmt->execute();
+    
+    return $stmt->get_result();
+}
 
     // Opening balance calculation filtered for the same transaction types
     public function getOpeningBalance($stockist_id, $from_date)
