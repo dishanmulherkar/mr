@@ -22,68 +22,77 @@ class InvoiceController
         // $this->pdf($id);
     }
 
-    public function pdf($id)
-    {
-        $order_id = (int)$id;
+public function pdf($id)
+{
+    $order_id = (int)$id;
 
-        if (!$order_id) {
-            die('Invalid order ID.');
-        }
-
-        $invoice = $this->model->getInvoice($order_id);
-
-        if (!$invoice) {
-            die('Invoice not found.');
-        }
-
-        /*
-         * Dompdf
-         */
-        require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
-
-        $options = new \Dompdf\Options();
-
-        $options->set(
-            'defaultFont',
-            'DejaVu Sans'
-        );
-
-        $options->set(
-            'isRemoteEnabled',
-            true
-        );
-
-        $dompdf = new \Dompdf\Dompdf($options);
-
-        /*
-         * Load invoice HTML
-         */
-        ob_start();
-
-        require __DIR__ . '/../view/invoice.php';
-
-        $html = ob_get_clean();
-
-        /*
-         * Generate PDF
-         */
-       $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'portrait');
-        $dompdf->render();
-
-        /*
-         * Display in browser
-         */
-        $invoice_no = $invoice['invoice_no']
-            ?? ('INV-' . $order_id);
-
-        $dompdf->stream(
-            'Invoice-' . $invoice_no . '.pdf',
-            [
-                'Attachment' => false
-            ]
-        );
+    if (!$order_id) {
+        die('Invalid order ID.');
     }
+
+    $invoice = $this->model->getInvoice($order_id);
+
+    if (!$invoice) {
+        die('Invoice not found.');
+    }
+
+    /*
+     * Dompdf
+     */
+    require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
+
+    $options = new \Dompdf\Options();
+    $options->set('defaultFont', 'DejaVu Sans');
+    $options->set('isRemoteEnabled', true);
+
+    $dompdf = new \Dompdf\Dompdf($options);
+
+    /*
+     * Load invoice HTML
+     */
+    ob_start();
+    require __DIR__ . '/../view/invoice.php';
+    $html = ob_get_clean();
+
+    /*
+     * Generate PDF
+     */
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+
+    /*
+     * Set File Name: InwardNo (Stockist Name).pdf
+     */
+    $inward_no     = trim($invoice['inward_no'] ?? $invoice['invoice_no'] ?? ('ORD-' . $order_id));
+    $stockist_name = trim($invoice['stockist_name'] ?? 'Unknown');
+
+    // Clean special characters illegal in file systems
+    $clean_stockist = preg_replace('/[\\\\\/:*?"<>|]/', '', $stockist_name);
+    $clean_inward   = preg_replace('/[\\\\\/:*?"<>|]/', '', $inward_no);
+
+    $filename = "{$clean_inward} ({$clean_stockist}).pdf";
+
+    /*
+     * Render Output and Send Explicit Headers
+     */
+    $pdfOutput = $dompdf->output();
+
+    // Clean any prior output buffers so nothing corrupts the PDF stream
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/pdf');
+    // Using both standard filename and RFC 5987 filename* ensures mobile WebViews read spaces and brackets correctly
+    header('Content-Disposition: attachment; filename="' . addslashes($filename) . '"; filename*=UTF-8\'\'' . rawurlencode($filename));
+    header('Content-Length: ' . strlen($pdfOutput));
+    header('Cache-Control: private, max-age=0, must-revalidate');
+    header('Pragma: public');
+
+    echo $pdfOutput;
+    exit;
+}
 
     public function sales_pdf($id)
     {

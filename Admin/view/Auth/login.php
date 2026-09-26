@@ -1,5 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,131 +8,144 @@
     <link rel="stylesheet" href="<?= BASE_URL ?>config/Addons/login.css">
     
     <style>
-        #msg{
+        #msg {
+            margin: 15px 0;
+            padding: 12px;
+            border-radius: 5px;
+            display: none;
+        }
 
-margin:15px 0;
-padding:12px;
-border-radius:5px;
-display:none;
+        .success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
 
-}
+        .error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
 
-.success{
+        #forgotPasswordModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
 
-display:block;
-background:#d4edda;
-color:#155724;
-border:1px solid #c3e6cb;
+        #forgotPasswordModal.show {
+            display: flex;
+        }
 
-}
+        #forgotDialog {
+            background: #fff;
+            width: min(90%, 420px);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            text-align: center;
+            position: relative;
+        }
 
-.error{
+        #forgotDialog .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            cursor: pointer;
+            font-size: 22px;
+            color: #666;
+        }
 
-display:block;
-background:#f8d7da;
-color:#721c24;
-border:1px solid #f5c6cb;
+        #forgotDialog button {
+            margin-top: 14px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #0d6efd;
+            color: #fff;
+            cursor: pointer;
+        }
 
-}
+        /* Default Desktop Style */
+        .hscroll-line {
+            right: 36%;
+            height: 1px;
+            position: absolute;
+            overflow: hidden;
+            width: 23%;
+            transform: rotate(90deg);
+            top: 50%;
+            background: #d4d4d4;
+        }
 
-#forgotPasswordModal {
-    display:none;
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,0.6);
-    align-items:center;
-    justify-content:center;
-    z-index:9999;
-}
+        .hscroll-line::before,
+        .hscroll-line::after {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            content: "";
+        }
 
-#forgotPasswordModal.show {
-    display:flex;
-}
+        .hscroll-line:before {
+            background: #ffffff3b;
+        }
 
-#forgotDialog {
-    background:#fff;
-    width:min(90%, 420px);
-    padding:24px;
-    border-radius:12px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.25);
-    text-align:center;
-    position:relative;
-}
+        .hscroll-line::after {
+            background: #000000;
+            animation: move 3s infinite;
+        }
 
-#forgotDialog .close-btn {
-    position:absolute;
-    top:10px;
-    right:12px;
-    cursor:pointer;
-    font-size:22px;
-    color:#666;
-}
+        /* Hide line ONLY on mobile screens */
+        @media (max-width: 768px) {
+            .hscroll-line {
+                display: none !important;
+            }
+        }
 
-#forgotDialog button {
-    margin-top:14px;
-    padding:10px 16px;
-    border:none;
-    border-radius:6px;
-    background:#0d6efd;
-    color:#fff;
-    cursor:pointer;
-}
+        @keyframes move {
+            0% { transform: translate3d(-200%, 0, 0); }
+            60% { transform: translate3d(100%, 0, 0); }
+            100% { transform: translate3d(100%, 0, 0); }
+        }
+
+        /* Options row styling */
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 14px 0;
+            font-size: 14px;
+        }
+
+        .remember-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            user-select: none;
+            color: #555;
+        }
+
+        .remember-wrapper input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
     </style>
-
-<style>
-    .hscroll-line {
-
-  right: 36%;
-  height: 1px;
-  position: absolute;
-  overflow: hidden;
-  width: 23%;
-  transform: rotate(90deg);
-  top: 50%;
-  background: #d4d4d4;
- 
-}
-
-
-.hscroll-line::before,
-.hscroll-line::after {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	content: ""
-}
-
-.hscroll-line:before {
-	background: #ffffff3b;
-}
-
-.hscroll-line::after {
-	background: #000000;
-	animation: move 3s infinite
-}
-
-@keyframes move {
-	0% {
-		transform: translate3d(-200%, 0, 0)
-	}
-	60% {
-		transform: translate3d(100%, 0, 0)
-	}
-	100% {
-		transform: translate3d(100%, 0, 0)
-	}
-}
-</style>
-
-
 </head>
 <body>
     <div class="container">
         <!-- Left Side with Pharmaceutical Art -->
         <div class="left-side">
-            <img  style="width:500px"  src="<?= BASE_URL ?>config/image/logo.jpg" alt="Pharmaceutical Illustrations" class="art-image">
+            <img style="width:500px" src="<?= BASE_URL ?>config/image/logo.jpg" alt="Pharmaceutical Illustrations" class="art-image">
         </div>
 
         <div>
@@ -144,24 +155,21 @@ border:1px solid #f5c6cb;
         <!-- Right Side with Login Form -->
         <div class="right-side">
             <div class="login-box">
-                <!-- Company Logo -->
-
                 <h2>Sign In</h2>
 
                 <form id="loginForm" method="POST">
                     <!-- User Name Field -->
                     <div class="input-group">
                         <label for="username">User Name or Email</label>
-                        <input type="text" id="username" name="username" placeholder="Enter your username or email">
+                        <input type="text" id="username" name="username" placeholder="Enter your username or email" value="<?= htmlspecialchars($_COOKIE['remember_username'] ?? '') ?>">
                     </div>
 
                     <!-- Password Field -->
                     <div class="input-group">
                         <label for="password">Password</label>
                         <div class="password-wrapper">
-                            <input type="password" id="password" name="password" placeholder="Enter your password">
+                            <input type="password" id="password" name="password" placeholder="Enter your password" value="<?= htmlspecialchars($_COOKIE['remember_password'] ?? '') ?>">
                             <span class="toggle-password">
-                                <!-- Example SVG icon for the eye (visible) -->
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#757575">
                                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -170,19 +178,26 @@ border:1px solid #f5c6cb;
                         </div>
                     </div>
 
-                    <!-- Forgot Password Link -->
-                    <div class="forgot-password">
-                        <a href="#" id="forgotPasswordLink">Forgot Password?</a>
+                    <!-- Remember Me & Forgot Password Row -->
+                    <div class="form-options">
+                        <label class="remember-wrapper">
+                            <input type="checkbox" name="remember_me" id="remember_me" <?= isset($_COOKIE['remember_username']) ? 'checked' : '' ?>>
+                            <span>Remember Me</span>
+                        </label>
+                        <!-- <div class="forgot-password">
+                            <a href="#" id="forgotPasswordLink">Forgot Password?</a>
+                        </div> -->
                     </div>
+
                     <div id="msg"></div>
+
                     <!-- Login Button -->
                     <button type="submit" class="login-btn">Login</button>
                 </form>
-
-                
             </div>
         </div>
     </div>
+
     <div id="forgotPasswordModal">
         <div id="forgotDialog">
             <span class="close-btn" id="closeForgotModal">&times;</span>
@@ -202,15 +217,11 @@ document.addEventListener('DOMContentLoaded', function () {
     var closeBtn2 = document.getElementById('closeForgotModalBtn');
 
     function openModal() {
-        if (modal) {
-            modal.classList.add('show');
-        }
+        if (modal) modal.classList.add('show');
     }
 
     function closeModal() {
-        if (modal) {
-            modal.classList.remove('show');
-        }
+        if (modal) modal.classList.remove('show');
     }
 
     if (link) {
@@ -220,26 +231,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeModal);
-    }
-
-    if (closeBtn2) {
-        closeBtn2.addEventListener('click', closeModal);
-    }
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeBtn2) closeBtn2.addEventListener('click', closeModal);
 
     if (modal) {
         modal.addEventListener('click', function (e) {
-            if (e.target === modal) {
-                closeModal();
-            }
+            if (e.target === modal) closeModal();
         });
     }
 
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            closeModal();
-        }
+        if (e.key === 'Escape') closeModal();
     });
 });
 

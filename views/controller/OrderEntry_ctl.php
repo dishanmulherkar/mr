@@ -49,6 +49,8 @@ class orderentry_ctl
 
         $mr_id = $_SESSION['mr_id'];
         $stockists = $this->model->getStockists($mr_id);
+        $credit_info = $this->model->getMrCreditLimitDetails($mr_id, $order_id);
+         $base_avail_limit = (float)($credit_info['available_to_bill'] ?? 0.00);
         
         // Fetch existing order details to populate the edit form
         // (You will need to ensure getOrderById exists in your model)

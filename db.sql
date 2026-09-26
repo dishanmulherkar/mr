@@ -548,3 +548,9 @@ ADD INDEX idx_mr_id (mr_id);
 ALTER TABLE financial_year 
 ADD COLUMN mr_id INT(11) NULL DEFAULT 0,
 ADD INDEX idx_fy_mr_id (mr_id);
+
+-- 26-9-26  - - - - - - - - 
+
+ALTER TABLE `admins` 
+ADD COLUMN `target` DECIMAL(12, 2) DEFAULT 0.00 AFTER `email`;
+

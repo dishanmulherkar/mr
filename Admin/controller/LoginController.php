@@ -2,28 +2,36 @@
 
 class LoginController {
     private $loginModel;
-     public function __construct()
+
+    public function __construct()
     {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
         require_once "modals/LoginModel.php";
         $this->loginModel = new LoginModel();
     }
 
-
-
     public function index() 
     {
-           include_once 'view/Auth/login.php';
+        if (!empty($_SESSION['admin_id'])) {
+            header("Location: " . BASE_URL . "dashboard");
+            exit;
+        }
+
+        include_once 'view/Auth/login.php';
     }
 
     public function authenticate()
     {
         header('Content-Type: application/json');
 
-        $username = trim($_POST['username'] ?? '');
-        $password = trim($_POST['password'] ?? '');
+        $username    = trim($_POST['username'] ?? '');
+        $password    = trim($_POST['password'] ?? '');
+        $remember_me = isset($_POST['remember_me']);
 
         if ($username == "" || $password == "") {
-
             echo json_encode([
                 "status" => false,
                 "message" => "Username and Password are required."
@@ -34,7 +42,6 @@ class LoginController {
         $user = $this->loginModel->login($username);
 
         if (!$user) {
-
             echo json_encode([
                 "status" => false,
                 "message" => "User not found."
@@ -43,7 +50,6 @@ class LoginController {
         }
 
         if ($password !== $user['password']) {
-
             echo json_encode([
                 "status" => false,
                 "message" => "Incorrect Password."
@@ -51,11 +57,21 @@ class LoginController {
             exit;
         }
 
-        $_SESSION['admin_id'] = $user['admin_id'];
-        $_SESSION['admin_name'] = $user['admin_name'];
-        $_SESSION['admin_role'] = $user['role'];
+        // Handle Remember Me (Stores for 30 days)
+        if ($remember_me) {
+            setcookie('remember_username', $username, time() + (86400 * 30), "/");
+            setcookie('remember_password', $password, time() + (86400 * 30), "/");
+        } else {
+            // Delete cookies if unchecked
+            setcookie('remember_username', '', time() - 3600, "/");
+            setcookie('remember_password', '', time() - 3600, "/");
+        }
+
+        $_SESSION['admin_id']       = $user['admin_id'];
+        $_SESSION['admin_name']     = $user['admin_name'];
+        $_SESSION['admin_role']     = $user['role'];
         $_SESSION['admin_username'] = $user['username'];
-        $_SESSION['stockist_id']  =  $user['stockist_id'];
+        $_SESSION['stockist_id']    = $user['stockist_id'];
 
         echo json_encode([
             "status" => true,
@@ -66,13 +82,10 @@ class LoginController {
     public function logout()
     {
         $_SESSION = [];
+        session_unset();
+        session_destroy();
 
-    session_unset();
-    session_destroy();
-
-    header("Location: " . BASE_URL . "login");
-    exit;
+        header("Location: " . BASE_URL . "login");
+        exit;
     }
-
-
 }
