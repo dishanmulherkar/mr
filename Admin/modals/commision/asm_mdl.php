@@ -82,7 +82,6 @@ class asm_com_mdl {
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             INNER JOIN headquarter h ON s.hq_id = h.headquarter_id
             WHERE h.asm_id = $admin_id
-            AND si.pay_status = 'paid' 
             AND si.asm_com = 0 
             $month_sql
             ORDER BY si.created_at ASC

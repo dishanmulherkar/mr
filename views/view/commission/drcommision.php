@@ -81,7 +81,7 @@ include 'view/layout/header.php';
 
 <div class="page-content">
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
-        <h3>My drc</h3> Current Balance <?php echo $drc_balance;   ?>
+        <h3>My drc</h3> Current Balance <?php echo number_format($drc_balance, 2);  ?>
     </div>
 
     <div class="filter-bar">

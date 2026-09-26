@@ -81,7 +81,7 @@ include 'view/layout/header-asm.php';
 
 <div class="page-content">
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
-        <strong>Current Balance :  <?php echo $asm_balance;   ?></strong> 
+        <strong>Current Balance :  <?php echo number_format($asm_balance, 2);  ?></strong> 
     </div>
 
     <div class="filter-bar">
