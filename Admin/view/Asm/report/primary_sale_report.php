@@ -189,8 +189,8 @@ include 'view/layout/header-asm.php';
     .rpt-table-wrap tfoot {
         display: block !important;
         position: sticky;
-        bottom: 12px;
-        margin-top: 14px;
+        bottom: 22px;
+        margin-top: 22px;
         z-index: 10;
     }
     .rpt-table-wrap tfoot tr {
@@ -223,7 +223,7 @@ include 'view/layout/header-asm.php';
 
     /* Elevate sticky footer slightly above the bottom bar */
     .rpt-table-wrap tfoot {
-        bottom: 8px !important; /* Adjust if your bottom bar height is ~60px */
+        bottom: 24px !important; /* Adjust if your bottom bar height is ~60px */
     }
 }
 </style>
@@ -283,18 +283,20 @@ include 'view/layout/header-asm.php';
                     $total_amount = 0;
                     while ($row = mysqli_fetch_assoc($query)):$inv_no     = htmlspecialchars($row['inward_no'] ?? '-');$date       = !empty($row['inward_date']) ? date('d-M-Y', strtotime($row['inward_date'])) : '-';
                         $party_name = htmlspecialchars($row['stockist_name'] ?? '-');
-                        $amount     = (float)($row['grand_total'] ?? 0);
+                        $amount     = (float)($row['business_value'] ?? 0);
                         
                         $total_amount +=$amount;
                     ?>
                         <tr>
-                            <td class="td-party"><strong><?= $party_name ?></strong></td>
                             <td class="td-inv">
                                 <span class="badge-pill">
                                     <?= $inv_no ?>
                                 </span>
                             </td>
                             <td class="td-date"><?= $date ?></td>
+                            <td class="td-party"><strong><?= $party_name ?></strong></td>
+                            
+                            
                             <td class="td-amount text-right"><?= number_format($amount, 2) ?></td>
                         </tr>
                     <?php endwhile; ?>

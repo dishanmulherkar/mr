@@ -362,6 +362,12 @@
                 </a>
                 <div class="collapse" id="reportMenu">
                     <ul class="nav flex-column ms-4 mt-1">
+
+                    <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>salereport/primary_sale_admin" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-file-invoice-dollar" style="width: 20px;"></i> Primary Sales
+                            </a>
+                        </li>
                         <li class="nav-item searchable-item">
                             <a href="<?= BASE_URL ?>stock_and_sales_report" class="nav-link text-light py-1">
                                 <i class="fa-solid fa-file-invoice-dollar" style="width: 20px;"></i> Stock & Sales

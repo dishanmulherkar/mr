@@ -309,7 +309,11 @@ include 'view/layout/header-asm.php';
                     $sr = 1;
                     $total_amount = 0;
                     while ($row = mysqli_fetch_assoc($query)):
-                        $sale_date     = !empty($row['sale_date']) ? date('d-M-Y', strtotime($row['sale_date'])) : '-';$customer_name = htmlspecialchars($row['customer_name'] ?? '-');$cust_type     = strtolower($row['customer_type'] ?? '');$stockist_name = htmlspecialchars($row['stockist_name'] ?? '-');$amount        = (float)($row['total_amt'] ?? $row['amount'] ?? 0);
+                        $sale_date     = !empty($row['sale_date']) ? date('d-M-Y', strtotime($row['sale_date'])) : '-';
+                        $customer_name = htmlspecialchars($row['customer_name'] ?? '-');
+                        $cust_type     = strtolower($row['customer_type'] ?? '');
+                        $stockist_name = htmlspecialchars($row['stockist_name'] ?? '-');
+                        $amount        = (float)($row['total_amt'] ?? 0);
 
                         $total_amount +=$amount;
 

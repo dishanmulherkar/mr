@@ -73,7 +73,7 @@ class primary_sale_mdl
 
     $stockist_condition = !empty($stockist_id) ? "AND si.stockist_id = '$stockist_id'" : "";
 
-    $sql = "SELECT si.inward_date, si.inward_no, si.grand_total, s.stockist_name
+    $sql = "SELECT si.inward_date, si.inward_no, si.business_value, s.stockist_name , si.grand_total
             FROM stock_inward si      
             INNER JOIN `stockists` s ON s.stockist_id = si.stockist_id 
             INNER JOIN `mr_users` m  ON m.m_id = si.mr_id
@@ -114,5 +114,24 @@ public function getSecondaryReport($hq_id, $from_date, $to_date, $stockist_id = 
 
     return mysqli_query($this->con, $sql);
 }
+
+ // Fetch HQs if a state is selected (for page reload retention)
+    public function getHQsByState(int $state_id) 
+    {
+        $stmt = $this->con->prepare("SELECT m_id, hq_name FROM mr_users WHERE state = ?");
+        $stmt->bind_param("i", $state_id);
+        $stmt->execute();
+        return $stmt->get_result();
+    }
+
+    // Fetch Stockists if an HQ is selected (for page reload retention)
+    public function getStockistsByHq(int $hq_id) 
+    {
+        $stmt = $this->con->prepare("SELECT stockist_id, stockist_name FROM stockists WHERE hq_id = ?");
+        $stmt->bind_param("i", $hq_id);
+        $stmt->execute();
+        return $stmt->get_result();
+    }
+
 }
 ?>

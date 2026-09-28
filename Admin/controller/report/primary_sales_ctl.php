@@ -57,76 +57,86 @@ class primary_sale_ctl
     }
 
 
-    //    public function asm_secondary_sale()
-    // {
-    //     // Start session if not already started
-    //     if (session_status() == PHP_SESSION_NONE) {
-    //         session_start();
-    //     }
-    //      $asm_id = $_SESSION['admin_id'];
-    //      $hq = $this->model->getHQbyAsm($asm_id);
-    //      $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
-    //      $stockist_ids = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
-
-    //     // Get filter inputs
-    //     $start_date  = $_GET['start_date'] ?? '';
-    //     $end_date    = $_GET['end_date'] ?? '';
-
-    //     $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
-    //     $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
-
-    //     // $opening_balance = 0;
-    //     $query = null;
-
-    //     // Fetch data if HQ ID exists
-    //     if ($hq_id > 0) {
-    //         $query = $this->model->getPrimaryReport($hq_id, $from_date, $to_date,$stockist_id = 0);
-
-    //     }
-
-    //     // Load the view
-    //     include 'view/Asm/report/primary_sale_report.php';
-    // }
-
     public function asm_secondary_sale()
+    {
+        // Start session if not already started
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $asm_id = $_SESSION['admin_id'] ?? 0;
+        $hq     = $this->model->getHQbyAsm($asm_id);
+
+        // Filter inputs from URL
+        $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
+        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+        $sale_type   = trim($_GET['sale_type'] ?? '');
+        $start_date  = $_GET['start_date'] ?? '';
+        $end_date    = $_GET['end_date'] ?? '';
+
+        // Date range defaults: 1st of current month to current date
+        $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
+        $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
+
+        $query     = null;
+        $stockists = [];
+
+        // Fetch data if HQ is selected
+        if ($hq_id > 0) {
+            // Fetch stockists for the selected HQ so the dropdown options render on page load
+            if (method_exists($this->model, 'getStockistsByHq')) {
+                $stockists = $this->model->getStockistsByHq($hq_id);
+            }
+
+            // Fetch secondary sale report data using actual filtered values
+            $query = $this->model->getSecondaryReport($hq_id, $from_date, $to_date, $stockist_id, $sale_type);
+        }
+
+        // Load the view
+        include 'view/Asm/report/secondary_sale.php';
+    }
+    
+  public function primary_sale_admin()
 {
     // Start session if not already started
-    if (session_status() == PHP_SESSION_NONE) {
+    if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
 
-    $asm_id = $_SESSION['admin_id'] ?? 0;
-    $hq     = $this->model->getHQbyAsm($asm_id);
-
-    // Filter inputs from URL
+    // 1. Sanitize Filter Inputs
+    $state_id    = isset($_GET['state']) ? (int)$_GET['state'] : (isset($_GET['state_id']) ? (int)$_GET['state_id'] : 0);
     $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
     $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
-    $sale_type   = trim($_GET['sale_type'] ?? '');
     $start_date  = $_GET['start_date'] ?? '';
     $end_date    = $_GET['end_date'] ?? '';
 
-    // Date range defaults: 1st of current month to current date
     $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
     $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
 
-    $query     = null;
-    $stockists = [];
+    // 2. Fetch States for Dropdown
+    $states    = $this->model->getStates();
+    $hqs       = false;
+    $stockists = false;
+    $hq_name   = '';
 
-    // Fetch data if HQ is selected
+    // Populate dependent dropdowns on page reload
+    if ($state_id > 0) {
+        $hqs = $this->model->getHQsByState($state_id);
+    }
+
     if ($hq_id > 0) {
-        // Fetch stockists for the selected HQ so the dropdown options render on page load
-        if (method_exists($this->model, 'getStockistsByHq')) {
-            $stockists = $this->model->getStockistsByHq($hq_id);
-        }
+        $stockists = $this->model->getStockistsByHq($hq_id);
+        $hq_name   = $this->model->getHqName($hq_id);
+    }
 
-        // Fetch secondary sale report data using actual filtered values
-        $query = $this->model->getSecondaryReport($hq_id, $from_date, $to_date, $stockist_id, $sale_type);
+    // 3. Fetch Report Data
+    $query = null;
+    if ($hq_id > 0) {
+        $query = $this->model->getPrimaryReport($hq_id, $from_date, $to_date, $stockist_id);
     }
 
     // Load the view
-    include 'view/Asm/report/secondary_sale.php';
+    include 'view/report/primary_sale.php';
 }
-    
-
  
 }
