@@ -554,3 +554,6 @@ ADD INDEX idx_fy_mr_id (mr_id);
 ALTER TABLE `admins` 
 ADD COLUMN `target` DECIMAL(12, 2) DEFAULT 0.00 AFTER `email`;
 
+-- 28 - 9 26 
+UPDATE `financial_year`
+SET `fy_name` = 'FY 2026-27';

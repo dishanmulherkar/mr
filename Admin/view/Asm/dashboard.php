@@ -39,7 +39,7 @@ include 'view/layout/header-asm.php';
             </div>
             <div class="stat-label">Target </div>
             <div class="stat-val"><?php 
-            //   echo number_format($target_amount, 2); 
+              echo number_format($taget['total_target'], 2); 
              ?></div>
           </div>
           <div class="stat-card">

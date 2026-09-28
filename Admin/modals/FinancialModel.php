@@ -114,7 +114,7 @@ class FinancialModel
 
             return mysqli_fetch_assoc($query);
         }
-       public function store($post)
+        public function store($post)
         {
             $hq_id         = (int)$post['hq_id'];
             $mr_id         = (int)$post['mr_id'];
@@ -124,16 +124,15 @@ class FinancialModel
             $target_amount = (float)$post['target_amount'];
             $status        = (int)$post['status'];
 
-            // If setting this FY to Active (1), deactivate only the previous FYs for this specific MR
-            if ($status == 1) {
+            // If setting this FY to Active (1), deactivate any existing active FY for this MR OR this HQ
+            if ($status === 1) {
                 mysqli_query($this->con, "
                     UPDATE financial_year
                     SET status = '0'
-                    WHERE mr_id = '$mr_id'
+                    WHERE (mr_id = '$mr_id' OR hq_id = '$hq_id')
                 ");
             }
 
-            // Direct insert without blocking duplicate names
             $insert = mysqli_query($this->con, "
                 INSERT INTO financial_year
                 (
@@ -171,17 +170,16 @@ class FinancialModel
             $target_amount = (float)$post['target_amount'];
             $status        = (int)$post['status'];
 
-            // If setting this FY to Active (1), deactivate other FYs for this MR
-            if ($status == 1) {
+            // If setting this FY to Active (1), deactivate any other active FY for this MR or HQ
+            if ($status === 1) {
                 mysqli_query($this->con, "
                     UPDATE financial_year
                     SET status = '0'
-                    WHERE mr_id = '$mr_id'
+                    WHERE (mr_id = '$mr_id' OR hq_id = '$hq_id')
                     AND fy_id != '$id'
                 ");
             }
 
-            // Direct update
             return mysqli_query($this->con, "
                 UPDATE financial_year
                 SET
@@ -195,7 +193,6 @@ class FinancialModel
                 WHERE fy_id       = '$id'
             ");
         }
-
         public function getMrByHq($hq_id)
         {
             $hq_id = intval($hq_id);

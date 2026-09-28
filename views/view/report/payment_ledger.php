@@ -269,7 +269,6 @@ include 'view/layout/header.php';
                             <td><?= $vch_type ?></td>
                             <td>
                                 <?= $vch_no ?>
-                                <?= $status_badge ?>
                             </td>
                             <td class="text-right" <?= ($row_class ? 'style="color: #166534; font-weight: 600;"' : '') ?>>
                                 <?= $debit > 0 ? number_format($debit, 2) : '' ?>

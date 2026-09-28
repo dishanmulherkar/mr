@@ -8,31 +8,19 @@ private $db;
     }
 
     // Financial Year / Target
-   public function getTargetDetails($asm_id)
+  public function getTargetDetails($asm_id)
     {
-        // 1. Escape the variable to prevent SQL injection
-        $asm_id = mysqli_real_escape_string($this->db, $asm_id);
+        $asm_id = (int)$asm_id;
 
-        // 2. Added aliases (fy.) to the WHERE clause to fix ambiguous columns
         $query = "
-            SELECT
-                fy.fy_id,
-                fy.target_amount,
-                fy.start_date,
-                fy.end_date
-            FROM financial_year fy
-            INNER JOIN mr_users h
-                ON h.m_id ='$asm_id'
-            INNER JOIN headquarter hq
-                ON hq.headquarter_id =  h.hq_id
-            WHERE fy.hq_id =  h.hq_id
-            AND fy.status = '1'
+            SELECT COALESCE(target, 0) AS total_target
+            FROM admins
+            WHERE admin_id = '$asm_id'
             LIMIT 1
         ";
 
         $result = mysqli_query($this->db, $query);
 
-        // Optional: Error handling to easily catch DB issues
         if (!$result) {
             die(mysqli_error($this->db));
         }
@@ -40,37 +28,42 @@ private $db;
         return mysqli_fetch_assoc($result);
     }
 // Primary Sale
-    public function getPrimarySale($asm_id)
+    public function getPrimarySale($asm_id,$fy_name = null)
     {
-        // 1. Base query without the date filter
-           $query = "
-           SELECT COALESCE(SUM(si.business_value), 0) AS primary_sale
-        FROM stock_inward si
-        INNER JOIN stockists st
-            ON si.stockist_id = st.stockist_id
-            INNER JOIN `headquarter` h ON h.headquarter_id = st.hq_id 
-        WHERE h.asm_id = '$asm_id'
-        ";
+        $asm_id = (int)$asm_id;
 
-        // 2. Append the date filter ONLY if dates are passed in
-        if (!empty($start_date) && !empty($end_date)) {
-            // Escape the variables to prevent SQL injection
-            $start = mysqli_real_escape_string($this->db, $start_date);
-            $end = mysqli_real_escape_string($this->db, $end_date);
-            
-            // Using DATE() ensures it matches properly even if inward_date has a timestamp (e.g. 2026-08-14 15:30:00)
-            $query .= " AND DATE(si.inward_date) BETWEEN '$start' AND '$end'";
+        // Optional filter by specific Financial Year name (e.g., 'FY 2026-27')
+        $fy_filter = "";
+        if (!empty($fy_name)) {
+            $fy_name_clean = mysqli_real_escape_string($this->db, trim($fy_name));$fy_filter = "AND fy.fy_name = '$fy_name_clean'";
         }
 
-        // 3. Execute query
-        $result = mysqli_query($this->db, $query);
+        $query = "
+            SELECT COALESCE(SUM(si.business_value), 0) AS primary_sale
+            FROM `headquarter` h
+            -- 1. Connect active financial year for each HQ under this ASM
+            INNER JOIN `financial_year` fy 
+                ON fy.hq_id = h.headquarter_id 
+                AND fy.status = '1'
+                $fy_filter
+            -- 2. Link stockists belonging to the HQ
+            INNER JOIN `stockists` st 
+                ON st.hq_id = h.headquarter_id
+            -- 3. Link stock_inward matching that HQ's active FY date window
+            INNER JOIN `stock_inward` si 
+                ON si.stockist_id = st.stockist_id
+                AND DATE(si.inward_date) BETWEEN fy.start_date AND fy.end_date
+            WHERE h.asm_id = '$asm_id'
+        ";
 
-        // Optional: Error handling if the query fails
+        $result = mysqli_query($this->db,$query);
+
         if (!$result) {
             die(mysqli_error($this->db));
         }
 
-        return mysqli_fetch_assoc($result)['primary_sale'];
+        $row = mysqli_fetch_assoc($result);
+        return $row && $row['primary_sale'] !== null ? round((float)$row['primary_sale'], 2) : 0.00;
     }
 
     // Customer Count

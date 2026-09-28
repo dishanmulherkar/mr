@@ -26,6 +26,7 @@ class AsmDashboardCtl
            $asm_id
         );
         $total_hq = $this->model->getTotalHqs($asm_id);
+        $taget = $this->model->getTargetDetails($asm_id);
 
         // 3. Fetch orders based on filters
         // $orders = $this->model->getFilteredOrders($super_stockist_id, $filter_status, $filter_date);

@@ -53,14 +53,29 @@ include 'view/layout/header.php';
                     </div>
                 </div>
 
-                <!-- FY Name -->
-                <div class="col-lg-3">
-                    <div class="form-group">
-                        <label>Financial Year Name</label>
-                        <input type="text" name="fy_name" class="form-control"
-                               value="<?= isset($ROW['fy_name']) ? htmlspecialchars($ROW['fy_name']) : ''; ?>"
-                               placeholder="Example : FY 2026-27" required>
-                    </div>
+             <?php
+                $options = [
+                    'FY 2025-26' => 'FY 2025-26',
+                    'FY 2026-27' => 'FY 2026-27',
+                    'FY 2027-28' => 'FY 2027-28',
+                    'FY 2028-29' => 'FY 2028-29',
+                    'FY 2029-30' => 'FY 2029-30',
+                ];
+
+                // 1. Read directly from $ROW if editing; fallback to default if creating new
+                $selected = !empty($ROW['fy_name']) ? trim($ROW['fy_name']) : 'FY 2026-27';
+                ?>
+
+                <div class="form-group col-lg-3">
+                    <label for="fySelect">Financial Year</label>
+                    <select name="fy_name" id="fySelect" class="form-control" required>
+                        <option value="">Select Financial Year</option>
+                        <?php foreach ($options as $key => $label): ?>
+                            <option value="<?= htmlspecialchars($key); ?>" <?= ($selected == trim($key)) ? 'selected' : ''; ?>>
+                                <?= htmlspecialchars($label); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <!-- Start Date -->

@@ -71,11 +71,11 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                         <label>Password</label>
                         <div class="input-group">
                             <input type="password"
-                                id="password"
-                                name="password"
-                                class="form-control"
-                                value="<?= isset($ROW['password']) ? htmlspecialchars($ROW['password']) : ''; ?>"
-                                required>
+                                    id="password"
+                                    name="password"
+                                    class="form-control"
+                                    value="<?= isset($ROW['password']) ? htmlspecialchars($ROW['password']) : ''; ?>"
+                                    required>
                             <button class="btn btn-outline-secondary"
                                     type="button"
                                     id="togglePassword">
@@ -139,9 +139,10 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                     </div>
                 </div>
             
+                <!-- Commission (ASM Only) -->
                 <div id="commissionDiv" class="col-lg-3">
                     <div class="form-group">
-                        <label>Commission</label>
+                        <label>Commission Rate (%)</label>
                         <input type="number"
                                 name="commission_rate"
                                 class="form-control"
@@ -150,6 +151,21 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                                 step="0.01"
                                 min="0"
                                 value="<?php echo isset($ROW['commission_rate']) ? $ROW['commission_rate'] : ''; ?>">
+                    </div>
+                </div>
+
+                <!-- Target (ASM Only) -->
+                <div id="targetDiv" class="col-lg-3">
+                    <div class="form-group">
+                        <label>Target</label>
+                        <input type="number"
+                                name="target"
+                                class="form-control"
+                                id="target"
+                                placeholder="Enter target amount"
+                                step="0.01"
+                                min="0"
+                                value="<?php echo isset($ROW['target']) ? $ROW['target'] : ''; ?>">
                     </div>
                 </div>
             
@@ -200,6 +216,7 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                     <th class="text-center">Email</th>
                     <th class="text-center">Mobile</th>
                     <th class="text-center">Role</th>
+                    <th class="text-center">Target</th>
                     <th class="text-center">Assigned State(s)</th>
                     <th class="text-center">Status</th>
                     <th class="text-center">Action</th>
@@ -223,9 +240,10 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                             <option value="Dispatch">Dispatch</option>
                         </select>
                     </th>
+                    <th><input type="text" class="form-control form-control-sm" placeholder="Search Target"></th>
                     <th><input type="text" class="form-control form-control-sm" placeholder="Search State"></th>
                     <th>
-                        <select class="form-select form-select-sm table-filter" data-column="7">
+                        <select class="form-select form-select-sm table-filter" data-column="8">
                             <option value="">All</option>
                             <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
@@ -248,6 +266,7 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                     <td class="text-center"><?= htmlspecialchars($row['email']); ?></td>
                     <td class="text-center"><?= htmlspecialchars($row['mobile']); ?></td>
                     <td class="text-center"><?= htmlspecialchars($row['role']); ?></td>
+                    <td class="text-center"><?= isset($row['target']) && $row['target'] !== '' ? htmlspecialchars($row['target']) : '-'; ?></td>
                     <td class="text-center"><?= !empty($row['state_names']) ? htmlspecialchars($row['state_names']) : '-'; ?></td>
                     <td class="text-center">
                         <?php if($row['status'] == 'Active') { ?>
@@ -328,11 +347,17 @@ $(document).ready(function () {
         }
         
         if (selectedRole == 'ASM') {
-             $('#commissionDiv').show();
+            $('#commissionDiv').show();
             $('#commission_rate').prop('required', true);
+            
+            $('#targetDiv').show();
+            $('#target').prop('required', true);
         } else {
             $('#commissionDiv').hide();
-            $('#commission_rate').prop('required', false).val(null).trigger('change');
+            $('#commission_rate').prop('required', false).val('');
+            
+            $('#targetDiv').hide();
+            $('#target').prop('required', false).val('');
         }
     }
 
