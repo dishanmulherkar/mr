@@ -220,7 +220,7 @@ class Payment_model {
             FROM stock_inward si
             INNER JOIN stockists s ON si.stockist_id = s.stockist_id
             WHERE $cond
-            ORDER BY si.created_at DESC, si.inward_id DESC
+            ORDER BY si.created_at ASC, si.inward_id ASC
         ";
 
         $result = $this->con->query($query);

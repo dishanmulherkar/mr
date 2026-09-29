@@ -257,31 +257,57 @@ $('#payment_method').trigger('change');
                             let cdAmountDisplay = '';
 
                             if (penaltyAmount > 0) {
-                                // 1. CD REVOKED (Late Payment Penalty)
-                                cdAmountDisplay = `<span class="text-danger fw-bold">+₹${penaltyAmount.toFixed(2)}</span>`;
-                                
-                                // Determine if partial downgrade (4% to 2%) or total revocation
-                                if (existingCdPercent == 4 && penaltyAmount < alreadyCdAmount) {
-                                    cdBadge = `<br><small class="badge bg-warning text-dark mt-1" style="font-size: 0.65em;">Downgraded to 2% CD (Late)</small>`;
-                                } else {
-                                    cdBadge = `<br><small class="badge bg-danger text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Revoked (Late)</small>`;
-                                }
+                                        // 1. CD REVOKED / DOWNGRADED (Late Payment Penalty)
+                                        cdAmountDisplay = `<span class="text-danger fw-bold">+₹${penaltyAmount.toFixed(2)}</span>`;
 
-                            } else if (newCdAmount > 0) {
-                                // 2. NEW CD APPLIED
-                                let cdAppliedPercent = (eligible4 > 0) ? 4 : 2;
-                                cdAmountDisplay = `<span class="text-success fw-bold">-₹${newCdAmount.toFixed(2)}</span>`;
-                                cdBadge = `<br><small class="badge bg-success text-white mt-1" style="font-size: 0.65em;">${cdAppliedPercent}% CD Applied</small>`;
-                            
-                            } else if (existingCdPercent > 0) {
-                                // 3. CD ALREADY GIVEN (Still valid)
-                                cdAmountDisplay = `<span class="text-muted" style="font-style: italic;">Included (-₹${alreadyCdAmount.toFixed(2)})</span>`;
-                                cdBadge = `<br><small class="badge bg-secondary text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Already Given</small>`;
-                            
-                            } else {
-                                // 4. NO CD 
-                                cdAmountDisplay = `<span class="text-muted">-₹0.00</span>`;
-                            }
+                                        // 1. Check explicit backend flags first
+                                        let isDowngrade = false;
+
+                                        if (b.is_downgraded == 1 || b.downgraded == 1 || b.cd_status === 'downgraded') {
+                                            isDowngrade = true;
+                                        } else if (existingCdPercent == 4) {
+                                            // Find total original discount amount
+                                            let fullDiscount = alreadyCdAmount > 0 
+                                                ? alreadyCdAmount 
+                                                : (already4 > 0 ? already4 : (sub_total > 0 ? (sub_total * 0.04) : 0));
+
+                                            if (fullDiscount > 0) {
+                                                // If penalty is roughly half the full discount (within 2 rupees tolerance for GST/rounding)
+                                                let halfDiscount = fullDiscount / 2;
+                                                let diffFromHalf = Math.abs(penaltyAmount - halfDiscount);
+                                                let diffFromFull = Math.abs(penaltyAmount - fullDiscount);
+
+                                                // It's a downgrade if the penalty is closer to half (2%) than the full (4%)
+                                                if (diffFromHalf < diffFromFull) {
+                                                    isDowngrade = true;
+                                                }
+                                            } else if (eligible2 > 0) {
+                                                // Remaining 2% eligibility indicates downgrade
+                                                isDowngrade = true;
+                                            }
+                                        }
+
+                                        if (isDowngrade) {
+                                            cdBadge = `<br><small class="badge bg-warning text-dark mt-1" style="font-size: 0.65em;">Revised to 2% CD (Late)</small>`;
+                                        } else {
+                                            cdBadge = `<br><small class="badge bg-danger text-white mt-1" style="font-size: 0.65em;">${existingCdPercent || 4}% CD Revoked (Late)</small>`;
+                                        }
+
+                                    } else if (newCdAmount > 0) {
+                                        // 2. NEW CD APPLIED
+                                        let cdAppliedPercent = (eligible4 > 0) ? 4 : 2;
+                                        cdAmountDisplay = `<span class="text-success fw-bold">-₹${newCdAmount.toFixed(2)}</span>`;
+                                        cdBadge = `<br><small class="badge bg-success text-white mt-1" style="font-size: 0.65em;">${cdAppliedPercent}% CD Applied</small>`;
+
+                                    } else if (existingCdPercent > 0) {
+                                        // 3. CD ALREADY GIVEN (Still valid)
+                                        cdAmountDisplay = `<span class="text-muted" style="font-style: italic;">Included (-₹${alreadyCdAmount.toFixed(2)})</span>`;
+                                        cdBadge = `<br><small class="badge bg-secondary text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Already Given</small>`;
+
+                                    } else {
+                                        // 4. NO CD 
+                                        cdAmountDisplay = `<span class="text-muted">-₹0.00</span>`;
+                                    }
                             
                             let dateParts = b.inward_date.split('-');
                             let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}` : b.inward_date;

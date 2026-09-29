@@ -57,8 +57,9 @@
                 <span class="text-muted" style="font-size: 13px;">Date: <?= $payout['payout_date'] ?></span>
             </div>
             <div>
-                <?php $badgeClass = ($payout['status'] === 'Paid') ? 'badge-approved' : 'badge-pending'; ?>
-                <span class="status-badge <?= $badgeClass ?>"><?= $payout['status'] ?></span>
+                <?php $badgeClass = ($payout['status'] === 'Paid') ? 'badge-approved' : 'badge-pending';
+                $PayoutStatus = ($payout['status'] === 'Paid') ? 'Finalize' : 'In Process'; ?>
+                <span class="status-badge <?= $badgeClass ?>"><?= $PayoutStatus ?></span>
             </div>
         </div>
 

@@ -1,5 +1,5 @@
 <?php 
-$pageTitle = "Payment Ledgers";
+$pageTitle = "Stockist Payment Ledgers";
 include 'view/layout/header.php'; 
 ?>
 <link rel="stylesheet" href="<?= BASE_URL ?>config/config/sales-report.css">

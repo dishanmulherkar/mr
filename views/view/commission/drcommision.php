@@ -1,5 +1,5 @@
 <?php 
-$pageTitle = "Commission List";
+$pageTitle = "Dr Commission List";
 include 'view/layout/header.php';
 ?>
 <style>
@@ -148,6 +148,7 @@ $(document).ready(function () {
                     let cards = '';
                     res.data.forEach(item => {
                         let badgeClass = item.status === 'Paid' ? 'badge-approved' : 'badge-pending';
+                        let statusName = item.status === 'Paid' ? 'Finalize' : 'In Process';
                         
                         // Generating Card HTML instead of Table Rows
                         cards += `
@@ -155,7 +156,7 @@ $(document).ready(function () {
                                 <div class="commission-card">
                                     <div class="card-header-flex">
                                         <span class="card-date"><i class="fa fa-calendar-alt me-1"></i> ${item.date_paid}</span>
-                                        <span class="status-badge ${badgeClass}">${item.status}</span>
+                                        <span class="status-badge ${badgeClass}">${statusName}</span>
                                     </div>
                                     <div class="card-body-flex">
                                         <div>

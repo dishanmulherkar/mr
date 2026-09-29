@@ -30,6 +30,17 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
       Dashboard
 </a>
 
+<a href="<?= BASE_URL ?>OrderEntry/view"
+   class="nav-item <?= ($current_page == 'orderentry') ? 'active' : ''; ?>">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+        <line x1="12" y1="11" x2="12" y2="17"></line>
+        <line x1="9" y1="14" x2="15" y2="14"></line>
+     </svg>
+   Order
+</a>
+
 <a href="<?= BASE_URL ?>customer"
    class="nav-item <?php echo ($current_page == 'customer') ? 'active' : ''; ?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -47,16 +58,7 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
    Sales Entry
 </a>
 
-<a href="<?= BASE_URL ?>OrderEntry/view"
-   class="nav-item <?= ($current_page == 'orderentry') ? 'active' : ''; ?>">
-     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-        <line x1="12" y1="11" x2="12" y2="17"></line>
-        <line x1="9" y1="14" x2="15" y2="14"></line>
-     </svg>
-   Order
-</a>
+
 
 <a href="<?= BASE_URL ?>payment"
   class="nav-item <?= ($current_page == 'payment') ? 'active' : ''; ?>">
@@ -102,7 +104,7 @@ $current_action = isset($url_segments[1]) ? strtolower($url_segments[1]) : '';
 <a href="<?= BASE_URL ?>payment_ledger"
    class="nav-item <?= ($current_controller == 'payment_ledger' && ($current_action == '' || $current_action == 'index')) ? 'active' : ''; ?>">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-   Payment Ledger
+   Stockist Ledger
 </a>
 <a href="<?= BASE_URL ?>payment_ledger/mrc_ledger"
    class="nav-item <?= ($current_controller == 'payment_ledger' && $current_action == 'mrc_ledger') ? 'active' : ''; ?>">
