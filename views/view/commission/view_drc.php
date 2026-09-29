@@ -58,7 +58,7 @@
             </div>
             <div>
                 <?php $badgeClass = ($payout['status'] === 'Paid') ? 'badge-approved' : 'badge-pending';
-                $PayoutStatus = ($payout['status'] === 'Paid') ? 'Finalize' : 'In Process'; ?>
+                $PayoutStatus = ($payout['status'] === 'Paid') ? 'Finalized' : 'In Process'; ?>
                 <span class="status-badge <?= $badgeClass ?>"><?= $PayoutStatus ?></span>
             </div>
         </div>

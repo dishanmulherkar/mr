@@ -148,7 +148,7 @@ $(document).ready(function () {
                     let cards = '';
                     res.data.forEach(item => {
                         let badgeClass = item.status === 'Paid' ? 'badge-approved' : 'badge-pending';
-                        let statusName = item.status === 'Paid' ? 'Finalize' : 'In Process';
+                        let statusName = item.status === 'Paid' ? 'Finalized' : 'In Process';
                         
                         // Generating Card HTML instead of Table Rows
                         cards += `
