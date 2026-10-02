@@ -170,13 +170,22 @@ class orderentry_mdl
         $order['items'] = $items;
         return $order;
     }
-public function saveOrderRecord($data)
+    public function saveOrderRecord($data)
     {
         $mr_id       = $data['mr_id'];
-        $order_date  = $data['order_date'];
         $stockist_id = $data['stockist_id'];
         $total_amt   = $data['total_amt'];
         $items       = $data['items'];
+
+        // Combine incoming date with current time, or fallback to current datetime
+        if (!empty($data['order_date'])) {
+            // If frontend only passes 'YYYY-MM-DD', append current time:
+            $order_date = strlen($data['order_date']) === 10 
+                ? $data['order_date'] . ' ' . date('H:i:s') 
+                : $data['order_date'];
+        } else {
+            $order_date = date('Y-m-d H:i:s');
+        }
 
         if (!$stockist_id || empty($items)) {
             return ['success' => false, 'msg' => 'Missing required fields or empty cart.'];
@@ -185,17 +194,17 @@ public function saveOrderRecord($data)
         try {
             $this->con->begin_transaction();
 
-            // Pass the order_date so the sequence resets correctly per Financial Year
-            $orderData = $this->generateOrderNo($stockist_id, $order_date);
+            // Pass date part for financial year sequence check
+            $dateOnly = substr($order_date, 0, 10);
+            $orderData = $this->generateOrderNo($stockist_id, $dateOnly);
             $order_no = $orderData['order_no'];
 
-            // Insert into orders storing ONLY the final order_no string
+            // Insert into orders with full date + time
             $stmt = $this->con->prepare("
                 INSERT INTO orders (stockist_id, mr_id, total_amt, order_date, order_no)
                 VALUES (?, ?, ?, ?, ?)
             ");
             
-            // "iidss" => integer, integer, double, string, string
             $stmt->bind_param("iidss", $stockist_id, $mr_id, $total_amt, $order_date, $order_no);
             $stmt->execute();
             $order_id = $this->con->insert_id;

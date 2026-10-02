@@ -179,7 +179,7 @@ include 'view/layout/header.php';
                             <tr class="copy-rates-row">
                                 <td colspan="13" class="text-end">
                                     <label class="form-check-label copy-rates-checkbox">
-                                        <input type="checkbox" class="form-check-input copy-rates" id="copy-rates">
+                                        <input type="checkbox" class="form-check-input copy-rates" id="copy-rates" checked>
                                         Copy Purchase Rate/Tax to Sale Rate/Tax
                                     </label>
                                 </td>
@@ -439,7 +439,7 @@ $(document).ready(function(){
         row.find('.tax').val('');
         row.find('.stax').val('');
         row.find('.amount').val('0.00');
-        $('#copy-rates').prop('checked', false);
+        $('#copy-rates').prop('checked', true);
 
         // Focus and open product select
         row.find('.product').select2('open');

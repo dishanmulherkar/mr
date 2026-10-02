@@ -42,7 +42,7 @@ class AdminController
         $data = [
             'admin_name'        => $_POST['admin_name'],
             'user_name'         => $_POST['user_name'],
-            'email'             => $_POST['email'],
+            'email' => trim($_POST['email'] ?? '') !== '' ? trim($_POST['email']) : null,
             'mobile'            => $_POST['mobile'],
             'password'          => $_POST['password'],
             'role'              => $_POST['role'],
@@ -69,7 +69,7 @@ class AdminController
         $data = [
             'admin_name'        => $_POST['admin_name'],
             'user_name'         => $_POST['user_name'],
-            'email'             => $_POST['email'],
+            'email' => trim($_POST['email'] ?? '') !== '' ? trim($_POST['email']) : null,
             'mobile'            => $_POST['mobile'],
             'password'          => $_POST['password'],
             'role'              => $_POST['role'],

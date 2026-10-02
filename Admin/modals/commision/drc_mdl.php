@@ -106,7 +106,7 @@ class drc_mdl {
                 throw new Exception("No active MR found for this Headquarter.");
             }
 
-            $rate  = (float)$mr_data['commission_rate'];
+            $rate  = '20';
             $mr_id = (int)$mr_data['m_id']; 
 
             $bill_ids    = json_decode($bill_ids_json, true);

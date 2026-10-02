@@ -261,7 +261,7 @@ include 'view/layout/header.php';
                                     <th class="text-center">MR Name</th>
                                     <th class="text-center">Mobile</th>
                                     <th class="text-center">Email</th>
-                                    <th class="text-center">Pincode</th>
+                                    <th class="text-center">Credit Limit</th>
                                     <!-- <th class="text-center">Address</th> -->
                                     <th class="text-center">Password</th>
                                     <th class="text-center">Action</th>
@@ -304,7 +304,7 @@ include 'view/layout/header.php';
                                 </td>
 
                                 <td class="text-center">
-                                    <?= htmlspecialchars($row['pincode']); ?>
+                                    <?= htmlspecialchars($row['credit_limit']); ?>
                                 </td>
 
                                 <!-- <td class="text-center">

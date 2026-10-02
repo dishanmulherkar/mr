@@ -557,3 +557,12 @@ ADD COLUMN `target` DECIMAL(12, 2) DEFAULT 0.00 AFTER `email`;
 -- 28 - 9 26 
 UPDATE `financial_year`
 SET `fy_name` = 'FY 2026-27';
+
+
+-- 30-09-26  -- - -
+ALTER TABLE `orders` 
+CHANGE `updated_at` `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP;
+
+ALTER TABLE `admins` DROP INDEX `email`;
+
+ALTER TABLE `admins` MODIFY `email` VARCHAR(191) NULL DEFAULT NULL;

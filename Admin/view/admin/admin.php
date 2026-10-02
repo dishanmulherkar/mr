@@ -36,7 +36,7 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                                 name="user_name"
                                 class="form-control"
                                 value="<?= isset($ROW['username']) ? $ROW['username'] : ''; ?>"
-                                placeholder="State : Name "
+                                placeholder="User Name "
                                 required>
                     </div>
                 </div>
@@ -263,7 +263,7 @@ $admin_role = $_SESSION['admin_role'] ?? 'Admin';
                     <td class="text-center"><?= $key; ?></td>
                     <td class="text-center"><?= htmlspecialchars($row['admin_name']); ?></td>
                     <td class="text-center"><?= htmlspecialchars($row['username']); ?></td>
-                    <td class="text-center"><?= htmlspecialchars($row['email']); ?></td>
+                    <td class="text-center"><?= !empty($row['email']) ? htmlspecialchars($row['email']) : '-'; ?></td>
                     <td class="text-center"><?= htmlspecialchars($row['mobile']); ?></td>
                     <td class="text-center"><?= htmlspecialchars($row['role']); ?></td>
                     <td class="text-center"><?= isset($row['target']) && $row['target'] !== '' ? htmlspecialchars($row['target']) : '-'; ?></td>
