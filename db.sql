@@ -566,3 +566,40 @@ CHANGE `updated_at` `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_T
 ALTER TABLE `admins` DROP INDEX `email`;
 
 ALTER TABLE `admins` MODIFY `email` VARCHAR(191) NULL DEFAULT NULL;
+
+
+-- 02-10-26 
+
+ALTER TABLE payment_ledgers 
+MODIFY COLUMN transaction_type ENUM(
+    'bill_added',
+    'payment_made',
+    'mrc_settlement',
+    'drc_settlement',
+    'commission_earned',
+    'settled_to_bill',
+    'paid_to_bank',
+    'asm_settlement',
+    'opening_balance'
+) NOT NULL;
+
+
+ALTER TABLE stockists 
+ADD COLUMN opening_balance DECIMAL(12,2) DEFAULT 0.00 AFTER credit_days,
+ADD COLUMN opening_balance_type ENUM('debt', 'credit') DEFAULT 'debt' AFTER opening_balance,
+ADD COLUMN opening_balance_date DATE NULL AFTER opening_balance_type;
+
+
+-- 1. Drop the existing foreign key constraint
+ALTER TABLE payment_allocations 
+DROP FOREIGN KEY payment_allocations_ibfk_2;
+
+-- 2. Modify inward_id to allow NULL
+ALTER TABLE payment_allocations 
+MODIFY COLUMN inward_id INT NULL DEFAULT NULL;
+
+-- 3. Re-add the foreign key constraint (MySQL allows NULL in foreign keys without breaking constraints)
+ALTER TABLE payment_allocations 
+ADD CONSTRAINT payment_allocations_ibfk_2 
+FOREIGN KEY (inward_id) REFERENCES stock_inward(inward_id) 
+ON DELETE CASCADE;

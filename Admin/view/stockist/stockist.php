@@ -303,6 +303,47 @@ include 'view/layout/header.php';
                                     </div>
                                 </div>
 
+                              <?php
+                                    // Fallbacks in case $stockist is empty (e.g., when reusing the same form for Add)
+                                    $opening_balance      = isset($ROW['opening_balance']) ? $ROW['opening_balance'] : '0.00';
+                                    $opening_balance_type = isset($ROW['opening_balance_type']) ? $ROW['opening_balance_type'] : 'debt';
+                                    $opening_balance_date = !empty($ROW['opening_balance_date']) ? $ROW['opening_balance_date'] : date('Y-m-d');
+                                    ?>
+
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <label for="opening_balance">Opening Balance (₹)</label>
+                                            <input type="number" 
+                                                step="0.01" 
+                                                min="0" 
+                                                class="form-control" 
+                                                name="opening_balance" 
+                                                id="opening_balance" 
+                                                value="<?= htmlspecialchars($opening_balance) ?>">
+                                        </div>
+                                        
+                                        <div class="col-md-4">
+                                            <label for="opening_balance_type">Balance Type</label>
+                                            <select class="form-control" name="opening_balance_type" id="opening_balance_type">
+                                                <option value="debt" <?= ($opening_balance_type === 'debt') ? 'selected' : '' ?>>
+                                                    Debit (Stockist Owes Us / Outstanding)
+                                                </option>
+                                                <option value="credit" <?= ($opening_balance_type === 'credit') ? 'selected' : '' ?>>
+                                                    Credit (Advance / We Owe Stockist)
+                                                </option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="col-md-4">
+                                            <label for="opening_balance_date">As Of Date</label>
+                                            <input type="date" 
+                                                class="form-control" 
+                                                name="opening_balance_date" 
+                                                id="opening_balance_date" 
+                                                value="<?= htmlspecialchars($opening_balance_date) ?>">
+                                        </div>
+                                    </div>
+
                             </div><!-- /row -->
                         </div><!-- /border -->
 

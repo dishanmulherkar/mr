@@ -21,6 +21,7 @@ class DispatchDashboardModel
         $sql = "
             SELECT 
                 o.order_id,
+                si.inward_no,
                 o.order_date, 
                 o.total_amt, 
                 o.status,

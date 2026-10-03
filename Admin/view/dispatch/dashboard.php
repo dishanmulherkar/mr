@@ -28,7 +28,7 @@ include 'view/layout/mobile_header.php';
             <div class="card-body">
                 
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0 text-primary">#ORD-<?= $order['order_id'] ?></h6>
+                    <h6 class="mb-0 text-primary"><?= $order['inward_no'] ?></h6>
                     <?php if($order['status'] === 'Approved'): ?>
                         <span class="badge bg-warning text-dark">Pending</span>
                     <?php else: ?>
@@ -59,27 +59,42 @@ include 'view/layout/mobile_header.php';
 <?php endif; ?>
 
 </div> <!-- End Container -->
-
 <!-- DISPATCH MODAL -->
 <div class="modal fade" id="dispatchModal" tabindex="-1" aria-labelledby="dispatchModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content border-0" style="border-radius: 15px; overflow: hidden;">
-      <div class="modal-header bg-primary text-white border-0">
-        <h6 class="modal-title" id="dispatchModalLabel">Order Details</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header bg-primary text-white border-0 d-flex justify-content-between align-items-center">
+        <h6 class="modal-title mb-0" id="dispatchModalLabel">Order Details</h6>
+        <div class="d-flex align-items-center gap-2">
+            <!-- Header Download Button -->
+            <a href="#" id="modalDownloadPdfBtn" target="_blank" class="btn btn-light btn-sm text-primary fw-semibold py-1 px-2" style="font-size: 0.8rem;">
+                <i class="fa fa-download me-1"></i> PDF
+            </a>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
       </div>
       <div class="modal-body bg-light">
-          <p class="mb-2 bg-white p-2 rounded shadow-sm text-center"><strong>Invoice No:</strong> <span id="modalInvoiceNo" class="text-primary fw-bold">Loading...</span></p>
+          <p class="mb-2 bg-white p-2 rounded shadow-sm text-center">
+              <strong>Invoice No:</strong> <span id="modalInvoiceNo" class="text-primary fw-bold">Loading...</span>
+          </p>
           
           <div id="modalProductList" class="mt-3">
               <div class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Fetching details...</div>
           </div>
       </div>
-      <div class="modal-footer border-0 bg-light">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-success btn-sm" id="confirmDispatchBtn">
-            <i class="fa fa-check-circle"></i> Confirm Dispatch
-        </button>
+      <div class="modal-footer border-0 bg-light d-flex justify-content-between">
+        <div>
+            <!-- Footer Download Button -->
+            <a href="#" id="modalFooterDownloadBtn" target="_blank" class="btn btn-outline-primary btn-sm">
+                <i class="fa fa-download me-1"></i> Download PDF
+            </a>
+        </div>
+        <div>
+            <!-- <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button> -->
+            <button type="button" class="btn btn-success btn-sm" id="confirmDispatchBtn">
+                <i class="fa fa-check-circle"></i> Confirm Dispatch
+            </button>
+        </div>
       </div>
     </div>
   </div>
@@ -91,12 +106,19 @@ document.addEventListener('DOMContentLoaded', function () {
     const dispatchModal = new bootstrap.Modal(document.getElementById('dispatchModal'));
     let currentOrderId = null;
     let confirmBtn = document.getElementById('confirmDispatchBtn');
+    let downloadPdfBtn = document.getElementById('modalDownloadPdfBtn');
+    let footerDownloadBtn = document.getElementById('modalFooterDownloadBtn');
 
     document.querySelectorAll('.view-order-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             currentOrderId = this.getAttribute('data-id');
             let orderStatus = this.getAttribute('data-status');
             
+            // Set dynamic PDF download URLs
+            let pdfUrl = '<?= BASE_URL ?>invoice/pdf/' + currentOrderId;
+            downloadPdfBtn.setAttribute('href', pdfUrl);
+            footerDownloadBtn.setAttribute('href', pdfUrl);
+
             // Hide Dispatch button if already dispatched
             confirmBtn.style.display = (orderStatus === 'dispatched') ? 'none' : 'block';
 

@@ -141,133 +141,263 @@ class StockistModel
         ");
     }
 
-  public function insert($data, $image)
+public function insert($data, $image)
     {
-        $hq_id = intval($data['hq_id']);
-        $admin_id = (int)$_SESSION['admin_id'];
-        $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
+        $this->con->begin_transaction();
 
-        $result = mysqli_query($this->con, "
-            SELECT ss.state
-            FROM headquarter h
-            INNER JOIN super_stockist ss
-                ON h.super_stockist_id = ss.super_stockist_id
-            WHERE h.headquarter_id = '$hq_id'
-            LIMIT 1
-        ");
+        try {
+            $hq_id = intval($data['hq_id']);
+            $admin_id = (int)$_SESSION['admin_id'];
+            $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
+            
+            // Opening balance inputs
+            $opening_balance = isset($data['opening_balance']) ? (float)$data['opening_balance'] : 0.00;
+            $opening_balance_type = (!empty($data['opening_balance_type']) && $data['opening_balance_type'] === 'credit') ? 'credit' : 'debt';
+            $opening_balance_date = !empty($data['opening_balance_date']) ? $data['opening_balance_date'] : date('Y-m-d');
+            $balance_action = ($opening_balance_type === 'debt') ? 'increase' : 'decrease';
 
-        $super_state = '';
-        if ($result && mysqli_num_rows($result) > 0) {
-            $row = mysqli_fetch_assoc($result);
-            $super_state = $this->getStateById($row['state'] ?? '');
+            // Fetch Super Stockist State
+            $result = mysqli_query($this->con, "
+                SELECT ss.state
+                FROM headquarter h
+                INNER JOIN super_stockist ss
+                    ON h.super_stockist_id = ss.super_stockist_id
+                WHERE h.headquarter_id = '$hq_id'
+                LIMIT 1
+            ");
+
+            $super_state = '';
+            if ($result && mysqli_num_rows($result) > 0) {
+                $row = mysqli_fetch_assoc($result);
+                $super_state = $this->getStateById($row['state'] ?? '');
+            }
+
+            $stockist_state = $this->getStateById($data['state']);
+
+            // GST Type Logic
+            if ($stockist_state == 'Nepal') {
+                $gst_type = 'VAT';
+            } elseif ($super_state == $stockist_state) {
+                $gst_type = 'CGST_SGST';
+            } else {
+                $gst_type = 'IGST';
+            }
+
+            // 1. Insert into stockists table
+            $stockist_stmt = $this->con->prepare("
+                INSERT INTO stockists (
+                    stockist_name, number, gst_no, gst_type, dispatch_to, 
+                    transport, status, state, district, pincode, 
+                    hq_id, address, stockist_image, admin_id, pan_no, 
+                    dl_no, credit_days, opening_balance, opening_balance_type, opening_balance_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+
+            $stockist_stmt->bind_param(
+                "ssssssssssissiissdss",
+                $data['stockist_name'],
+                $data['number'],
+                $data['gst_no'],
+                $gst_type,
+                $data['dispatch_to'],
+                $data['transport'],
+                $data['status'],
+                $data['state'],
+                $data['district'],
+                $data['pincode'],
+                $data['hq_id'],
+                $data['address'],
+                $image,
+                $admin_id,
+                $data['pan_no'],
+                $data['dl_no'],
+                $credit_days,
+                $opening_balance,
+                $opening_balance_type,
+                $opening_balance_date
+            );
+
+            if (!$stockist_stmt->execute()) {
+                throw new Exception("Error inserting stockist: " . $stockist_stmt->error);
+            }
+
+            $stockist_id = $this->con->insert_id;
+            $stockist_stmt->close();
+
+            // 2. Insert into payment_ledgers if opening balance > 0
+            if ($opening_balance > 0) {
+                $ledger_stmt = $this->con->prepare("
+                    INSERT INTO payment_ledgers (
+                        stockist_id, 
+                        ledger_type, 
+                        transaction_type, 
+                        reference_id, 
+                        amount, 
+                        balance_action
+                    ) VALUES (?, ?, 'opening_balance', 0, ?, ?)
+                ");
+                $ledger_stmt->bind_param("isds", $stockist_id, $opening_balance_type, $opening_balance, $balance_action);
+
+                if (!$ledger_stmt->execute()) {
+                    throw new Exception("Error creating ledger entry: " . $ledger_stmt->error);
+                }
+                $ledger_stmt->close();
+            }
+
+            $this->con->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->con->rollback();
+            return false;
         }
-
-        $stockist_state = $this->getStateById($data['state']);
-
-        if ($stockist_state == 'Nepal') {
-            $gst_type = 'VAT';
-        } elseif ($super_state == $stockist_state) {
-            $gst_type = 'CGST_SGST';
-        } else {
-            $gst_type = 'IGST';
-        }
-
-        return mysqli_query($this->con, "
-            INSERT INTO stockists
-            (
-                stockist_name,
-                number,
-                gst_no,
-                gst_type,
-                dispatch_to,
-                transport,
-                status,
-                state,
-                district,
-                pincode,
-                hq_id,
-                address,
-                stockist_image,
-                admin_id,
-                pan_no,
-                dl_no,
-                credit_days
-            )
-            VALUES
-            (
-                '".$data['stockist_name']."',
-                '".$data['number']."',
-                '".$data['gst_no']."',
-                '".$gst_type."',
-                '".$data['dispatch_to']."',
-                '".$data['transport']."',
-                '".$data['status']."',
-                '".$data['state']."',
-                '".$data['district']."',
-                '".$data['pincode']."',
-                '".$data['hq_id']."',
-                '".$data['address']."',
-                '$image',
-                '$admin_id',
-                '".$data['pan_no']."',
-                '".$data['dl_no']."',
-                '$credit_days'
-            )
-        ");
     }
 
     public function update($id, $data, $image)
     {
-        $admin_id = (int)$_SESSION['admin_id'];
-        $hq_id = (int)$data['hq_id'];
-        $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
+        $this->con->begin_transaction();
 
-        $result = mysqli_query($this->con, "
-            SELECT ss.state
-            FROM headquarter h
-            INNER JOIN super_stockist ss
-                ON h.super_stockist_id = ss.super_stockist_id
-            WHERE h.headquarter_id = '$hq_id'
-            LIMIT 1
-        ");
+        try {
+            $id = (int)$id;
+            $admin_id = (int)$_SESSION['admin_id'];
+            $hq_id = (int)$data['hq_id'];
+            $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
 
-        $super_state = '';
-        if ($result && mysqli_num_rows($result) > 0) {
-            $row = mysqli_fetch_assoc($result);
-            $super_state = $this->getStateById($row['state'] ?? '');
+            // Opening balance inputs
+            $opening_balance = isset($data['opening_balance']) ? (float)$data['opening_balance'] : 0.00;
+            $opening_balance_type = (!empty($data['opening_balance_type']) && $data['opening_balance_type'] === 'credit') ? 'credit' : 'debt';
+            $opening_balance_date = !empty($data['opening_balance_date']) ? $data['opening_balance_date'] : date('Y-m-d');
+            $balance_action = ($opening_balance_type === 'debt') ? 'increase' : 'decrease';
+
+            // Fetch Super Stockist State
+            $result = mysqli_query($this->con, "
+                SELECT ss.state
+                FROM headquarter h
+                INNER JOIN super_stockist ss
+                    ON h.super_stockist_id = ss.super_stockist_id
+                WHERE h.headquarter_id = '$hq_id'
+                LIMIT 1
+            ");
+
+            $super_state = '';
+            if ($result && mysqli_num_rows($result) > 0) {
+                $row = mysqli_fetch_assoc($result);
+                $super_state = $this->getStateById($row['state'] ?? '');
+            }
+
+            $stockist_state = $this->getStateById($data['state']);
+
+            // GST Type Logic
+            if ($stockist_state == 'Nepal' && $super_state == 'Nepal') {
+                $gst_type = 'VAT';
+            } elseif ($super_state == $stockist_state) {
+                $gst_type = 'CGST_SGST';
+            } else {
+                $gst_type = 'IGST';
+            }
+
+            // 1. Update stockists table
+            $stockist_stmt = $this->con->prepare("
+                UPDATE stockists SET
+                    stockist_name = ?,
+                    number = ?,
+                    gst_no = ?,
+                    gst_type = ?,
+                    dispatch_to = ?,
+                    transport = ?,
+                    status = ?,
+                    state = ?,
+                    district = ?,
+                    pincode = ?,
+                    hq_id = ?,
+                    admin_id = ?,
+                    address = ?,
+                    stockist_image = ?,
+                    pan_no = ?,
+                    dl_no = ?,
+                    credit_days = ?,
+                    opening_balance = ?,
+                    opening_balance_type = ?,
+                    opening_balance_date = ?
+                WHERE stockist_id = ?
+            ");
+
+            $stockist_stmt->bind_param(
+                "ssssssssssiisssiidssi",
+                $data['stockist_name'],
+                $data['number'],
+                $data['gst_no'],
+                $gst_type,
+                $data['dispatch_to'],
+                $data['transport'],
+                $data['status'],
+                $data['state'],
+                $data['district'],
+                $data['pincode'],
+                $data['hq_id'],
+                $admin_id,
+                $data['address'],
+                $image,
+                $data['pan_no'],
+                $data['dl_no'],
+                $credit_days,
+                $opening_balance,
+                $opening_balance_type,
+                $opening_balance_date,
+                $id
+            );
+
+            if (!$stockist_stmt->execute()) {
+                throw new Exception("Error updating stockist: " . $stockist_stmt->error);
+            }
+            $stockist_stmt->close();
+
+            // 2. Check and sync payment_ledgers entry
+            $check_ledger = $this->con->prepare("
+                SELECT id FROM payment_ledgers 
+                WHERE stockist_id = ? AND transaction_type = 'opening_balance' 
+                LIMIT 1
+            ");
+            $check_ledger->bind_param("i", $id);
+            $check_ledger->execute();
+            $ledger_res = $check_ledger->get_result();
+
+            if ($row = $ledger_res->fetch_assoc()) {
+                $ledger_id = (int)$row['id'];
+                $upd_ledger = $this->con->prepare("
+                    UPDATE payment_ledgers 
+                    SET amount = ?, 
+                        ledger_type = ?, 
+                        balance_action = ? 
+                    WHERE id = ?
+                ");
+                $upd_ledger->bind_param("dssi", $opening_balance, $opening_balance_type, $balance_action, $ledger_id);
+                $upd_ledger->execute();
+                $upd_ledger->close();
+            } elseif ($opening_balance > 0) {
+                $ins_ledger = $this->con->prepare("
+                    INSERT INTO payment_ledgers (
+                        stockist_id, 
+                        ledger_type, 
+                        transaction_type, 
+                        reference_id, 
+                        amount, 
+                        balance_action
+                    ) VALUES (?, ?, 'opening_balance', 0, ?, ?)
+                ");
+                $ins_ledger->bind_param("isds", $id, $opening_balance_type, $opening_balance, $balance_action);
+                $ins_ledger->execute();
+                $ins_ledger->close();
+            }
+            $check_ledger->close();
+
+            $this->con->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->con->rollback();
+            return false;
         }
-
-        $stockist_state = $this->getStateById($data['state']);
-
-        if ($stockist_state == 'Nepal' AND $super_state == 'Nepal') {
-            $gst_type = 'VAT';
-        } elseif ($super_state == $stockist_state) {
-            $gst_type = 'CGST_SGST';
-        } else {
-            $gst_type = 'IGST';
-        }
-
-        return mysqli_query($this->con, "
-            UPDATE stockists SET
-                stockist_name='".$data['stockist_name']."',
-                number='".$data['number']."',
-                gst_no='".$data['gst_no']."',
-                gst_type='".$gst_type."',
-                dispatch_to='".$data['dispatch_to']."',
-                transport='".$data['transport']."',
-                status='".$data['status']."',
-                state='".$data['state']."',
-                district='".$data['district']."',
-                pincode='".$data['pincode']."',
-                hq_id='".$data['hq_id']."',
-                admin_id='$admin_id',
-                address='".$data['address']."',
-                stockist_image='$image',
-                pan_no ='".$data['pan_no']."',
-                dl_no = '".$data['dl_no']."',
-                credit_days = '$credit_days'
-            WHERE stockist_id='$id'
-        ");
     }
 
     public function delete($id)

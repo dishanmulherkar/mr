@@ -323,17 +323,21 @@ class Payment_model {
     // ==========================================
     // Fetch Outstanding and Eligible Cash Discount
     // ==========================================
-public function getStockistOutstandingWithCD($stockist_id)
+    public function getStockistOutstandingWithCD($stockist_id)
     {
         $stockist_id = (int)$stockist_id;
 
         /*
-         * 1. Get Super Stockist ID
-         */
+        * 1. Get Super Stockist ID, Opening Balance details
+        */
         $stmtSS = $this->con->prepare("
-            SELECT h.super_stockist_id
+            SELECT 
+                h.super_stockist_id,
+                s.opening_balance,
+                s.opening_balance_type,
+                s.opening_balance_date
             FROM stockists s 
-            INNER JOIN headquarter h ON h.headquarter_id =  s.hq_id
+            INNER JOIN headquarter h ON h.headquarter_id = s.hq_id
             WHERE s.stockist_id = ?
             LIMIT 1
         ");
@@ -357,8 +361,34 @@ public function getStockistOutstandingWithCD($stockist_id)
         $super_stockist_id = (int)$stockistData['super_stockist_id'];
 
         /*
-         * 2. Get CD rules
-         */
+        * 2. Calculate Pending Opening Balance (if Debit)
+        */
+        $ob_amount = (float)($stockistData['opening_balance'] ?? 0);
+        $ob_type   = $stockistData['opening_balance_type'] ?? 'debt';
+        $ob_date   = !empty($stockistData['opening_balance_date']) ? $stockistData['opening_balance_date'] : date('Y-m-d');
+        $pending_ob = 0.00;
+
+        // Inside getStockistOutstandingWithCD()
+            if ($ob_amount > 0 && $ob_type === 'debt') {
+                $stmtOBPaid = $this->con->prepare("
+                    SELECT COALESCE(SUM(pa.amount_allocated), 0) as paid_ob 
+                    FROM payment_allocations pa
+                    INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
+                    WHERE pl.stockist_id = ? 
+                    AND  pa.inward_id IS NULL
+                ");
+                $stmtOBPaid->bind_param("i", $stockist_id);
+                $stmtOBPaid->execute();
+                $obPaidRes = $stmtOBPaid->get_result()->fetch_assoc();
+                $stmtOBPaid->close();
+
+                $already_paid_ob = (float)($obPaidRes['paid_ob'] ?? 0);
+                $pending_ob = max(0, round($ob_amount - $already_paid_ob, 2));
+            }
+
+        /*
+        * 3. Get CD rules
+        */
         $stmtRule = $this->con->prepare("
             SELECT cd_4_percent_days, cd_2_percent_days
             FROM super_stockist_cd_rules
@@ -372,13 +402,12 @@ public function getStockistOutstandingWithCD($stockist_id)
         $rules = $resultRule->fetch_assoc();
         $stmtRule->close();
 
-        // Default CD rules
         $cd_4_days = isset($rules['cd_4_percent_days']) ? (int)$rules['cd_4_percent_days'] : 10;
         $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
 
         /*
-         * 3. Get unpaid bills and calculate Exact Penalties / CD
-         */
+        * 4. Get unpaid bills
+        */
         $stmt = $this->con->prepare("
             SELECT 
                 inward_id,
@@ -391,39 +420,33 @@ public function getStockistOutstandingWithCD($stockist_id)
                 (grand_total - paid_amt) AS pending_amount,
                 DATEDIFF(CURDATE(), inward_date) AS bill_age_days,
 
-                -- NEW ELIGIBLE 4% CD (Current Grand Total - Target 4% Grand Total)
+                -- NEW ELIGIBLE 4% CD
                 CASE 
                     WHEN DATEDIFF(CURDATE(), inward_date) <= ? AND COALESCE(cd_percent, 0) = 0 
                     THEN grand_total - ROUND((sub_total * 0.96) + (COALESCE(gst_amount, 0) * 0.96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) 
                     ELSE 0 
                 END AS eligible_4_cd,
 
-                -- NEW ELIGIBLE 2% CD (Current Grand Total - Target 2% Grand Total)
+                -- NEW ELIGIBLE 2% CD
                 CASE 
                     WHEN DATEDIFF(CURDATE(), inward_date) > ? AND DATEDIFF(CURDATE(), inward_date) <= ? AND COALESCE(cd_percent, 0) = 0 
                     THEN grand_total - ROUND((sub_total * 0.98) + (COALESCE(gst_amount, 0) * 0.98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) 
                     ELSE 0 
                 END AS eligible_2_cd,
 
-                -- REVOKED PENALTY (Target Grand Total - Current Grand Total)
+                -- REVOKED PENALTY
                 CASE
                     WHEN COALESCE(cd_percent, 0) = 4 THEN
                         CASE 
                             WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN 0 
-                            
-                            -- Downgrade 4% to 2% (Scale base by 98/96)
                             WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN 
                                 ROUND((sub_total * 98/96) + (COALESCE(gst_amount, 0) * 98/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
-                            
-                            -- Missed completely. Lose full 4% (Scale base by 100/96)
                             ELSE 
                                 ROUND((sub_total * 100/96) + (COALESCE(gst_amount, 0) * 100/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
                         END
                     WHEN COALESCE(cd_percent, 0) = 2 THEN
                         CASE
                             WHEN DATEDIFF(CURDATE(), inward_date) <= ? THEN 0
-                            
-                            -- Missed completely. Lose full 2% (Scale base by 100/98)
                             ELSE 
                                 ROUND((sub_total * 100/98) + (COALESCE(gst_amount, 0) * 100/98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
                         END
@@ -435,14 +458,13 @@ public function getStockistOutstandingWithCD($stockist_id)
             ORDER BY inward_date ASC
         ");
 
-        // FIX APPLIED HERE: Changed "iiiiii" to "iiiiiii" (7 characters for 7 variables)
         $stmt->bind_param(
             "iiiiiii",
-            $cd_4_days,                  // 1. For eligible_4_cd
-            $cd_4_days, $cd_2_days,      // 2, 3. For eligible_2_cd
-            $cd_4_days, $cd_2_days,      // 4, 5. For penalty_amount (4% logic)
-            $cd_2_days,                  // 6. For penalty_amount (2% logic)
-            $stockist_id                 // 7. For WHERE clause
+            $cd_4_days,
+            $cd_4_days, $cd_2_days,
+            $cd_4_days, $cd_2_days,
+            $cd_2_days,
+            $stockist_id
         );
 
         $stmt->execute();
@@ -454,6 +476,26 @@ public function getStockistOutstandingWithCD($stockist_id)
         $total_penalty = 0.00;
         $bills = [];
 
+        // Prepend Opening Balance if active debt exists
+        if ($pending_ob > 0) {
+            $total_pending += $pending_ob;
+            $bills[] = [
+                'inward_id'         => 0,
+                'inward_no'         => 'OPENING-BAL',
+                'inward_date'       => $ob_date,
+                'gross_amount'      => $ob_amount,
+                'sub_total'         => $ob_amount,
+                'cd_percent'        => 0,
+                'paid_amt'          => ($ob_amount - $pending_ob),
+                'pending_amount'    => $pending_ob,
+                'bill_age_days'     => 0,
+                'eligible_4_cd'     => 0,
+                'eligible_2_cd'     => 0,
+                'penalty_amount'    => 0,
+                'is_opening_balance'=> 1
+            ];
+        }
+
         while ($row = $result->fetch_assoc()) {
             $pending = (float)$row['pending_amount'];
 
@@ -463,13 +505,12 @@ public function getStockistOutstandingWithCD($stockist_id)
                 $total_eligible_2_cd += (float)$row['eligible_2_cd'];
                 $total_penalty += (float)$row['penalty_amount'];
             }
+            $row['is_opening_balance'] = 0;
             $bills[] = $row;
         }
         $stmt->close();
 
         $total_cd = $total_eligible_4_cd + $total_eligible_2_cd;
-        
-        // Net Payable increases if there is a penalty (revoked CD)
         $net_payable = $total_pending - $total_cd + $total_penalty;
 
         return [

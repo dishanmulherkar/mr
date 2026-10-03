@@ -51,8 +51,6 @@ class payment_ledger_mdl
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
 public function getReport($stockist_id, $from_date, $to_date)
 {
-    // Added si.pay_status to the SELECT list
-    // Fixed JOIN conditions to be transaction_type specific
     $sql = "SELECT 
                 pl.*, 
                 si.inward_no, 
@@ -74,7 +72,7 @@ public function getReport($stockist_id, $from_date, $to_date)
                 ON b.bank_id = pd.bank_id
             WHERE pl.stockist_id = ? 
               AND pl.ledger_type = 'debt'
-              AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+              AND pl.transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
               AND DATE(pl.created_at) >= ? 
               AND DATE(pl.created_at) <= ?
             ORDER BY pl.created_at ASC, pl.id ASC";
@@ -86,42 +84,37 @@ public function getReport($stockist_id, $from_date, $to_date)
     return $stmt->get_result();
 }
 
-    // Opening balance calculation filtered for the same transaction types
-    public function getOpeningBalance($stockist_id, $from_date)
-    {
-        // FIX: Using 'balance_action' instead of hardcoding transaction types! 
-        // This guarantees that any 'decrease' (payment) or 'increase' (bill) is perfectly calculated.
-        $sql = "SELECT 
-                    SUM(CASE WHEN balance_action = 'increase' THEN amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN balance_action = 'decrease' THEN amount ELSE 0 END) as total_dec
-                FROM payment_ledgers 
-                WHERE stockist_id = ? 
-                AND ledger_type = 'debt' 
-                
-                -- FIX: Added 'asm_settlement' here so it matches the getReport query exactly!
-                AND transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
-                AND DATE(created_at) < ?";
+public function getOpeningBalance($stockist_id, $from_date)
+{
+    // Include 'opening_balance' in transaction types
+    $sql = "SELECT 
+                SUM(CASE WHEN balance_action = 'increase' THEN amount ELSE 0 END) as total_inc,
+                SUM(CASE WHEN balance_action = 'decrease' THEN amount ELSE 0 END) as total_dec
+            FROM payment_ledgers 
+            WHERE stockist_id = ? 
+              AND ledger_type = 'debt' 
+              AND transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+              AND DATE(created_at) < ?";
+    
+    $stmt = $this->con->prepare($sql);
+    $stmt->bind_param("is", $stockist_id, $from_date);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    
+    if ($res && $row = $res->fetch_assoc()) {
+        $inc = (float)$row['total_inc'];
+        $dec = (float)$row['total_dec'];
         
-        // Secured with Prepared Statements
-        $stmt = $this->con->prepare($sql);
-        $stmt->bind_param("is", $stockist_id, $from_date);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        
-        if ($res && $row = $res->fetch_assoc()) {
-            $inc = (float)$row['total_inc'];
-            $dec = (float)$row['total_dec'];
-            
-            $stmt->close();
-            return $inc - $dec; // Positive = Debt Balance, Negative = Credit Balance
-        }
-        
-        if (isset($stmt)) {
-            $stmt->close();
-        }
-        
-        return 0.00;
+        $stmt->close();
+        return round($inc - $dec, 2); // Positive = Debit/Receivable, Negative = Credit/Advance
     }
+    
+    if (isset($stmt)) {
+        $stmt->close();
+    }
+    
+    return 0.00;
+}
    // ==========================================
     // MR Commission (MRC) Report (Grouped by Ref ID)
     // ==========================================

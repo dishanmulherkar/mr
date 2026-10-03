@@ -55,17 +55,38 @@ class payment_ledger_mdl
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
    public function getReport($stockist_id, $from_date, $to_date)
     {
-        $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id ,pd.payment_method ,b.bank_name
+        $stockist_id = (int)$stockist_id;
+        $from_date   = mysqli_real_escape_string($this->con, $from_date);
+        $to_date     = mysqli_real_escape_string($this->con, $to_date);
+
+        $sql = "SELECT 
+                    pl.*, 
+                    si.inward_no, 
+                    pd.id AS pay_id, 
+                    pd.payment_method, 
+                    b.bank_name
                 FROM payment_ledgers pl 
-                LEFT JOIN stock_inward si ON si.inward_id = pl.reference_id 
-                LEFT JOIN payment_details pd ON pd.id = pl.reference_id 
-                LEFT JOIN banks b ON b.bank_id = pd.bank_id
+                LEFT JOIN stock_inward si 
+                    ON si.inward_id = pl.reference_id 
+                    AND pl.transaction_type = 'bill_added'
+                LEFT JOIN payment_details pd 
+                    ON pd.id = pl.reference_id 
+                    AND pl.transaction_type = 'payment_made'
+                LEFT JOIN banks b 
+                    ON b.bank_id = pd.bank_id
                 WHERE pl.stockist_id = '$stockist_id' 
-                AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
-                AND DATE(pl.created_at) >= '$from_date' 
-                AND DATE(pl.created_at) <= '$to_date'
-                ORDER BY pl.created_at ASC, pl.id ASC";
+                  AND pl.ledger_type = 'debt'
+                  -- 1. Included 'opening_balance'
+                  AND pl.transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
+                  -- 2. Allow opening_balance to show OR respect the date range
+                  AND (
+                      pl.transaction_type = 'opening_balance' 
+                      OR (DATE(pl.created_at) >= '$from_date' AND DATE(pl.created_at) <= '$to_date')
+                  )
+                ORDER BY 
+                    CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE 1 END ASC,
+                    pl.created_at ASC, 
+                    pl.id ASC";
                 
         return mysqli_query($this->con, $sql);
     }
@@ -73,22 +94,35 @@ class payment_ledger_mdl
     // Opening balance calculation filtered for the same transaction types
     public function getOpeningBalance($stockist_id, $from_date)
     {
+        $stockist_id = (int)$stockist_id;
+        $from_date   = mysqli_real_escape_string($this->con, $from_date);
+
+        // Uses balance_action ('increase' vs 'decrease') so opening_balance, bills, and payments are calculated correctly
         $sql = "SELECT 
-                    SUM(CASE WHEN transaction_type = 'bill_added' THEN amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill') THEN amount ELSE 0 END) as total_dec
+                    SUM(CASE 
+                        WHEN balance_action = 'increase' THEN amount 
+                        WHEN transaction_type IN ('opening_balance', 'bill_added') THEN amount 
+                        ELSE 0 
+                    END) AS total_inc,
+                    SUM(CASE 
+                        WHEN balance_action = 'decrease' THEN amount 
+                        WHEN transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill') THEN amount 
+                        ELSE 0 
+                    END) AS total_dec
                 FROM payment_ledgers 
                 WHERE stockist_id = '$stockist_id' 
-                AND ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
-                AND DATE(created_at) < '$from_date'";
+                  AND ledger_type = 'debt'
+                  -- Included 'opening_balance'
+                  AND transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill')
+                  AND DATE(created_at) < '$from_date'";
         
         $res = mysqli_query($this->con, $sql);
         if ($res && $row = mysqli_fetch_assoc($res)) {
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
-            return $inc - $dec; // Positive = Debit Balance, Negative = Credit Balance
+            return round($inc - $dec, 2); // Positive = Debit/Receivable, Negative = Credit/Advance
         }
-        return 0;
+        return 0.00;
     }
    // ==========================================
     // MR Commission (MRC) Report (Grouped by Ref ID)
