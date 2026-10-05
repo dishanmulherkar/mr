@@ -68,15 +68,21 @@ class Payment_model {
     }
 
    // Save a new pending payment entry
-    public function addPayment($data, $file) 
+   public function addPayment($data, $file) 
     {
         try {
             $stockist_id = (int)($data['stockist_id'] ?? 0);
             
-            // ADDED: Capture mr_id (Checks 'mr_id' first, falls back to 'hq_id' if used in ASM views)
+            // Capture mr_id
             $mr_id = !empty($_SESSION['mr_id']) ? (int)$_SESSION['mr_id'] : (!empty($data['hq_id']) ? (int)$data['hq_id'] : 0);
             
             $amount_paid = (float)($data['amount_paid'] ?? 0);
+
+            // Sanitize and validate payment_date (fallback to current date if missing or invalid)
+            $payment_date = !empty($data['payment_date']) ? trim($data['payment_date']) : date('Y-m-d');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payment_date)) {
+                $payment_date = date('Y-m-d');
+            }
 
             $payment_method = trim($data['payment_method'] ?? '');
             $bank_id = (int)($data['bank_id'] ?? 0);
@@ -127,37 +133,52 @@ class Payment_model {
                 }
             }
 
-            // Insert payment (ADDED mr_id to columns and VALUES)
+            // Insert payment with payment_date
             $stmt = $this->con->prepare("
                 INSERT INTO payment_details 
                 (
                     stockist_id,
                     mr_id,
                     amount_paid,
+                    payment_date,
                     payment_method,
                     bank_details,
                     screenshot_path,
                     approval_status,
                     bank_id
                 ) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             if (!$stmt) {
                 throw new Exception("Prepare failed: " . $this->con->error);
             }
 
-            // ADDED: Updated bind string to "iidssssi" (added an 'i' for mr_id) and passed $mr_id
+            // Bind parameters:
+            // i -> stockist_id (int)
+            // i -> mr_id (int)
+            // d -> amount_paid (double/float)
+            // s -> payment_date (string)
+            // s -> payment_method (string)
+            // s -> bank_details (string)
+            // s -> screenshot_path (string)
+            // s -> approval_status (string)
+            // i -> bank_id (int)
+           // Old (incorrect):
+            // $stmt->bind_param("iiddssssi", ...);
+
+            // New (correct):
             $stmt->bind_param(
-                "iidssssi",
-                $stockist_id,
-                $mr_id,
-                $amount_paid,
-                $payment_method,
-                $bank_details,
-                $screenshot_path,
-                $approval_status,
-                $bank_id
+                "iidsssssi",
+                $stockist_id,       // i (integer)
+                $mr_id,             // i (integer)
+                $amount_paid,       // d (double / decimal)
+                $payment_date,      // s (string - 'YYYY-MM-DD')
+                $payment_method,    // s (string)
+                $bank_details,      // s (string)
+                $screenshot_path,   // s (string)
+                $approval_status,   // s (string)
+                $bank_id            // i (integer)
             );
 
             if ($stmt->execute()) {
@@ -249,13 +270,29 @@ class Payment_model {
         $stockist_id = (int)$stockist_id;
         
         // FIX: Added ROUND() around the SUM functions, included settlement types, and restricted to the 'debt' ledger
-        $stmt = $this->con->prepare("
-            SELECT 
-                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('increase', 'increase_debt') OR LOWER(transaction_type) IN ('bill_added', 'opening_balance', 'debit_note') THEN amount ELSE 0 END), 0)) - 
-                ROUND(COALESCE(SUM(CASE WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') OR LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END), 0)) AS total_outstanding
-            FROM payment_ledgers 
-            WHERE stockist_id = ? AND ledger_type = 'debt'
-        ");
+       $stmt = $this->con->prepare("
+                SELECT 
+                    ROUND(
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN LOWER(balance_action) IN ('increase', 'increase_debt') THEN amount
+                                WHEN (balance_action IS NULL OR balance_action = '') AND LOWER(transaction_type) IN ('bill_added', 'debit_note') THEN amount
+                                ELSE 0 
+                            END
+                        ), 0)
+                        -
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN LOWER(balance_action) IN ('decrease', 'decrease_debt') THEN amount
+                                WHEN (balance_action IS NULL OR balance_action = '') AND LOWER(transaction_type) IN ('payment_made', 'credit_note', 'discount', 'payment', 'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill') THEN amount
+                                ELSE 0 
+                            END
+                        ), 0)
+                    , 2) AS total_outstanding
+                FROM payment_ledgers 
+                WHERE stockist_id = ? 
+                AND ledger_type IN ('debt', 'credit')
+            ");
         
         $stmt->bind_param("i", $stockist_id);
         $stmt->execute();
@@ -323,7 +360,7 @@ class Payment_model {
     // ==========================================
     // Fetch Outstanding and Eligible Cash Discount
     // ==========================================
-    public function getStockistOutstandingWithCD($stockist_id)
+   public function getStockistOutstandingWithCD($stockist_id)
     {
         $stockist_id = (int)$stockist_id;
 
@@ -361,30 +398,39 @@ class Payment_model {
         $super_stockist_id = (int)$stockistData['super_stockist_id'];
 
         /*
-        * 2. Calculate Pending Opening Balance (if Debit)
+        * 2. Calculate Pending Opening Balance (Debit vs Credit)
         */
         $ob_amount = (float)($stockistData['opening_balance'] ?? 0);
-        $ob_type   = $stockistData['opening_balance_type'] ?? 'debt';
+        $ob_type   = strtolower($stockistData['opening_balance_type'] ?? 'debt');
         $ob_date   = !empty($stockistData['opening_balance_date']) ? $stockistData['opening_balance_date'] : date('Y-m-d');
-        $pending_ob = 0.00;
+        
+        $pending_ob_debt   = 0.00;
+        $remaining_advance = 0.00;
 
-        // Inside getStockistOutstandingWithCD()
-            if ($ob_amount > 0 && $ob_type === 'debt') {
-                $stmtOBPaid = $this->con->prepare("
-                    SELECT COALESCE(SUM(pa.amount_allocated), 0) as paid_ob 
-                    FROM payment_allocations pa
-                    INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
-                    WHERE pl.stockist_id = ? 
-                    AND  pa.inward_id IS NULL
-                ");
-                $stmtOBPaid->bind_param("i", $stockist_id);
-                $stmtOBPaid->execute();
-                $obPaidRes = $stmtOBPaid->get_result()->fetch_assoc();
-                $stmtOBPaid->close();
+        if ($ob_amount > 0) {
+            // Query allocations made against the opening balance (where inward_id IS NULL)
+            $stmtOBPaid = $this->con->prepare("
+                SELECT COALESCE(SUM(pa.amount_allocated), 0) as allocated_ob 
+                FROM payment_allocations pa
+                INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
+                WHERE pl.stockist_id = ? 
+                AND pa.inward_id IS NULL
+            ");
+            $stmtOBPaid->bind_param("i", $stockist_id);
+            $stmtOBPaid->execute();
+            $obPaidRes = $stmtOBPaid->get_result()->fetch_assoc();
+            $stmtOBPaid->close();
 
-                $already_paid_ob = (float)($obPaidRes['paid_ob'] ?? 0);
-                $pending_ob = max(0, round($ob_amount - $already_paid_ob, 2));
+            $allocated_ob = (float)($obPaidRes['allocated_ob'] ?? 0);
+
+            if ($ob_type === 'debt') {
+                // Unpaid pending debt
+                $pending_ob_debt = max(0, round($ob_amount - $allocated_ob, 2));
+            } elseif ($ob_type === 'credit') {
+                // Unutilized advance credit
+                $remaining_advance = max(0, round($ob_amount - $allocated_ob, 2));
             }
+        }
 
         /*
         * 3. Get CD rules
@@ -470,29 +516,51 @@ class Payment_model {
         $stmt->execute();
         $result = $stmt->get_result();
 
-        $total_pending = 0.00;
+        $total_pending       = 0.00;
         $total_eligible_4_cd = 0.00;
         $total_eligible_2_cd = 0.00;
-        $total_penalty = 0.00;
-        $bills = [];
+        $total_penalty       = 0.00;
+        $bills               = [];
 
         // Prepend Opening Balance if active debt exists
-        if ($pending_ob > 0) {
-            $total_pending += $pending_ob;
+        if ($pending_ob_debt > 0) {
+            $total_pending += $pending_ob_debt;
             $bills[] = [
-                'inward_id'         => 0,
-                'inward_no'         => 'OPENING-BAL',
-                'inward_date'       => $ob_date,
-                'gross_amount'      => $ob_amount,
-                'sub_total'         => $ob_amount,
-                'cd_percent'        => 0,
-                'paid_amt'          => ($ob_amount - $pending_ob),
-                'pending_amount'    => $pending_ob,
-                'bill_age_days'     => 0,
-                'eligible_4_cd'     => 0,
-                'eligible_2_cd'     => 0,
-                'penalty_amount'    => 0,
-                'is_opening_balance'=> 1
+                'inward_id'          => 0,
+                'inward_no'          => 'OPENING-BAL (DEBT)',
+                'inward_date'        => $ob_date,
+                'gross_amount'       => $ob_amount,
+                'sub_total'          => $ob_amount,
+                'cd_percent'         => 0,
+                'paid_amt'           => ($ob_amount - $pending_ob_debt),
+                'pending_amount'     => $pending_ob_debt,
+                'bill_age_days'      => 0,
+                'eligible_4_cd'      => 0,
+                'eligible_2_cd'      => 0,
+                'penalty_amount'     => 0,
+                'is_opening_balance' => 1,
+                'balance_type'       => 'debt'
+            ];
+        }
+
+        // Prepend Opening Balance if active advance credit exists (deducts from outstanding)
+        if ($remaining_advance > 0) {
+            $total_pending -= $remaining_advance;
+            $bills[] = [
+                'inward_id'          => 0,
+                'inward_no'          => 'OPENING-BAL (ADVANCE)',
+                'inward_date'        => $ob_date,
+                'gross_amount'       => $ob_amount,
+                'sub_total'          => $ob_amount,
+                'cd_percent'         => 0,
+                'paid_amt'           => ($ob_amount - $remaining_advance),
+                'pending_amount'     => -$remaining_advance, // negative indicates advance credit
+                'bill_age_days'      => 0,
+                'eligible_4_cd'      => 0,
+                'eligible_2_cd'      => 0,
+                'penalty_amount'     => 0,
+                'is_opening_balance' => 1,
+                'balance_type'       => 'credit'
             ];
         }
 
@@ -500,17 +568,18 @@ class Payment_model {
             $pending = (float)$row['pending_amount'];
 
             if ($pending > 0) {
-                $total_pending += $pending;
+                $total_pending       += $pending;
                 $total_eligible_4_cd += (float)$row['eligible_4_cd'];
                 $total_eligible_2_cd += (float)$row['eligible_2_cd'];
-                $total_penalty += (float)$row['penalty_amount'];
+                $total_penalty       += (float)$row['penalty_amount'];
             }
             $row['is_opening_balance'] = 0;
+            $row['balance_type']       = 'debt';
             $bills[] = $row;
         }
         $stmt->close();
 
-        $total_cd = $total_eligible_4_cd + $total_eligible_2_cd;
+        $total_cd    = $total_eligible_4_cd + $total_eligible_2_cd;
         $net_payable = $total_pending - $total_cd + $total_penalty;
 
         return [

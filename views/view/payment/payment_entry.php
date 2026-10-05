@@ -78,100 +78,113 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
     </div>
 
     <div class="form-container">
-        <form action="<?= BASE_URL ?>payment/save" method="POST" enctype="multipart/form-data">
-            
-            <div class="form-group">
-                <label for="stockist_id">Stockist *</label>
-                <select name="stockist_id" id="stockist_id" class="form-control" required>
-                    <option value="">-- Select Stockist --</option>
-                    <?php if(!empty($stockists)): ?>
-                        <?php foreach ($stockists as $s): ?>
-                            <option value="<?= $s['stockist_id'] ?>" <?= ($s['stockist_id'] == $selected_stockist_id) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($s['stockist_name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </select>
+    <form action="<?= BASE_URL ?>payment/save" method="POST" enctype="multipart/form-data">
                 
-                <!-- Display Area for Detailed Bills -->
-                <div class="row g-3 mb-2 mt-1">
-                    <div class="col-lg-12">
-                        <div id="outstandingDisplay"></div>
-                    </div>
+        <div class="form-group">
+            <label for="stockist_id">Stockist *</label>
+            <select name="stockist_id" id="stockist_id" class="form-control" required>
+                <option value="">-- Select Stockist --</option>
+                <?php if(!empty($stockists)): ?>
+                    <?php foreach ($stockists as $s): ?>
+                        <option value="<?= $s['stockist_id'] ?>" <?= ($s['stockist_id'] == $selected_stockist_id) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($s['stockist_name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </select>
+            
+            <!-- Display Area for Detailed Bills -->
+            <div class="row g-3 mb-2 mt-1">
+                <div class="col-lg-12">
+                    <div id="outstandingDisplay"></div>
                 </div>
             </div>
+        </div>
 
-            <div class="form-group">
-                <label for="amount_paid">Payment Amount (₹) *</label>
-                <!-- NOTE: ID is amount_paid -->
-                <input type="number" name="amount_paid" id="amount_paid" class="form-control"  min="1" placeholder="Enter amount..." required>
-            </div>
+        <!-- Payment Date Field -->
+        <div class="form-group">
+            <label for="payment_date">Payment Date *</label>
+            <input 
+                type="date" 
+                name="payment_date" 
+                id="payment_date" 
+                class="form-control" 
+                value="<?= date('Y-m-d') ?>" 
+                min="<?= date('Y-m-d', strtotime('-15 days')) ?>" 
+                max="<?= date('Y-m-d') ?>" 
+                required
+            >
+        </div>
 
-            <div class="form-group">
-                <label for="payment_method">Payment Method *</label>
-                <select name="payment_method" id="payment_method" class="form-control" required>
-                    <option value="">-- Select Method --</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Bank Transfer (NEFT/RTGS)">Bank Transfer (NEFT/RTGS)</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Other">Other</option>
-                </select>
-            </div>
+        <div class="form-group">
+            <label for="amount_paid">Payment Amount (₹) *</label>
+            <input type="number" name="amount_paid" id="amount_paid" class="form-control" min="1" step="0.01" placeholder="Enter amount..." required>
+        </div>
 
-            <div class="form-group">
-                <label for="payment_to">Payment To *</label>
-                <select name="bank_id" id="bank_id" class="form-control" required>
-                    <option value="">Select Bank</option>
-                    <?php 
-                    if (!empty($data['LinkedBanks'])): 
-                        foreach($data['LinkedBanks'] as $bank): 
-                            // Optional: Retain selected bank if editing
-                            $isSelected = (isset($ROW['bank_id']) && $ROW['bank_id'] == $bank['bank_id']) ? 'selected' : '';
-                    ?>
-                        <option value="<?= $bank['bank_id']; ?>" <?= $isSelected; ?>>
-                            <?= htmlspecialchars($bank['bank_name']); ?>
-                        </option>
-                    <?php 
-                        endforeach; 
-                    else: 
-                    ?>
-                        <option value="" disabled>No banks assigned to this Super Stockist</option>
-                    <?php endif; ?>
-                </select>
-            </div>
+        <div class="form-group">
+            <label for="payment_method">Payment Method *</label>
+            <select name="payment_method" id="payment_method" class="form-control" required>
+                <option value="">-- Select Method --</option>
+                <option value="UPI">UPI</option>
+                <option value="Bank Transfer (NEFT/RTGS)">Bank Transfer (NEFT/RTGS)</option>
+                <option value="Cheque">Cheque</option>
+                <option value="Cash">Cash</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
 
-            <div class="form-group" id="other_method_wrapper" style="display: none;">
-                <label for="other_payment_method">Other Payment Method *</label>
-                <input type="text" name="other_payment_method" id="other_payment_method" class="form-control" placeholder="Enter payment method...">
-            </div>
+        <div class="form-group">
+            <label for="payment_to">Payment To *</label>
+            <select name="bank_id" id="bank_id" class="form-control" required>
+                <option value="">Select Bank</option>
+                <?php 
+                if (!empty($data['LinkedBanks'])): 
+                    foreach($data['LinkedBanks'] as $bank): 
+                        $isSelected = (isset($ROW['bank_id']) && $ROW['bank_id'] == $bank['bank_id']) ? 'selected' : '';
+                ?>
+                    <option value="<?= $bank['bank_id']; ?>" <?= $isSelected; ?>>
+                        <?= htmlspecialchars($bank['bank_name']); ?>
+                    </option>
+                <?php 
+                    endforeach; 
+                else: 
+                ?>
+                    <option value="" disabled>No banks assigned to this Super Stockist</option>
+                <?php endif; ?>
+            </select>
+        </div>
 
-            <div class="form-group">
-                <label for="bank_details">Reference No / Bank Details</label>
-                <input type="text" name="bank_details" id="bank_details" class="form-control" placeholder="UTR, Cheque No, or Transaction ID">
-            </div>
+        <div class="form-group" id="other_method_wrapper" style="display: none;">
+            <label for="other_payment_method">Other Payment Method *</label>
+            <input type="text" name="other_payment_method" id="other_payment_method" class="form-control" placeholder="Enter payment method...">
+        </div>
 
-          <div class="form-group">
-                <label for="screenshot">Payment Proof (Screenshot)</label>
-                <input 
-                    type="file" 
-                    name="screenshot" 
-                    id="screenshot" 
-                    class="form-control" 
-                    accept="image/*, .png, .jpg, .jpeg"
-                >
-                <small style="color: #666; margin-top: 4px; display: block;">
-                    Upload a clear screenshot (JPG, JPEG, PNG max 2MB).
-                </small>
-            </div>
+        <div class="form-group">
+            <label for="bank_details">Reference No / Bank Details</label>
+            <input type="text" name="bank_details" id="bank_details" class="form-control" placeholder="UTR, Cheque No, or Transaction ID">
+        </div>
 
-            <div class="form-group" style="margin-top: 20px;">
-                <button type="submit" class="btn-submit-form">
-                    <i class="fa fa-save"></i> Submit Payment
-                </button>
-            </div>
+        <div class="form-group">
+            <label for="screenshot">Payment Proof (Screenshot)</label>
+            <input 
+                type="file" 
+                name="screenshot" 
+                id="screenshot" 
+                class="form-control" 
+                accept="image/*, .png, .jpg, .jpeg"
+            >
+            <small style="color: #666; margin-top: 4px; display: block;">
+                Upload a clear screenshot (JPG, JPEG, PNG max 2MB).
+            </small>
+        </div>
 
-        </form>
+        <div class="form-group" style="margin-top: 20px;">
+            <button type="submit" class="btn-submit-form">
+                <i class="fa fa-save"></i> Submit Payment
+            </button>
+        </div>
+
+    </form>
     </div>
 </div>
 

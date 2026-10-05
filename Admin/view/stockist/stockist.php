@@ -126,7 +126,7 @@ include 'view/layout/header.php';
                                             placeholder="Enter Mobile Number"
                                             maxlength="10" pattern="[0-9]{10}"
                                             value="<?php echo isset($ROW['number']) ? htmlspecialchars($ROW['number']) : ''; ?>"
-                                            required>
+                                            >
                                     </div>
                                 </div>
 
@@ -287,7 +287,7 @@ include 'view/layout/header.php';
                                         <label>Credit Days</label>
                                         <input type="number" name="credit_days" class="form-control"
                                             placeholder="Enter Credit Days"
-                                            value="<?php echo isset($ROW['credit_days']) ? htmlspecialchars($ROW['credit_days']) : '0'; ?>"
+                                            value="<?php echo isset($ROW['credit_days']) ? htmlspecialchars($ROW['credit_days']) : '30'; ?>"
                                             min="0">
                                     </div>
                                 </div>
@@ -367,71 +367,44 @@ include 'view/layout/header.php';
                         </a>
                     </div>
                     <!-- ================  TABLE  ================ -->
-                    <div class="table_container table-responsive pt-4">
-                        <table class="table" id="stockistTable">
+                   <div class="table_container table-responsive pt-4">
+                        <table class="table table-striped table-bordered" id="stockistTable" style="width:100%">
                             <thead class="table-secondary">
                                 <tr>
                                     <th class="text-center">Sr. No</th>
-                                    <th class="text-center">Image</th>
                                     <th class="text-center">Head Quarter</th>
                                     <th class="text-center">Stockist Name</th>
+                                    <th class="text-center">O/B</th>
                                     <th class="text-center">Mobile</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-center">State</th>
-                                    <th class="text-center">District</th>
-                                    <!-- <th class="text-center">Pincode</th> -->
-<!--                                     
-                                    <th class="text-center">Address</th> -->
                                     <th class="text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php
-                                $key  = 1;
-                               
+                                $key = 1;
                                 while($row = mysqli_fetch_assoc($list)):
                                 ?>
                                 <tr>
                                     <td class="text-center"><?php echo $key; ?></td>
-                                    <!-- Image -->
-                                    <td class="text-center">
-                                        <?php if(!empty($row['stockist_image'])): ?>
-                                            <img src="<?= BASE_URL ?>uploads/stockist/<?php echo htmlspecialchars($row['stockist_image']); ?>"
-                                                 class="thumb" alt="img">
-                                        <?php else: ?>
-                                            <span class="text-muted">—</span>
-                                        <?php endif; ?>
-                                    </td>
                                     <td class="text-center"><?php echo htmlspecialchars($row['hq_name'] ?? '—'); ?></td>
-                                    <td class="text-center"><?php echo htmlspecialchars($row['stockist_name']); ?></td>
-                                    <td class="text-center"><?php echo htmlspecialchars($row['number']); ?></td>
-
-                                    <!-- Status badge -->
+                                    <td class="text-center"><?php echo htmlspecialchars($row['stockist_name'] ?? ''); ?></td>
+                                    <td class="text-center"><?php echo htmlspecialchars($row['opening_balance'] ?? ''); ?></td>
+                                    <td class="text-center"><?php echo htmlspecialchars($row['number'] ?? ''); ?></td>
                                     <td class="text-center">
                                         <?php if($row['status'] == 1): ?>
-                                            <span class="badge-active">Active</span>
+                                            <span class="badge bg-success">Active</span>
                                         <?php else: ?>
-                                            <span class="badge-inactive">Inactive</span>
+                                            <span class="badge bg-danger">Inactive</span>
                                         <?php endif; ?>
                                     </td>
-                                                    
-                                   <td class="text-center"><?php echo htmlspecialchars($row['state_name'] ?? ''); ?></td>
-                                    
-                                    <td class="text-center"><?php 
-                                    
-                                    echo htmlspecialchars($row['district']);
-                                     ?></td>
-                                    <!-- <td class="text-center"><?php echo htmlspecialchars($row['pincode']); ?></td>
-                                    
-                                    <td class="text-center"><?php echo htmlspecialchars($row['address'] ?? '—'); ?></td> -->
-
-                                    <!-- Actions -->
+                                    <td class="text-center"><?php echo htmlspecialchars($row['state_name'] ?? ''); ?></td>
                                     <td class="text-center">
                                         <a href="<?= BASE_URL ?>stockist/edit/<?php echo $row['stockist_id']; ?>"
-                                           class="btn btn-warning btn-sm" title="Edit">
+                                        class="btn btn-warning btn-sm" title="Edit">
                                             <i class="fa-solid fa-pen-to-square"></i>
                                         </a>
-                                        
                                     </td>
                                 </tr>
                                 <?php $key++; endwhile; ?>
@@ -478,6 +451,19 @@ document.getElementById('imageModal').onclick = function(e)
 
 $(document).ready(function(){
 
+
+$('#stockistTable').DataTable({
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, 'asc']], // Default sort by Sr. No
+        columnDefs: [
+            { orderable: false, targets: [-1] } // Disable sorting on the last column (Action)
+        ],
+        language: {
+            search: "_INPUT_",
+            searchPlaceholder: "Search stockists..."
+        }
+    });
        // 1. Function to Load Districts
     function loadDistrict(state_id, district_id = '') {
         $.ajax({

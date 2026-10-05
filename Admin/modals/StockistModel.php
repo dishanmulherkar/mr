@@ -141,38 +141,48 @@ class StockistModel
         ");
     }
 
-public function insert($data, $image)
+    public function insert($data, $image)
     {
         $this->con->begin_transaction();
 
         try {
-            $hq_id = intval($data['hq_id']);
-            $admin_id = (int)$_SESSION['admin_id'];
+            $hq_id = intval($data['hq_id'] ?? 0);
+            $admin_id = (int)($_SESSION['admin_id'] ?? 0);
             $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
             
-            // Opening balance inputs
-            $opening_balance = isset($data['opening_balance']) ? (float)$data['opening_balance'] : 0.00;
-            $opening_balance_type = (!empty($data['opening_balance_type']) && $data['opening_balance_type'] === 'credit') ? 'credit' : 'debt';
-            $opening_balance_date = !empty($data['opening_balance_date']) ? $data['opening_balance_date'] : date('Y-m-d');
-            $balance_action = ($opening_balance_type === 'debt') ? 'increase' : 'decrease';
+            // Opening balance mappings
+                $opening_balance = isset($data['opening_balance']) ? (float)$data['opening_balance'] : 0.00;
+                $clean_balance = abs($opening_balance);
+                $opening_balance_type = (!empty($data['opening_balance_type']) && $data['opening_balance_type'] === 'credit') ? 'credit' : 'debt';
+                $opening_balance_date = !empty($data['opening_balance_date']) ? $data['opening_balance_date'] : date('Y-m-d');
+
+                // Now ledger_type supports both 'credit' and 'debt'
+                if ($opening_balance_type === 'credit') {
+                    $ledger_type    = 'credit';
+                    $balance_action = 'decrease'; // Advance reduces pending balance
+                } else {
+                    $ledger_type    = 'debt';
+                    $balance_action = 'increase'; // Pending increases due balance
+                }
 
             // Fetch Super Stockist State
-            $result = mysqli_query($this->con, "
-                SELECT ss.state
-                FROM headquarter h
-                INNER JOIN super_stockist ss
-                    ON h.super_stockist_id = ss.super_stockist_id
-                WHERE h.headquarter_id = '$hq_id'
-                LIMIT 1
-            ");
-
             $super_state = '';
-            if ($result && mysqli_num_rows($result) > 0) {
-                $row = mysqli_fetch_assoc($result);
-                $super_state = $this->getStateById($row['state'] ?? '');
+            if ($hq_id > 0) {
+                $result = mysqli_query($this->con, "
+                    SELECT ss.state
+                    FROM headquarter h
+                    INNER JOIN super_stockist ss
+                        ON h.super_stockist_id = ss.super_stockist_id
+                    WHERE h.headquarter_id = '$hq_id'
+                    LIMIT 1
+                ");
+                if ($result && mysqli_num_rows($result) > 0) {
+                    $row = mysqli_fetch_assoc($result);
+                    $super_state = $this->getStateById($row['state'] ?? '');
+                }
             }
 
-            $stockist_state = $this->getStateById($data['state']);
+            $stockist_state = $this->getStateById($data['state'] ?? '');
 
             // GST Type Logic
             if ($stockist_state == 'Nepal') {
@@ -183,7 +193,6 @@ public function insert($data, $image)
                 $gst_type = 'IGST';
             }
 
-            // 1. Insert into stockists table
             $stockist_stmt = $this->con->prepare("
                 INSERT INTO stockists (
                     stockist_name, number, gst_no, gst_type, dispatch_to, 
@@ -192,9 +201,9 @@ public function insert($data, $image)
                     dl_no, credit_days, opening_balance, opening_balance_type, opening_balance_date
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-
+            
             $stockist_stmt->bind_param(
-                "ssssssssssissiissdss",
+                "ssssssssssississidss",
                 $data['stockist_name'],
                 $data['number'],
                 $data['gst_no'],
@@ -205,14 +214,14 @@ public function insert($data, $image)
                 $data['state'],
                 $data['district'],
                 $data['pincode'],
-                $data['hq_id'],
+                $hq_id,
                 $data['address'],
                 $image,
                 $admin_id,
                 $data['pan_no'],
                 $data['dl_no'],
                 $credit_days,
-                $opening_balance,
+                $clean_balance,
                 $opening_balance_type,
                 $opening_balance_date
             );
@@ -225,7 +234,7 @@ public function insert($data, $image)
             $stockist_stmt->close();
 
             // 2. Insert into payment_ledgers if opening balance > 0
-            if ($opening_balance > 0) {
+            if ($clean_balance > 0) {
                 $ledger_stmt = $this->con->prepare("
                     INSERT INTO payment_ledgers (
                         stockist_id, 
@@ -236,7 +245,8 @@ public function insert($data, $image)
                         balance_action
                     ) VALUES (?, ?, 'opening_balance', 0, ?, ?)
                 ");
-                $ledger_stmt->bind_param("isds", $stockist_id, $opening_balance_type, $opening_balance, $balance_action);
+                // $ledger_type passes 'credit' or 'debt'
+                $ledger_stmt->bind_param("isds", $stockist_id, $ledger_type, $clean_balance, $balance_action);
 
                 if (!$ledger_stmt->execute()) {
                     throw new Exception("Error creating ledger entry: " . $ledger_stmt->error);
@@ -249,6 +259,7 @@ public function insert($data, $image)
 
         } catch (Exception $e) {
             $this->con->rollback();
+            error_log("Insert Stockist Error: " . $e->getMessage());
             return false;
         }
     }
@@ -259,33 +270,44 @@ public function insert($data, $image)
 
         try {
             $id = (int)$id;
-            $admin_id = (int)$_SESSION['admin_id'];
-            $hq_id = (int)$data['hq_id'];
+            $admin_id = (int)($_SESSION['admin_id'] ?? 0);
+            $hq_id = (int)($data['hq_id'] ?? 0);
             $credit_days = isset($data['credit_days']) ? (int)$data['credit_days'] : 0;
 
             // Opening balance inputs
-            $opening_balance = isset($data['opening_balance']) ? (float)$data['opening_balance'] : 0.00;
-            $opening_balance_type = (!empty($data['opening_balance_type']) && $data['opening_balance_type'] === 'credit') ? 'credit' : 'debt';
-            $opening_balance_date = !empty($data['opening_balance_date']) ? $data['opening_balance_date'] : date('Y-m-d');
-            $balance_action = ($opening_balance_type === 'debt') ? 'increase' : 'decrease';
+            // Opening balance mappings
+                $opening_balance = isset($data['opening_balance']) ? (float)$data['opening_balance'] : 0.00;
+                $clean_balance = abs($opening_balance);
+                $opening_balance_type = (!empty($data['opening_balance_type']) && $data['opening_balance_type'] === 'credit') ? 'credit' : 'debt';
+                $opening_balance_date = !empty($data['opening_balance_date']) ? $data['opening_balance_date'] : date('Y-m-d');
+
+                if ($opening_balance_type === 'credit') {
+                    $ledger_type    = 'credit';
+                    $balance_action = 'decrease';
+                } else {
+                    $ledger_type    = 'debt';
+                    $balance_action = 'increase';
+                }
 
             // Fetch Super Stockist State
-            $result = mysqli_query($this->con, "
-                SELECT ss.state
-                FROM headquarter h
-                INNER JOIN super_stockist ss
-                    ON h.super_stockist_id = ss.super_stockist_id
-                WHERE h.headquarter_id = '$hq_id'
-                LIMIT 1
-            ");
-
             $super_state = '';
-            if ($result && mysqli_num_rows($result) > 0) {
-                $row = mysqli_fetch_assoc($result);
-                $super_state = $this->getStateById($row['state'] ?? '');
+            if ($hq_id > 0) {
+                $result = mysqli_query($this->con, "
+                    SELECT ss.state
+                    FROM headquarter h
+                    INNER JOIN super_stockist ss
+                        ON h.super_stockist_id = ss.super_stockist_id
+                    WHERE h.headquarter_id = '$hq_id'
+                    LIMIT 1
+                ");
+
+                if ($result && mysqli_num_rows($result) > 0) {
+                    $row = mysqli_fetch_assoc($result);
+                    $super_state = $this->getStateById($row['state'] ?? '');
+                }
             }
 
-            $stockist_state = $this->getStateById($data['state']);
+            $stockist_state = $this->getStateById($data['state'] ?? '');
 
             // GST Type Logic
             if ($stockist_state == 'Nepal' && $super_state == 'Nepal') {
@@ -322,8 +344,12 @@ public function insert($data, $image)
                 WHERE stockist_id = ?
             ");
 
+            if (!$stockist_stmt) {
+                throw new Exception("Stockist Prepare failed: " . $this->con->error);
+            }
+
             $stockist_stmt->bind_param(
-                "ssssssssssiisssiidssi",
+                "ssssssssssiissssidssi",
                 $data['stockist_name'],
                 $data['number'],
                 $data['gst_no'],
@@ -334,14 +360,14 @@ public function insert($data, $image)
                 $data['state'],
                 $data['district'],
                 $data['pincode'],
-                $data['hq_id'],
+                $hq_id,
                 $admin_id,
                 $data['address'],
                 $image,
                 $data['pan_no'],
                 $data['dl_no'],
                 $credit_days,
-                $opening_balance,
+                $clean_balance,
                 $opening_balance_type,
                 $opening_balance_date,
                 $id
@@ -363,32 +389,36 @@ public function insert($data, $image)
             $ledger_res = $check_ledger->get_result();
 
             if ($row = $ledger_res->fetch_assoc()) {
-                $ledger_id = (int)$row['id'];
-                $upd_ledger = $this->con->prepare("
-                    UPDATE payment_ledgers 
-                    SET amount = ?, 
-                        ledger_type = ?, 
-                        balance_action = ? 
-                    WHERE id = ?
-                ");
-                $upd_ledger->bind_param("dssi", $opening_balance, $opening_balance_type, $balance_action, $ledger_id);
-                $upd_ledger->execute();
-                $upd_ledger->close();
-            } elseif ($opening_balance > 0) {
-                $ins_ledger = $this->con->prepare("
-                    INSERT INTO payment_ledgers (
-                        stockist_id, 
-                        ledger_type, 
-                        transaction_type, 
-                        reference_id, 
-                        amount, 
-                        balance_action
-                    ) VALUES (?, ?, 'opening_balance', 0, ?, ?)
-                ");
-                $ins_ledger->bind_param("isds", $id, $opening_balance_type, $opening_balance, $balance_action);
-                $ins_ledger->execute();
-                $ins_ledger->close();
+            $ledger_id = (int)$row['id'];
+            $upd_ledger = $this->con->prepare("
+                UPDATE payment_ledgers 
+                SET amount = ?, 
+                    ledger_type = ?, 
+                    balance_action = ? 
+                WHERE id = ?
+            ");
+            $upd_ledger->bind_param("dssi", $clean_balance, $ledger_type, $balance_action, $ledger_id);
+            if (!$upd_ledger->execute()) {
+                throw new Exception("Error updating ledger: " . $upd_ledger->error);
             }
+            $upd_ledger->close();
+        } elseif ($clean_balance > 0) {
+            $ins_ledger = $this->con->prepare("
+                INSERT INTO payment_ledgers (
+                    stockist_id, 
+                    ledger_type, 
+                    transaction_type, 
+                    reference_id, 
+                    amount, 
+                    balance_action
+                ) VALUES (?, ?, 'opening_balance', 0, ?, ?)
+            ");
+            $ins_ledger->bind_param("isds", $id, $ledger_type, $clean_balance, $balance_action);
+            if (!$ins_ledger->execute()) {
+                throw new Exception("Error inserting ledger: " . $ins_ledger->error);
+            }
+            $ins_ledger->close();
+        }
             $check_ledger->close();
 
             $this->con->commit();
@@ -396,10 +426,10 @@ public function insert($data, $image)
 
         } catch (Exception $e) {
             $this->con->rollback();
+            error_log("Update Stockist Error: " . $e->getMessage());
             return false;
         }
     }
-
     public function delete($id)
     {
         return mysqli_query($this->con,"

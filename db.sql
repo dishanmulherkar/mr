@@ -603,3 +603,20 @@ ALTER TABLE payment_allocations
 ADD CONSTRAINT payment_allocations_ibfk_2 
 FOREIGN KEY (inward_id) REFERENCES stock_inward(inward_id) 
 ON DELETE CASCADE;
+
+
+-- 03 10-26
+ALTER TABLE payment_details 
+ADD COLUMN payment_date DATE NOT NULL DEFAULT (CURRENT_DATE) 
+AFTER amount_paid;
+
+-- 05-10-26
+
+ALTER TABLE `payment_ledgers` 
+MODIFY COLUMN `ledger_type` ENUM(
+    'debt', 
+    'credit', 
+    'mrc_wallet', 
+    'drc_wallet', 
+    'asm_wallet'
+) NOT NULL;

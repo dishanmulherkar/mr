@@ -25,10 +25,11 @@ class PaymentApproval_mdl {
     {
         // Join stockists and headquarter tables to enable state/hq filtering
         $query = "
-            SELECT p.*, s.stockist_name 
+            SELECT p.*, s.stockist_name, b.bank_name
             FROM payment_details p
             LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
             LEFT JOIN headquarter h ON s.hq_id = h.headquarter_id
+            LEFT JOIN banks b ON p.bank_id = b.bank_id
             WHERE p.payment_method != 'Commission Adjustment' 
         ";
         // NOTE: We excluded 'Commission Adjustment' so Admin Manual Entries don't show in the MR Approval list.

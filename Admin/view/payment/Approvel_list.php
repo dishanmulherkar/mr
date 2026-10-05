@@ -109,8 +109,10 @@ include 'view/layout/header.php';
                         <h6 class="text-primary fw-bold mb-3">Payment Details</h6>
                         <table class="table table-sm table-borderless">
                             <tr><th style="width: 40%">Stockist:</th><td id="revStockist" class="fw-bold"></td></tr>
+                            <tr><th>Payment Date:</th><td id="revDate" class="fw-semibold text-secondary"></td></tr>
                             <tr><th>Amount Paid:</th><td id="revAmount" class="text-success fw-bold fs-5"></td></tr>
                             <tr><th>Method:</th><td id="revMethod"></td></tr>
+                            <tr><th>Bank Name:</th><td id="revBank" class="fw-semibold"></td></tr>
                             <tr><th>Reference:</th><td id="revRef"></td></tr>
                         </table>
                         <hr>
@@ -154,7 +156,6 @@ include 'view/layout/header.php';
         </div>
     </div>
 </div>
-
 
 <!-- ========================================== -->
 <!-- VIEW ALLOCATION MODAL (For Approved)       -->
@@ -231,11 +232,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         approvalTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Loading records...</td></tr>';
 
-       const params = new URLSearchParams({ 
-        status: statusFilter.value,
-        state_id: $('#state_id').val() || '',
-        hq_id: $('#hq').val() || ''
-    });
+        const params = new URLSearchParams({ 
+            status: statusFilter.value,
+            state_id: $('#state_id').val() || '',
+            hq_id: $('#hq').val() || ''
+        });
 
         fetch(BASE_URL + 'payment/fetch_list?' + params.toString())
             .then(res => res.json())
@@ -258,7 +259,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 ? `<a href="${BASE_URL}../${p.screenshot_path}" target="_blank" class="btn btn-sm btn-info text-white"><i class="fa fa-image"></i> View</a>` 
                                 : '<span class="text-muted small">N/A</span>';
                     
-                    // NEW LOGIC: Dynamic Action Buttons based on status
+                    let paymentDate = (p.payment_date || p.created_at || '').split(' ')[0];
+                    let bankName = p.bank_name || p.bank || '';
+
                     let actions = '';
                     if (p.approval_status === 'pending') {
                         actions = `
@@ -271,7 +274,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <a class="dropdown-item text-primary btn-review" href="#" 
                                             data-id="${p.id}" data-stockist="${p.stockist_id}" 
                                             data-name="${p.stockist_name}" data-amount="${p.amount_paid}"
-                                            data-method="${p.payment_method}" data-ref="${p.bank_details}"
+                                            data-method="${p.payment_method}" data-ref="${p.bank_details || ''}"
+                                            data-bank="${bankName}" data-date="${paymentDate}"
                                             data-img="${p.screenshot_path}">
                                             <i class="fa fa-search me-2 pointer-events-none"></i> Review & Approve
                                         </a>
@@ -286,7 +290,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                         `;
                     } else if (p.approval_status === 'approved') {
-                        // Show VIEW button for approved payments
                         actions = `<button class="btn btn-info btn-sm text-white btn-view-allocation" data-id="${p.id}" data-stockist="${p.stockist_name}" data-amount="${p.amount_paid}"><i class="fa fa-eye"></i> View</button>`;
                     } else {
                         actions = '<span class="text-muted small fw-bold">Rejected</span>';
@@ -295,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return `
                         <tr>
                             <td class="text-center">${count++}</td>
-                            <td class="text-center">${p.created_at.split(' ')[0]}</td>
+                            <td class="text-center">${paymentDate}</td>
                             <td>${p.stockist_name || '<span class="text-muted">Unknown</span>'}</td>
                             <td class="text-end fw-bold text-success">₹${parseFloat(p.amount_paid).toFixed(2)}</td>
                             <td>${p.payment_method}<br><small class="text-muted">${p.bank_details || 'No Ref Provided'}</small></td>
@@ -371,12 +374,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // ==========================================
     $(document).on('click', '.btn-review', function(e) {
         e.preventDefault();
-        let btn = $(this);
-        
-        $('#revPaymentId').val(btn.data('id'));
+        let btn = $(this);$('#revPaymentId').val(btn.data('id'));
         $('#revStockist').text(btn.data('name'));
+        $('#revDate').text(btn.data('date') || 'N/A');
         $('#revAmount').text('₹' + parseFloat(btn.data('amount')).toFixed(2));
         $('#revMethod').text(btn.data('method'));
+        $('#revBank').text(btn.data('bank') || 'N/A');
         $('#revRef').text(btn.data('ref') || 'N/A');
         
         if (btn.data('img') && btn.data('img') !== 'null') {
@@ -443,7 +446,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         cdAmountDisplay = `<span class="text-muted">-₹0.00</span>`;
                     }
 
-                    // Combine for output
                     let cdStatusHtml = cdAmountDisplay + cdBadge;
 
                     let dateParts = b.inward_date.split('-');
@@ -494,7 +496,6 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('payment_id', paymentId);
         formData.append('action', action);
 
-        // Hide modal if open
         $('#reviewModal').modal('hide');
 
         fetch(BASE_URL + 'payment/process', { method: 'POST', body: formData })
@@ -520,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Reject Button (Directly from table dropdown)
     $(document).on('click', '.action-btn', function(e) {
         e.preventDefault();
-        processPaymentAction($(this).data('id'), $(this).data('act'));
+        processPaymentAction($(this).data('id'),$(this).data('act'));
     });
 
     // Filter Buttons & Dependencies
