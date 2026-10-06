@@ -365,21 +365,21 @@ class OrderModel
         ];
     }
 
-    public function processOrderApproval($data)
+   public function processOrderApproval($data)
     {
         try {
             $this->con->begin_transaction();
 
-            $current_date = date('Y-m-d');
+            $current_date     = date('Y-m-d');
             $current_datetime = date('Y-m-d H:i:s');
             
-            $order_id = (int)$data['order_id'];
-            $stockist_id = (int)$data['stockist_id'];
+            $order_id          = (int)$data['order_id'];
+            $stockist_id       = (int)$data['stockist_id'];
             $super_stockist_id = (int)$data['super_stockist_id'];
             
-            $exact_grand_total = (float)$data['grand_total']; 
+            $exact_grand_total  = (float)$data['grand_total']; 
             $rounded_net_amount = round($exact_grand_total);
-            $round_off = (float)($data['round_off'] ?? 0); 
+            $round_off          = (float)($data['round_off'] ?? 0); 
             
             $approved_qtys = $data['approved_qty'] ?? [];
             $product_ids   = $data['product_id'] ?? [];
@@ -392,42 +392,43 @@ class OrderModel
             $amounts       = $data['amount'] ?? [];
             $detail_ids    = $data['detail_id'] ?? [];
 
-            $lr_no = $data['lr_no'] ?? '';
-            $eway_bill_no = $data['eway_bill_no'] ?? '';
-            $vehicle_no = $data['vehicle_no'] ?? '';
-            $transport_name = $data['transport_name'] ?? '';
-            $credit_days = (int)($data['credit_days'] ?? 0);
-            $total_qty = (float)($data['total_qty'] ?? 0);
-            $cd_percent = (float)($data['cd_percent'] ?? 0);
-            $header_discount = (float)($data['header_discount'] ?? 0);
-            $gst_amt = (float)($data['gst_amt'] ?? 0);
-            $other_charges = (float)($data['other_charges'] ?? 0);
-            $cgst = (float)($data['cgst'] ?? 0);
-            $sgst = (float)($data['sgst'] ?? 0);
-            $igst = (float)($data['igst'] ?? 0);
-            $remarks = $data['remarks'] ?? '';
+            $lr_no            = $data['lr_no'] ?? '';
+            $eway_bill_no     = $data['eway_bill_no'] ?? '';
+            $vehicle_no       = $data['vehicle_no'] ?? '';
+            $transport_name   = $data['transport_name'] ?? '';
+            $credit_days      = (int)($data['credit_days'] ?? 0);
+            $total_qty        = (float)($data['total_qty'] ?? 0);
+            $cd_percent       = (float)($data['cd_percent'] ?? 0);
+            $header_discount  = (float)($data['header_discount'] ?? 0);
+            $gst_amt          = (float)($data['gst_amt'] ?? 0);
+            $other_charges    = (float)($data['other_charges'] ?? 0);
+            $cgst             = (float)($data['cgst'] ?? 0);
+            $sgst             = (float)($data['sgst'] ?? 0);
+            $igst             = (float)($data['igst'] ?? 0);
+            $remarks          = $data['remarks'] ?? '';
 
-           $sub_total = 0;
-            $total_business_value = 0; // 1. ADD THIS LINE
+            $sub_total            = 0;
+            $total_business_value = 0;
             
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
                     $qty = (int)$raw_qty;
                     if ($qty > 0) {
-                        $rate = (float)($rates[$key] ?? 0);
-                        $disc = (float)($discs[$key] ?? 0);
-                        $base = $qty * $rate;
-                        $first_disc = $base - ($base * ($disc / 100)); // This is your business value per item
+                        $rate       = (float)($rates[$key] ?? 0);
+                        $disc       = (float)($discs[$key] ?? 0);
+                        $base       = $qty * $rate;
+                        $first_disc = $base - ($base * ($disc / 100));
                         
-                        $total_business_value += $first_disc; // 2. ADD THIS LINE
+                        $total_business_value += $first_disc;
                         
-                        $taxable = $first_disc - ($first_disc * ($cd_percent / 100)); 
+                        $taxable    = $first_disc - ($first_disc * ($cd_percent / 100)); 
                         $sub_total += $taxable;
                     }
                 }
             }
 
-            $mr_id = 0;
+            // Fetch MR ID
+            $mr_id    = 0;
             $mr_query = $this->con->prepare("SELECT mr_id FROM orders WHERE order_id = ?");
             $mr_query->bind_param("i", $order_id);
             $mr_query->execute();
@@ -437,52 +438,51 @@ class OrderModel
             }
             $mr_query->close();
 
+            // Fetch Stockist Info
             $stockist_name = '';
-            $gst_no = '';
-            $st_query = $this->con->prepare("SELECT stockist_name, gst_no FROM stockists WHERE stockist_id = ?"); 
+            $gst_no        = '';
+            $st_query      = $this->con->prepare("SELECT stockist_name, gst_no FROM stockists WHERE stockist_id = ?"); 
             $st_query->bind_param("i", $stockist_id);
             $st_query->execute();
             $st_res = $st_query->get_result();
             if ($st_row = $st_res->fetch_assoc()) {
                 $stockist_name = $st_row['stockist_name'] ?? '';
-                $gst_no = $st_row['gst_no'] ?? '';
+                $gst_no        = $st_row['gst_no'] ?? '';
             }
             $st_query->close();
 
-            // ---------------------------------------------------------
-            // Generate official Invoice Number right before saving
-            // ---------------------------------------------------------
+            // 1. Generate official Invoice Number
             $invoiceData = $this->generateInvoiceNo($stockist_id);
-            $inward_no = $invoiceData['invoice_no'];
+            $inward_no   = $invoiceData['invoice_no'];
             
-            // Optionally, update the orders table with the newly generated final invoice number 
-            // replacing whatever draft number it had before.
+            // 2. Update orders table with approval status
             $stmt1 = $this->con->prepare("UPDATE orders SET status = 'Approved', total_amt = ?, round_off = ?, order_no = ? WHERE order_id = ?");
             $stmt1->bind_param("ddsi", $rounded_net_amount, $round_off, $inward_no, $order_id);
             $stmt1->execute();
             $stmt1->close();
             
             $admin_id = 1; 
-            $fy_id = 1;    
+            $fy_id    = 1;    
 
+            // 3. Insert into stock_inward (defaults to 'unpaid')
             $stmt2 = $this->con->prepare("
                 INSERT INTO stock_inward (
                     inward_no, super_stockist_id, stockist_id, stockist_name, gst_no, mr_id, order_id, 
                     lr_no, eway_bill_no, vehicle_no, transport_name, credit_days, 
                     admin_id, fy_id, inward_date, 
                     total_qty, sub_total, discount, gst_amount, other_charges, grand_total, round_off, 
-                    cgst_amount, sgst_amount, igst_amount, remarks, cd_percent, business_value
+                    cgst_amount, sgst_amount, igst_amount, remarks, cd_percent, business_value,
+                    paid_amt, pay_status
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, 
                     ?, ?, ?, ?, ?, 
                     ?, ?, ?, 
                     ?, ?, ?, ?, ?, ?, ?, 
-                    ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?,
+                    0.00, 'unpaid'
                 )
             ");
             
-            // Note: Added 'd' at the end of the string for the new decimal value, 
-            // and added $total_business_value at the end of the variables.
             $stmt2->bind_param(
                 "siissiissssiiisddddddddddsdd", 
                 $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
@@ -493,16 +493,17 @@ class OrderModel
             );
 
             $stmt2->execute();
-            $inward_id = $this->con->insert_id;
+            $inward_id = (int)$this->con->insert_id;
             $stmt2->close();
 
+            // 4. Record bill creation in payment_ledgers
             $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ? AND ledger_type = 'debt'");
             $check_ledger->bind_param("i", $inward_id);
             $check_ledger->execute();
             $res_ledger = $check_ledger->get_result();
             
             if ($row_ledger = $res_ledger->fetch_assoc()) {
-                $ledger_id = $row_ledger['id'];
+                $ledger_id  = $row_ledger['id'];
                 $upd_ledger = $this->con->prepare("UPDATE payment_ledgers SET amount = ? WHERE id = ?");
                 $upd_ledger->bind_param("di", $rounded_net_amount, $ledger_id);
                 $upd_ledger->execute();
@@ -515,10 +516,66 @@ class OrderModel
             }
             $check_ledger->close();
 
-           // ADDED `disc` and `tax` to the UPDATE query
-            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, discount = ?, gst = ?, amt = ?, net_total = ? WHERE detail_id = ?");
+            // -----------------------------------------------------------------
+            // 5. AUTO-DEDUCT AVAILABLE ADVANCE AGAINST THIS BILL
+            // -----------------------------------------------------------------
+            $pending_on_bill       = (float)$rounded_net_amount;
+            $total_advance_settled = 0.00;
 
-            // ADDED `disc` and `tax` to the INSERT query
+            if ($pending_on_bill > 0) {
+                $stmtAdv = $this->con->prepare("
+                    SELECT 
+                        pl.id AS ledger_id,
+                        pl.amount,
+                        COALESCE(SUM(pa.amount_allocated), 0) AS used_amount,
+                        (pl.amount - COALESCE(SUM(pa.amount_allocated), 0)) AS available_advance
+                    FROM payment_ledgers pl
+                    LEFT JOIN payment_allocations pa ON pa.ledger_id = pl.id
+                    WHERE pl.stockist_id = ? 
+                    AND (
+                        (pl.transaction_type = 'opening_balance' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease'))
+                        OR (pl.transaction_type = 'payment_made' AND (pl.reference_id = 0 OR pl.reference_id IS NULL))
+                    )
+                    GROUP BY pl.id
+                    HAVING available_advance > 0
+                    ORDER BY pl.created_at ASC, pl.id ASC
+                ");
+                $stmtAdv->bind_param("i", $stockist_id);
+                $stmtAdv->execute();
+                $advRes = $stmtAdv->get_result();
+
+                while ($pending_on_bill > 0 && ($advRow = $advRes->fetch_assoc())) {
+                    $adv_ledger_id     = (int)$advRow['ledger_id'];
+                    $available_advance = (float)$advRow['available_advance'];
+
+                    $settle_amount = min($available_advance, $pending_on_bill);
+
+                    if ($settle_amount > 0) {
+                        $stmtAlloc = $this->con->prepare("
+                            INSERT INTO payment_allocations (ledger_id, inward_id, amount_allocated) 
+                            VALUES (?, ?, ?)
+                        ");
+                        $stmtAlloc->bind_param("iid", $adv_ledger_id, $inward_id, $settle_amount);
+                        $stmtAlloc->execute();
+                        $stmtAlloc->close();
+
+                        $total_advance_settled += $settle_amount;
+                        $pending_on_bill       -= $settle_amount;
+                    }
+                }
+                $stmtAdv->close();
+
+                if ($total_advance_settled > 0) {
+                    $final_status = ($total_advance_settled >= $rounded_net_amount) ? 'paid' : 'partial';
+                    $stmtUpdateBill = $this->con->prepare("UPDATE stock_inward SET paid_amt = ?, pay_status = ? WHERE inward_id = ?");
+                    $stmtUpdateBill->bind_param("dsi", $total_advance_settled, $final_status, $inward_id);
+                    $stmtUpdateBill->execute();
+                    $stmtUpdateBill->close();
+                }
+            }
+
+            // 6. Process Items and Stock Ledgers
+            $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, discount = ?, gst = ?, amt = ?, net_total = ? WHERE detail_id = ?");
             $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, discount, gst, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt_inward_det  = $this->con->prepare("
                 INSERT INTO stock_inward_details 
@@ -526,8 +583,8 @@ class OrderModel
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_out = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
 
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -555,12 +612,10 @@ class OrderModel
                     $net_total        = $amt + $gst_amount_item;
                     $qty_float        = (float)$qty; 
 
-                   if (!empty($detail_id)) {
-                        // Added $discount_percent and $gst_percent (2 new 'd's)
+                    if (!empty($detail_id)) {
                         $stmt_update_item->bind_param("iidddddi", $qty, $batch_id, $rate, $discount_percent, $gst_percent, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
                     } else {
-                        // Added $discount_percent and $gst_percent (2 new 'd's)
                         $stmt_insert_item->bind_param("iiiiiddddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $discount_percent, $gst_percent, $amt, $net_total);
                         $stmt_insert_item->execute();
                     }
@@ -583,30 +638,35 @@ class OrderModel
             $stmt_ledger_in->close();
 
             $this->con->commit();
-            return ['success' => true, 'msg' => 'Order approved and stock updated successfully.', 'inward_no' => $inward_no];
+            return [
+                'success'          => true, 
+                'msg'              => 'Order approved and stock updated successfully.', 
+                'inward_no'        => $inward_no,
+                'advance_deducted' => $total_advance_settled
+            ];
 
         } catch (Exception $e) {
             $this->con->rollback();
             return ['success' => false, 'msg' => 'Database error: ' . $e->getMessage()];
         }
     }
-    
+
     public function updateApprovedOrder($data)
     {
         try {
             $this->con->begin_transaction();
 
-            $current_date = date('Y-m-d');
+            $current_date     = date('Y-m-d');
             $current_datetime = date('Y-m-d H:i:s');
 
-            $order_id = (int)$data['order_id'];
-            $stockist_id = (int)$data['stockist_id'];
+            $order_id          = (int)$data['order_id'];
+            $stockist_id       = (int)$data['stockist_id'];
             $super_stockist_id = (int)$data['super_stockist_id'];
             
-            $exact_grand_total = (float)$data['grand_total'];
+            $exact_grand_total  = (float)$data['grand_total'];
             $rounded_net_amount = round($exact_grand_total); 
-            $round_off = (float)($data['round_off'] ?? 0); 
-            $admin_id = 1;
+            $round_off          = (float)($data['round_off'] ?? 0); 
+            $admin_id           = 1;
 
             $approved_qtys = $data['approved_qty'] ?? [];
             $product_ids   = $data['product_id'] ?? [];
@@ -619,20 +679,20 @@ class OrderModel
             $amounts       = $data['amount'] ?? [];
             $detail_ids    = $data['detail_id'] ?? [];
 
-            $lr_no = $data['lr_no'] ?? '';
-            $eway_bill_no = $data['eway_bill_no'] ?? ''; 
-            $vehicle_no = $data['vehicle_no'] ?? '';
-            $transport_name = $data['transport_name'] ?? '';
-            $credit_days = (int)($data['credit_days'] ?? 0);
-            $total_qty = (float)($data['total_qty'] ?? 0);
-            $cd_percent = (float)($data['cd_percent'] ?? 0);
+            $lr_no           = $data['lr_no'] ?? '';
+            $eway_bill_no    = $data['eway_bill_no'] ?? ''; 
+            $vehicle_no      = $data['vehicle_no'] ?? '';
+            $transport_name  = $data['transport_name'] ?? '';
+            $credit_days     = (int)($data['credit_days'] ?? 0);
+            $total_qty       = (float)($data['total_qty'] ?? 0);
+            $cd_percent      = (float)($data['cd_percent'] ?? 0);
             $header_discount = (float)($data['header_discount'] ?? 0);
-            $gst_amt = (float)($data['gst_amt'] ?? 0);
-            $other_charges = (float)($data['other_charges'] ?? 0);
-            $cgst_amount = (float)($data['cgst'] ?? 0);
-            $sgst_amount = (float)($data['sgst'] ?? 0);
-            $igst_amount = (float)($data['igst'] ?? 0);
-            $remarks = $data['remarks'] ?? '';
+            $gst_amt         = (float)($data['gst_amt'] ?? 0);
+            $other_charges   = (float)($data['other_charges'] ?? 0);
+            $cgst_amount     = (float)($data['cgst'] ?? 0);
+            $sgst_amount     = (float)($data['sgst'] ?? 0);
+            $igst_amount     = (float)($data['igst'] ?? 0);
+            $remarks         = $data['remarks'] ?? '';
 
             $inward_id = 0;
             $stmt_inw = $this->con->prepare("SELECT inward_id FROM stock_inward WHERE order_id = ?");
@@ -644,6 +704,7 @@ class OrderModel
             }
             $stmt_inw->close();
 
+            // 1. Delete previous stock ledger and detail records
             $stmt_del_ledger = $this->con->prepare("DELETE FROM stock_ledger WHERE reference_table = 'stock_inward' AND reference_id = ?");
             $stmt_del_ledger->bind_param("i", $inward_id);
             $stmt_del_ledger->execute();
@@ -654,6 +715,14 @@ class OrderModel
             $stmt_del_inw_det->execute();
             $stmt_del_inw_det->close();
 
+            // 2. Clear previous advance allocations on this bill to release credit back
+            if ($inward_id > 0) {
+                $stmt_del_alloc = $this->con->prepare("DELETE FROM payment_allocations WHERE inward_id = ?");
+                $stmt_del_alloc->bind_param("i", $inward_id);
+                $stmt_del_alloc->execute();
+                $stmt_del_alloc->close();
+            }
+
             $kept_detail_ids = array_filter($detail_ids);
             if (!empty($kept_detail_ids)) {
                 $id_list = implode(',', array_map('intval', $kept_detail_ids));
@@ -661,21 +730,22 @@ class OrderModel
             } else {
                 $this->con->query("DELETE FROM order_details WHERE order_id = $order_id");
             }
-            $sub_total = 0;
-            $total_business_value = 0; // NEW: Initialize business value tracker
+
+            $sub_total            = 0;
+            $total_business_value = 0; 
             
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
                     $qty = (int)$raw_qty;
                     if ($qty > 0) {
-                        $rate = (float)($rates[$key] ?? 0);
-                        $disc = (float)($discs[$key] ?? 0);
-                        $base = $qty * $rate;
-                        $first_disc = $base - ($base * ($disc / 100)); // (rate * qty) - discount %
+                        $rate       = (float)($rates[$key] ?? 0);
+                        $disc       = (float)($discs[$key] ?? 0);
+                        $base       = $qty * $rate;
+                        $first_disc = $base - ($base * ($disc / 100));
                         
-                        $total_business_value += $first_disc; // NEW: Accumulate business value
+                        $total_business_value += $first_disc;
                         
-                        $taxable = $first_disc - ($first_disc * ($cd_percent / 100));
+                        $taxable    = $first_disc - ($first_disc * ($cd_percent / 100));
                         $sub_total += $taxable;
                     }
                 }
@@ -686,16 +756,15 @@ class OrderModel
             $stmt1->execute();
             $stmt1->close();
 
-            // NEW: Added business_value=? to the SET clause
+            // 3. Update stock_inward record
             $stmt2 = $this->con->prepare("
                 UPDATE stock_inward SET 
-                lr_no=?, eway_bill_no=?, vehicle_no=?, transport_name=?, credit_days=?, 
-                total_qty=?, sub_total=?, discount=?, gst_amount=?, other_charges=?, 
-                grand_total=?, round_off=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?, business_value=?
+                    lr_no=?, eway_bill_no=?, vehicle_no=?, transport_name=?, credit_days=?, 
+                    total_qty=?, sub_total=?, discount=?, gst_amount=?, other_charges=?, 
+                    grand_total=?, round_off=?, cgst_amount=?, sgst_amount=?, igst_amount=?, remarks=?, cd_percent=?, business_value=?
                 WHERE order_id=?
             ");
             
-            // NEW: Added 'd' to the bind_param string and inserted $total_business_value before $order_id
             $stmt2->bind_param("ssssiddddddddddsddi", 
                 $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
                 $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, 
@@ -705,6 +774,7 @@ class OrderModel
             $stmt2->execute();
             $stmt2->close();
 
+            // 4. Update the bill_added ledger entry
             if ($inward_id > 0) {
                 $check_ledger = $this->con->prepare("SELECT id FROM payment_ledgers WHERE transaction_type = 'bill_added' AND reference_id = ? AND ledger_type = 'debt'");
                 $check_ledger->bind_param("i", $inward_id);
@@ -712,7 +782,7 @@ class OrderModel
                 $res_ledger = $check_ledger->get_result();
                 
                 if ($row_ledger = $res_ledger->fetch_assoc()) {
-                    $ledger_id = $row_ledger['id'];
+                    $ledger_id  = $row_ledger['id'];
                     $upd_ledger = $this->con->prepare("UPDATE payment_ledgers SET amount = ? WHERE id = ?");
                     $upd_ledger->bind_param("di", $rounded_net_amount, $ledger_id);
                     $upd_ledger->execute();
@@ -724,12 +794,69 @@ class OrderModel
                     $ins_ledger->close();
                 }
                 $check_ledger->close();
+
+                // -------------------------------------------------------------
+                // 5. RE-EVALUATE AND ALLOCATE ADVANCE MONEY
+                // -------------------------------------------------------------
+                $pending_on_bill       = (float)$rounded_net_amount;
+                $total_advance_settled = 0.00;
+
+                if ($pending_on_bill > 0) {
+                    $stmtAdv = $this->con->prepare("
+                        SELECT 
+                            pl.id AS ledger_id,
+                            pl.amount,
+                            COALESCE(SUM(pa.amount_allocated), 0) AS used_amount,
+                            (pl.amount - COALESCE(SUM(pa.amount_allocated), 0)) AS available_advance
+                        FROM payment_ledgers pl
+                        LEFT JOIN payment_allocations pa ON pa.ledger_id = pl.id
+                        WHERE pl.stockist_id = ? 
+                        AND (
+                            (pl.transaction_type = 'opening_balance' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease'))
+                            OR (pl.transaction_type = 'payment_made' AND (pl.reference_id = 0 OR pl.reference_id IS NULL))
+                        )
+                        GROUP BY pl.id
+                        HAVING available_advance > 0
+                        ORDER BY pl.created_at ASC, pl.id ASC
+                    ");
+                    $stmtAdv->bind_param("i", $stockist_id);
+                    $stmtAdv->execute();
+                    $advRes = $stmtAdv->get_result();
+
+                    while ($pending_on_bill > 0 && ($advRow = $advRes->fetch_assoc())) {
+                        $adv_ledger_id     = (int)$advRow['ledger_id'];
+                        $available_advance = (float)$advRow['available_advance'];
+
+                        $settle_amount = min($available_advance, $pending_on_bill);
+
+                        if ($settle_amount > 0) {
+                            $stmtAlloc = $this->con->prepare("
+                                INSERT INTO payment_allocations (ledger_id, inward_id, amount_allocated) 
+                                VALUES (?, ?, ?)
+                            ");
+                            $stmtAlloc->bind_param("iid", $adv_ledger_id, $inward_id, $settle_amount);
+                            $stmtAlloc->execute();
+                            $stmtAlloc->close();
+
+                            $total_advance_settled += $settle_amount;
+                            $pending_on_bill       -= $settle_amount;
+                        }
+                    }
+                    $stmtAdv->close();
+                }
+
+                $final_status = ($total_advance_settled >= $rounded_net_amount && $rounded_net_amount > 0) 
+                                ? 'paid' 
+                                : (($total_advance_settled > 0) ? 'partial' : 'unpaid');
+
+                $stmtUpdateBill = $this->con->prepare("UPDATE stock_inward SET paid_amt = ?, pay_status = ? WHERE inward_id = ?");
+                $stmtUpdateBill->bind_param("dsi", $total_advance_settled, $final_status, $inward_id);
+                $stmtUpdateBill->execute();
+                $stmtUpdateBill->close();
             }
 
-           // Added `disc` and `tax` 
+            // 6. Update Items and Re-insert Stock Ledger entries
             $stmt_update_item = $this->con->prepare("UPDATE order_details SET approved_qty = ?, batch_id = ?, rate = ?, discount = ?, gst = ?, amt = ?, net_total = ? WHERE detail_id = ?");
-
-            // Added `disc` and `tax` 
             $stmt_insert_item = $this->con->prepare("INSERT INTO order_details (order_id, product_id, batch_id, qty, approved_qty, rate, discount, gst, amt, net_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt_inward_det  = $this->con->prepare("
                 INSERT INTO stock_inward_details 
@@ -737,8 +864,8 @@ class OrderModel
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            $stmt_ledger_out  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
-            $stmt_ledger_in   = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_out = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_out, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'Super-Stockist', ?, ?, ?, ?, 'SALE', ?, ?, ?, ?, 'stock_inward', ?)");
+            $stmt_ledger_in  = $this->con->prepare("INSERT INTO stock_ledger (trans_date, trans_datetime, stockist_type, stockist_id, admin_id, p_id, batch_id, trans_type, qty_in, qty, rate, amount, reference_table, reference_id) VALUES (?, ?, 'STOCKIST', ?, ?, ?, ?, 'INWARD', ?, ?, ?, ?, 'stock_inward', ?)");
 
             if (!empty($approved_qtys)) {
                 foreach ($approved_qtys as $key => $raw_qty) {
@@ -767,11 +894,9 @@ class OrderModel
                     $qty_float        = (float)$qty; 
 
                     if (!empty($detail_id)) {
-                        // Added $discount_percent and $gst_percent
                         $stmt_update_item->bind_param("iidddddi", $qty, $batch_id, $rate, $discount_percent, $gst_percent, $amt, $net_total, $detail_id);
                         $stmt_update_item->execute();
                     } else {
-                        // Added $discount_percent and $gst_percent
                         $stmt_insert_item->bind_param("iiiiiddddd", $order_id, $product_id, $batch_id, $qty, $qty, $rate, $discount_percent, $gst_percent, $amt, $net_total);
                         $stmt_insert_item->execute();
                     }
@@ -794,7 +919,11 @@ class OrderModel
             $stmt_ledger_in->close();
 
             $this->con->commit();
-            return ['success' => true];
+            return [
+                'success'          => true, 
+                'inward_id'        => $inward_id,
+                'advance_deducted' => $total_advance_settled
+            ];
 
         } catch (Exception $e) {
             $this->con->rollback();

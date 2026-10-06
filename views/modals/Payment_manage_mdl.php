@@ -360,7 +360,7 @@ class Payment_model {
     // ==========================================
     // Fetch Outstanding and Eligible Cash Discount
     // ==========================================
-   public function getStockistOutstandingWithCD($stockist_id)
+  public function getStockistOutstandingWithCD($stockist_id)
     {
         $stockist_id = (int)$stockist_id;
 
@@ -404,11 +404,13 @@ class Payment_model {
         $ob_type   = strtolower($stockistData['opening_balance_type'] ?? 'debt');
         $ob_date   = !empty($stockistData['opening_balance_date']) ? $stockistData['opening_balance_date'] : date('Y-m-d');
         
-        $pending_ob_debt   = 0.00;
-        $remaining_advance = 0.00;
+        $pending_ob_debt    = 0.00;
+        $remaining_advance  = 0.00;
+        $total_used_advance = 0.00;
+        $total_orig_advance = 0.00;
 
-        if ($ob_amount > 0) {
-            // Query allocations made against the opening balance (where inward_id IS NULL)
+        // CASE A: Stockist has Pending DEBT Opening Balance
+        if ($ob_amount > 0 && $ob_type === 'debt') {
             $stmtOBPaid = $this->con->prepare("
                 SELECT COALESCE(SUM(pa.amount_allocated), 0) as allocated_ob 
                 FROM payment_allocations pa
@@ -421,15 +423,50 @@ class Payment_model {
             $obPaidRes = $stmtOBPaid->get_result()->fetch_assoc();
             $stmtOBPaid->close();
 
-            $allocated_ob = (float)($obPaidRes['allocated_ob'] ?? 0);
+            $allocated_ob    = (float)($obPaidRes['allocated_ob'] ?? 0);
+            $pending_ob_debt = max(0, round($ob_amount - $allocated_ob, 2));
+        }
 
-            if ($ob_type === 'debt') {
-                // Unpaid pending debt
-                $pending_ob_debt = max(0, round($ob_amount - $allocated_ob, 2));
-            } elseif ($ob_type === 'credit') {
-                // Unutilized advance credit
-                $remaining_advance = max(0, round($ob_amount - $allocated_ob, 2));
-            }
+        // CASE B: Stockist has ADVANCE Credit (Opening Balance and/or Advance Payments)
+        // Tracks total advance credit and how much has been consumed by bills
+        $stmtAdv = $this->con->prepare("
+            SELECT 
+                COALESCE(SUM(adv.available_advance), 0) AS total_remaining_advance,
+                COALESCE(SUM(adv.amount), 0) AS total_original_advance,
+                COALESCE(SUM(adv.used_amount), 0) AS total_used_advance
+            FROM (
+                SELECT 
+                    pl.id,
+                    pl.amount,
+                    COALESCE(SUM(pa.amount_allocated), 0) AS used_amount,
+                    CASE 
+                        WHEN pl.amount > COALESCE(SUM(pa.amount_allocated), 0) 
+                        THEN (pl.amount - COALESCE(SUM(pa.amount_allocated), 0)) 
+                        ELSE 0 
+                    END AS available_advance
+                FROM payment_ledgers pl
+                LEFT JOIN payment_allocations pa ON pa.ledger_id = pl.id
+                WHERE pl.stockist_id = ? 
+                AND (
+                    (pl.transaction_type = 'opening_balance' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease'))
+                    OR (pl.transaction_type = 'payment_made' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease') AND (pl.reference_id = 0 OR pl.reference_id IS NULL))
+                )
+                GROUP BY pl.id
+            ) AS adv
+        ");
+        $stmtAdv->bind_param("i", $stockist_id);
+        $stmtAdv->execute();
+        $advData = $stmtAdv->get_result()->fetch_assoc();
+        $stmtAdv->close();
+
+        $remaining_advance  = (float)($advData['total_remaining_advance'] ?? 0.00);
+        $total_used_advance = (float)($advData['total_used_advance'] ?? 0.00);
+        $total_orig_advance = (float)($advData['total_original_advance'] ?? 0.00);
+
+        // Fallback if ledger row is not yet created but stockist row has credit opening balance
+        if ($total_orig_advance <= 0 && $ob_type === 'credit' && $ob_amount > 0) {
+            $total_orig_advance = $ob_amount;
+            $remaining_advance  = $ob_amount;
         }
 
         /*
@@ -452,7 +489,7 @@ class Payment_model {
         $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
 
         /*
-        * 4. Get unpaid bills
+        * 4. Get unpaid / partially paid bills (bills fully cleared by advance will NOT appear here)
         */
         $stmt = $this->con->prepare("
             SELECT 
@@ -543,18 +580,18 @@ class Payment_model {
             ];
         }
 
-        // Prepend Opening Balance if active advance credit exists (deducts from outstanding)
+        // Prepend Opening Balance if active advance credit is still remaining
         if ($remaining_advance > 0) {
             $total_pending -= $remaining_advance;
             $bills[] = [
                 'inward_id'          => 0,
                 'inward_no'          => 'OPENING-BAL (ADVANCE)',
                 'inward_date'        => $ob_date,
-                'gross_amount'       => $ob_amount,
-                'sub_total'          => $ob_amount,
+                'gross_amount'       => $total_orig_advance,
+                'sub_total'          => $total_orig_advance,
                 'cd_percent'         => 0,
-                'paid_amt'           => ($ob_amount - $remaining_advance),
-                'pending_amount'     => -$remaining_advance, // negative indicates advance credit
+                'paid_amt'           => $total_used_advance,       // Shows how much advance was adjusted into bills
+                'pending_amount'     => -$remaining_advance,      // Remaining unused credit balance
                 'bill_age_days'      => 0,
                 'eligible_4_cd'      => 0,
                 'eligible_2_cd'      => 0,
@@ -590,7 +627,7 @@ class Payment_model {
             'bill_details'      => $bills
         ];
     }
-
+    
      public function getSuperStockistIdByMr($mr_id)
     {
         $mr_id = (int)$mr_id;
