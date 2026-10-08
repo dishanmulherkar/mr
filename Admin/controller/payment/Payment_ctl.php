@@ -314,44 +314,88 @@ public function get_payment_allocations() {
     }
 
     public function asm_pay_ledger()
-{
-    $asm_id = $_SESSION['admin_id'];
-    $hq = $this->model->getHQbyAsm($asm_id);
-    
-    // Get filter inputs from URL
-    $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
-    $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
-    $start_date  = $_GET['start_date'] ?? '';
-    $end_date    = $_GET['end_date'] ?? '';
-    
-    $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
-    $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
-
-    $isEdit = false;
-    $order_data = ['stockist_id' => ''];
-    $hq_name = '';
-    $stockist_name = '';
-    $query = null;
-    $opening_balance = 0;
-    
-    // Initialize empty array to prevent errors
-    $stockists = []; 
-
-    // REQUIRED: Fetch the stockists for the selected HQ so the dropdown populates
-    if ($hq_id > 0) {
-        // NOTE: Replace 'getStockistsByHq' with your actual model method for fetching stockists by HQ ID
-        $stockists = $this->model->getStockistsByHq($hq_id); 
-    }
-
-    if ($stockist_id > 0) {
-        // Get opening balance calculated before the start date
-        $opening_balance = $this->model->getOpeningBalance($stockist_id, $from_date);
+    {
+        $asm_id = $_SESSION['admin_id'];
+        $hq = $this->model->getHQbyAsm($asm_id);
         
-        // Get the actual ledger rows for the date range
-        $query = $this->model->getReport($stockist_id, $from_date, $to_date);
+        // Get filter inputs from URL
+        $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
+        $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+        $start_date  = $_GET['start_date'] ?? '';
+        $end_date    = $_GET['end_date'] ?? '';
+        
+        $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
+        $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
+
+        $isEdit = false;
+        $order_data = ['stockist_id' => ''];
+        $hq_name = '';
+        $stockist_name = '';
+        $query = null;
+        $opening_balance = 0;
+        
+        // Initialize empty array to prevent errors
+        $stockists = []; 
+
+        // REQUIRED: Fetch the stockists for the selected HQ so the dropdown populates
+        if ($hq_id > 0) {
+            // NOTE: Replace 'getStockistsByHq' with your actual model method for fetching stockists by HQ ID
+            $stockists = $this->model->getStockistsByHq($hq_id); 
+        }
+
+        if ($stockist_id > 0) {
+            // Get opening balance calculated before the start date
+            $opening_balance = $this->model->getOpeningBalance($stockist_id, $from_date);
+            
+            // Get the actual ledger rows for the date range
+            $query = $this->model->getReport($stockist_id, $from_date, $to_date);
+        }
+        
+        include 'view/Asm/report/payment_ledger.php';
     }
-    
-    include 'view/Asm/report/payment_ledger.php';
+
+     // Load Payment Entry View
+    public function manual_entry() {
+        if (!isset($_SESSION['admin_id'])) {
+            header('Location: index');
+            exit;
+        }
+        $states = $this->model->getStates();
+        $current_page = 'Payment Entry';
+
+        // Check if we are in Edit/Reverse mode
+        $edit_id = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
+        $edit_data = null;
+        if ($edit_id > 0) {
+            $edit_data = $this->model->getPaymentById($edit_id);
+        }
+
+        include 'view/payment/manual_pay_entry.php';
+    }
+
+
+      public function submit_manual_pay_entry() {
+        header('Content-Type: application/json');
+        
+        if (!isset($_SESSION['admin_id'])) {
+            echo json_encode(['success' => false, 'msg' => 'Unauthorized']);
+            exit;
+        }
+
+        $admin_id = $_SESSION['admin_id'];
+        $data = $_POST;
+        
+        // FIX: Check if EITHER asm_id OR mr_id exists
+        $has_valid_user_id = !empty($data['mr_id']);
+        
+        if (!$has_valid_user_id  ||  empty($data['amount'])) {
+            echo json_encode(['success' => false, 'msg' => 'Please fill in all required fields.']);
+            exit;
+        }
+
+        $result = $this->model->submitManualPayEntry($data, $admin_id);
+        echo json_encode($result);
+        exit;
 }
 
 

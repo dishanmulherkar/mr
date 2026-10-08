@@ -216,32 +216,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
 
-                // 2. Adjustments (CD, DRC, MRC, ASM)
                 // 2. Adjustments (DRC, MRC, ASM Commissions & Cash Discounts)
                 if (res.adjustments && res.adjustments.length > 0) {
                     res.adjustments.forEach(adj => {
                         let label = 'Commission';
-                        let badgeBg = '#64748b'; // default slate gray
+                        let badgeBg = '#64748b';
                         let badgeColor = '#ffffff';
                         let txType = (adj.transaction_type || '').toLowerCase();
                         let notesText = adj.notes || '';
 
-                        // Check Transaction Type first, then inspect notes as fallback
                         if (txType === 'drc_settlement' || notesText.toLowerCase().includes('drc')) {
                             label = 'DRC Commission';
-                            badgeBg = '#7c3aed'; // Purple
+                            badgeBg = '#7c3aed';
                             badgeColor = '#ffffff';
                         } else if (txType === 'mrc_settlement' || notesText.toLowerCase().includes('mrc')) {
                             label = 'MRC Commission';
-                            badgeBg = '#0284c7'; // Sky Blue
+                            badgeBg = '#0284c7';
                             badgeColor = '#ffffff';
                         } else if (txType === 'asm_settlement' || notesText.toLowerCase().includes('asm')) {
                             label = 'ASM Commission';
-                            badgeBg = '#0f172a'; // Dark Navy
+                            badgeBg = '#0f172a';
                             badgeColor = '#ffffff';
                         } else if (notesText.includes('CD') || txType === 'settled_to_bill') {
                             label = 'Cash Discount';
-                            badgeBg = '#d97706'; // Amber / Gold
+                            badgeBg = '#d97706';
                             badgeColor = '#ffffff';
                         }
 
@@ -286,6 +284,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         payments.forEach(p => {
+            // 1. Resolve paymentId checking pay_id first (common in your queries)
+            let paymentId = p.pay_id || p.id || p.payment_id || p.reference_no || 0;
+
             let filterVal = statusFilter.value.toLowerCase();
             let recordStatus = p.status ? p.status.toLowerCase() : 'pending';
 
@@ -301,6 +302,11 @@ document.addEventListener('DOMContentLoaded', function() {
             let actionBtn = p.proof_image 
                 ? `<button type="button" class="view-proof-btn" data-img="${BASE_URL}../${p.proof_image}" style="background-color: #17a2b8; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;"><i class="fa fa-eye"></i> View Proof</button>` 
                 : `<span style="color:#aaa; font-size:13px;">No Proof</span>`;
+
+            // Only render delete button for pending payments
+            let deleteBtn = (recordStatus === 'pending') 
+                ? `<button type="button" class="btn-delete-payment" data-id="${paymentId}" style="background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; margin-left: 8px;"><i class="fa fa-trash"></i> Delete</button>` 
+                : '';
 
             let card = document.createElement('div');
             card.className = 'payment-card';
@@ -327,13 +333,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         <strong style="color: #28a745;">₹${parseFloat(p.amount).toFixed(2)}</strong>
                     </div>
                 </div>
-                <div class="card-footer">
-                    ${actionBtn}
+                <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>${actionBtn}</div>
+                    <div>${deleteBtn}</div>
                 </div>
             `;
             cardContainer.appendChild(card);
         });
 
+        // View Proof Listener
         document.querySelectorAll('.view-proof-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const imgSrc = this.getAttribute('data-img');
@@ -343,6 +351,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         });
+
+        // Delete Pending Payment Listener
+        // Attach Delete Listener
+   // Delegate click event to the container for dynamically created buttons
+cardContainer.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-delete-payment');
+    if (!btn) return; // Exit if the click was not on a delete button
+
+    const paymentId = btn.getAttribute('data-id');
+    console.log('Delete button clicked for payment ID:', paymentId);
+
+    if (!paymentId || paymentId === '0') {
+        alert('Invalid payment ID.');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to delete this pending payment?')) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('id', paymentId);
+
+    // If your project routes via query params (e.g. index.php?route=payment&action=delete), adjust URL accordingly
+    const targetUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + 'payment/delete';
+
+    fetch(targetUrl, {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('HTTP status ' + res.status);
+        return res.json();
+    })
+    .then(res => {
+        if (res.success) {
+            fetchPayments(); // Refresh list after deletion
+        } else {
+            alert(res.msg || 'Failed to delete payment.');
+        }
+    })
+    .catch(err => {
+        console.error('Delete error:', err);
+        alert('Server error occurred while deleting payment.');
+    });
+});
 
         if(count === 0) {
             cardContainer.innerHTML = '<div class="empty-state">No matching payments found.</div>';

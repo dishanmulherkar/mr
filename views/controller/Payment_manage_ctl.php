@@ -159,5 +159,27 @@ public function get_bill_breakdown() {
         exit;
     }
 }
+
+public function delete()
+{
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['success' => false, 'msg' => 'Invalid request method.']);
+        exit;
+    }
+
+    $payment_id = (int)($_POST['id'] ?? 0);
+
+    if ($payment_id <= 0) {
+        echo json_encode(['success' => false, 'msg' => 'Invalid payment ID.']);
+        exit;
+    }
+
+    $result = $this->model->deletePendingPayment($payment_id);
+
+    echo json_encode($result);
+    exit;
+}
 }
 ?>

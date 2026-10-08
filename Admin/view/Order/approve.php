@@ -83,7 +83,7 @@ if ($ROW['status'] !== 'Processed'){ ?>
 
     <!-- Pending Debt -->
     <div class="col-md-2 col-6 text-center border-end">
-        <small class="text-muted d-block">Pending Debt</small>
+        <small class="text-muted d-block">Pending Debt (HQ)</small>
         <span class="fs-5 fw-bold text-secondary">₹<?= number_format($pending_debt, 2); ?></span>
     </div>
 
@@ -94,12 +94,12 @@ if ($ROW['status'] !== 'Processed'){ ?>
     </div>
 
     <!-- Available Capacity Before Current Bill -->
-    <div class="col-md-3 col-6 text-center border-end">
+    <!-- <div class="col-md-3 col-6 text-center border-end">
         <small class="text-muted d-block">Available Capacity</small>
         <span class="fs-5 fw-bold <?= $available_to_bill <= 0 ? 'text-danger' : 'text-success'; ?>">
             ₹<?= number_format($available_to_bill, 2); ?>
         </span>
-    </div>
+    </div> -->
 
     <!-- Live Decision Badge (Recalculates Live) -->
     <div class="col-md-3 col-12 text-center" id="credit_decision_box">
@@ -810,21 +810,31 @@ $(document).ready(function(){
         calculateTotals();
     });
 
-    $(document).on('click', '.remove-row', function(){
-        if(confirm('Remove this item from the order?')) {
-            let removedBatchId = $(this).closest('tr').find('.batch-select').val();
-            $(this).closest('tr').remove();
-            
-            // Re-validate remaining rows that might share the same batch to free up stock
-            if(removedBatchId) {
-                 $('.order-table tbody tr:not(.entry-row)').each(function() {
-                     if($(this).find('.batch-select').val() == removedBatchId) {
-                         $(this).find('.approved_qty').trigger('input');
-                     }
-                 });
-            }
-            calculateTotals();
+    $(document).on('click', '.remove-row', function () {
+        if (!confirm('Remove this item from the order?')) return;
+
+        const $row = $(this).closest('tr');
+        const detailId = $row.find('input[name="detail_id[]"]').val();
+        const removedBatchId = $row.find('.batch-select').val();
+
+        // Remember saved rows (not newly added ones) so the server can delete them
+        if (detailId) {
+            $('#orderApprovalForm').append(
+                `<input type="hidden" name="deleted_detail_id[]" value="${detailId}">`
+            );
         }
+
+        $row.remove();
+        hasUnsavedChanges = true;
+
+        if (removedBatchId) {
+            $('.order-table tbody tr:not(.entry-row)').each(function () {
+                if ($(this).find('.batch-select').val() == removedBatchId) {
+                    $(this).find('.approved_qty').trigger('input');
+                }
+            });
+        }
+        calculateTotals();
     });
 
     function updateRowAmount(row) {
@@ -844,140 +854,145 @@ $(document).ready(function(){
     }
 
     function calculateTotals() {
-        let totalQty = 0;
-        let totalBase = 0;
-        let totalDisc = 0;
-        let totalTax = 0;
+    let totalQty  = 0;
+    let totalBase = 0;
+    let totalDisc = 0;
+    let totalTax  = 0;
 
-        $('.order-table tbody tr:not(.entry-row)').each(function(){
-            let qty  = parseFloat($(this).find('.approved_qty').val()) || 0;
-            let rate = parseFloat($(this).find('.rate').val()) || 0;
-            let disc = parseFloat($(this).find('.disc').val()) || 0;
-            let tax  = parseFloat($(this).find('.tax').val()) || 0;
+    // 1. Loop through all item rows (excluding placeholder/entry rows)
+    $('.order-table tbody tr:not(.entry-row)').each(function() {
+        let qty  = parseFloat($(this).find('.approved_qty').val()) || 0;
+        let rate = parseFloat($(this).find('.rate').val()) || 0;
+        let disc = parseFloat($(this).find('.disc').val()) || 0;
+        let tax  = parseFloat($(this).find('.tax').val()) || 0;
 
-            let base    = qty * rate;
-            let discAmt = base * (disc / 100);
-            let taxable = base - discAmt;
-            let taxAmt  = taxable * (tax / 100);
+        let base    = qty * rate;
+        let discAmt = base * (disc / 100);
+        let taxable = base - discAmt;
+        let taxAmt  = taxable * (tax / 100);
 
-            totalQty  += qty;
-            totalBase += base;
-            totalDisc += discAmt;
-            totalTax  += taxAmt;
-        });
+        totalQty  += qty;
+        totalBase += base;
+        totalDisc += discAmt;
+        totalTax  += taxAmt;
+    });
 
-        let taxableAmount = totalBase - totalDisc;
-        let cdPercent = parseFloat($('#cd_percent').val()) || 0;
-        let cdAmount  = taxableAmount * (cdPercent / 100);
-        let netTaxable = taxableAmount - cdAmount;
+    // 2. Cash Discount (CD) Math
+    let taxableAmount = totalBase - totalDisc;
+    let cdPercent     = parseFloat($('#cd_percent').val()) || 0;
+    let cdAmount      = taxableAmount * (cdPercent / 100);
+    let netTaxable    = taxableAmount - cdAmount;
 
-        let cdTaxAmount = totalTax * (cdPercent / 100);
-        let netTax = totalTax - cdTaxAmount;
-        
-        let cgst = 0, sgst = 0, igst = 0, vat = 0;
+    let cdTaxAmount   = totalTax * (cdPercent / 100);
+    let netTax        = totalTax - cdTaxAmount;
+    
+    // 3. Tax Split (CGST/SGST/IGST/VAT)
+    let cgst = 0, sgst = 0, igst = 0, vat = 0;
+    let currentGstType = typeof gst_type !== 'undefined' ? gst_type : ($('#gst_type_input').val() || 'CGST_SGST');
 
-        $('#row_cgst').hide();
-        $('#row_sgst').hide();
-        $('#row_igst').hide();
-        $('#row_vat').hide();
+    $('#row_cgst, #row_sgst, #row_igst, #row_vat').hide();
 
-        switch (gst_type) {
-            case "CGST_SGST":
-                cgst = netTax / 2;
-                sgst = netTax / 2;
-                $('#row_cgst').show();
-                $('#row_sgst').show();
-                break;
-            case "IGST":
-                igst = netTax;
-                $('#row_igst').show();
-                break;
-            case "VAT":
-                vat = netTax;
-                $('#row_vat').show();
-                break;
-        }
-
-        $('#show_cgst').text('₹' + cgst.toFixed(2));
-        $('#show_sgst').text('₹' + sgst.toFixed(2));
-        $('#show_igst').text('₹' + igst.toFixed(2));
-        $('#show_vat').text('₹' + vat.toFixed(2));
-
-        let headerDiscount = parseFloat($('#discount').val()) || 0;
-        let otherCharges     = parseFloat($('#other_charges').val()) || 0;
-        let otherChargesSign = $('#other_charges_sign').val() === '-' ? -1 : 1;
-        let otherChargesSigned = otherCharges * otherChargesSign;
-
-        // 1. Calculate Exact Total
-        let exactTotal = netTaxable + netTax - headerDiscount + otherChargesSigned;
-        
-        // 2. Round off the Grand Total
-        let grandTotal = Math.round(exactTotal);
-        
-        // 3. Calculate the difference for transparency
-        let roundOff = grandTotal - exactTotal;
-
-        $('#show_total_qty').text(totalQty);
-        $('#show_taxable').text('₹' + netTaxable.toFixed(2));
-        $('#show_gst').text('₹' + netTax.toFixed(2));
-        $('#show_discount').text('₹' + headerDiscount.toFixed(2));
-        $('#show_cd').text('₹' + cdAmount.toFixed(2));
-        $('#show_other').text('₹' + (otherChargesSign < 0 ? '-' : '') + otherCharges.toFixed(2));
-        
-        // Display round off and rounded grand total
-        $('#show_round_off').text((roundOff < 0 ? '- ₹' : '+ ₹') + Math.abs(roundOff).toFixed(2));
-        $('#show_grand_total').text('₹' + grandTotal.toFixed(2));
-
-        $('#total_qty').val(totalQty);
-        
-        // Update hidden inputs for DB Insertion
-        $('#grand_total').val(grandTotal.toFixed(2)); 
-        $('#round_off').val(roundOff.toFixed(2));
-        
-        $('#gst_type_input').val(gst_type);
-        
-        $('#input_gst_amt').val(netTax.toFixed(2));
-        $('#input_cgst').val(cgst.toFixed(2));
-        $('#input_sgst').val(sgst.toFixed(2));
-        $('#input_igst').val(igst.toFixed(2));
-        $('#input_vat').val(vat.toFixed(2));
-        // ============================================================
-        // LIVE MR CREDIT LIMIT CHECK (Runs dynamically with Grand Total)
-        // ============================================================
-        let creditLimit     = <?= json_encode((float)($credit_info['credit_limit'] ?? 0)); ?>;
-        let availableToBill = <?= json_encode((float)($credit_info['available_to_bill'] ?? 0)); ?>;
-
-        // 1. Update the live bill figure in the top strip
-        $('#credit_card_bill').text('₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-
-        // 2. Net Difference after subtracting the current dynamic invoice
-        let netDifference = availableToBill - grandTotal;
-        let decisionHtml  = '';
-
-        if (creditLimit > 0 && netDifference < 0) {
-            // EXCEEDED: Show exact exceeded amount, notify admin override is allowed
-            let exceededAmount = Math.abs(netDifference).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            
-            decisionHtml = `
-                <small class="text-danger fw-bold d-block">⚠️ Limit Exceeded By</small>
-                <span class="fs-5 fw-bold text-danger">₹${exceededAmount}</span>
-                <span class="badge bg-warning text-dark d-block mt-1" title="Credit limit exceeded, but administrative override is active">
-                    <i class="fa fa-info-circle"></i> ADMIN CAN STILL APPROVE
-                </span>
-            `;
-        } else {
-            // WITHIN LIMIT / SURPLUS
-            let surplusAmount = Math.max(0, netDifference).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            
-            decisionHtml = `
-                <small class="text-success fw-bold d-block">✓ Surplus / Advance</small>
-                <span class="fs-5 fw-bold text-success">₹${surplusAmount}</span>
-                <span class="badge bg-success d-block mt-1">SAFE TO APPROVE</span>
-            `;
-        }
-
-        $('#credit_decision_box').html(decisionHtml);
+    switch (currentGstType) {
+        case "CGST_SGST":
+            cgst = netTax / 2;
+            sgst = netTax / 2;
+            $('#row_cgst, #row_sgst').show();
+            break;
+        case "IGST":
+            igst = netTax;
+            $('#row_igst').show();
+            break;
+        case "VAT":
+            vat = netTax;
+            $('#row_vat').show();
+            break;
     }
+
+    $('#show_cgst').text('₹' + cgst.toFixed(2));
+    $('#show_sgst').text('₹' + sgst.toFixed(2));
+    $('#show_igst').text('₹' + igst.toFixed(2));
+    $('#show_vat').text('₹' + vat.toFixed(2));
+
+    // 4. Header Discounts and Additional Charges
+    let headerDiscount     = parseFloat($('#discount').val()) || 0;
+    let otherCharges       = parseFloat($('#other_charges').val()) || 0;
+    let otherChargesSign   = $('#other_charges_sign').val() === '-' ? -1 : 1;
+    let otherChargesSigned = otherCharges * otherChargesSign;
+
+    // 5. Grand Total & Clean Round-off
+    let exactTotal = netTaxable + netTax - headerDiscount + otherChargesSigned;
+    let grandTotal = Math.round(exactTotal);
+    let roundOff   = grandTotal - exactTotal;
+
+    // 6. Update UI Labels
+    $('#show_total_qty').text(totalQty);
+    $('#show_taxable').text('₹' + netTaxable.toFixed(2));
+    $('#show_gst').text('₹' + netTax.toFixed(2));
+    $('#show_cd').text('₹' + cdAmount.toFixed(2));
+    $('#show_discount').text('₹' + headerDiscount.toFixed(2));
+    $('#show_other').text('₹' + (otherChargesSign < 0 ? '-' : '') + otherCharges.toFixed(2));
+    
+    let roundOffText = (Math.abs(roundOff) < 0.005) ? '₹0.00' : ((roundOff < 0 ? '- ₹' : '+ ₹') + Math.abs(roundOff).toFixed(2));
+    $('#show_round_off').text(roundOffText);
+    $('#show_grand_total').text('₹' + grandTotal.toFixed(2));
+
+    // 7. Update Hidden Form Inputs
+    $('#total_qty').val(totalQty);
+    $('#sub_total').val(netTaxable.toFixed(2));
+    $('#grand_total').val(grandTotal.toFixed(2)); 
+    $('#round_off').val(roundOff.toFixed(2));
+    $('#gst_type_input').val(currentGstType);
+    $('#input_gst_amt').val(netTax.toFixed(2));
+    $('#input_cgst').val(cgst.toFixed(2));
+    $('#input_sgst').val(sgst.toFixed(2));
+    $('#input_igst').val(igst.toFixed(2));
+    $('#input_vat').val(vat.toFixed(2));
+
+    // ============================================================
+    // 8. LIVE MR CREDIT LIMIT CHECK
+    // ============================================================
+    let creditLimit  = <?= json_encode((float)($credit_info['credit_limit'] ?? 0)); ?>;
+    let existingDebt = <?= json_encode((float)($credit_info['pending_amount'] ?? 0)); ?>;
+
+    // Update dynamic bill display
+    $('#credit_card_bill').text('₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+    // Projected liability includes pre-existing debt plus the new bill
+    let totalProjectedDebt = existingDebt + grandTotal;
+    let netDifference      = creditLimit - totalProjectedDebt;
+    let decisionHtml       = '';
+
+    if (creditLimit > 0 && netDifference < 0) {
+        // EXCEEDED: (e.g., 90,102 debt + 10,000 bill - 90,000 limit = 10,102 exceeded)
+        let exceededAmount = Math.abs(netDifference).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        
+        let preExistingBreachNote = '';
+        if (existingDebt > creditLimit) {
+            let overBeforeBill = (existingDebt - creditLimit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            preExistingBreachNote = `<small class="text-muted d-block" style="font-size: 11px;">(Pre-existing debt breach: ₹${overBeforeBill})</small>`;
+        }
+
+        decisionHtml = `
+            <small class="text-danger fw-bold d-block">⚠️ Limit Exceeded By</small>
+            <span class="fs-5 fw-bold text-danger">₹${exceededAmount}</span>
+            ${preExistingBreachNote}
+            <span class="badge bg-warning text-dark d-block mt-1" title="Credit limit exceeded, but administrative override is active">
+                <i class="fa fa-info-circle"></i> ADMIN CAN STILL APPROVE
+            </span>
+        `;
+    } else {
+        // WITHIN LIMIT / SURPLUS
+        let surplusAmount = Math.max(0, netDifference).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        
+        decisionHtml = `
+            <small class="text-success fw-bold d-block">Available Limit After Bill</small>
+            <span class="fs-5 fw-bold text-success">₹${surplusAmount}</span>
+            <span class="badge bg-success d-block mt-1">SAFE TO APPROVE</span>
+        `;
+    }
+
+    $('#credit_decision_box').html(decisionHtml);
+}
 
     calculateTotals();
     /* ============================================================

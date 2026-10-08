@@ -186,32 +186,64 @@ include 'view/layout/header.php';
                                 $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
                                 
                                 if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
-                                    if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)/i', $raw_notes, $matches)) {
-                                        $particulars = $matches[1] . " on " . $matches[2];
+                                        if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)/i', $raw_notes, $matches)) {
+                                            $particulars = "<span style='font-weight: 600;'>" . $matches[1] . " on " . $matches[2] . "</span>";
+                                            $extra_note = trim(preg_replace('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)(:\s*₹?[0-9,.]+)?/i', '', $raw_notes));
+                                            $extra_note = ltrim($extra_note, '| -:');
+                                            if (!empty($extra_note)) {
+                                                $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($extra_note) . "</small>";
+                                            }
+                                        } else {
+                                            $particulars = "<span style='font-weight: 600;'>Cash Discount</span>";
+                                            if (!empty($raw_notes)) {
+                                                $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                            }
+                                        }
+                                    } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
+                                        $particulars = "<span style='font-weight: 600; color: #dc2626;'>CD Reversed</span>";
+                                        if (!empty($raw_notes)) {
+                                            $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                        }
+                                    } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
+                                        $particulars = "<span style='font-weight: 600;'>CD Applied</span>";
+                                        if (!empty($raw_notes)) {
+                                            $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                        }
+                                    } elseif ($row['transaction_type'] === 'drc_settlement') {
+                                        $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                                        if (!empty($raw_notes)) {
+                                            $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                        }
+                                    } elseif ($row['transaction_type'] === 'mrc_settlement') {
+                                        $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
+                                        if (!empty($raw_notes)) {
+                                            $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                        }
+                                    } elseif ($row['transaction_type'] === 'asm_settlement') {
+                                        $particulars = "<span style='font-weight: 600;'>ASM Settlement</span>";
+                                        if (!empty($raw_notes)) {
+                                            $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                        }
+                                    } elseif ($row['transaction_type'] === 'settled_to_bill') {
+                                        $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
+                                        if (!empty($raw_notes)) {
+                                            $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                        }
                                     } else {
-                                        $particulars = explode(':', $raw_notes)[0]; 
+                                        // Shows custom notes (e.g., "DRC (04/08)") directly
+                                        if (!empty($raw_notes) && stripos($raw_notes, 'Payment Approved:') === false) {
+                                            $particulars = "<span style='font-weight: 600;'>" . htmlspecialchars($raw_notes) . "</span>";
+                                            if (!empty($payment_method) && stripos($payment_method, 'manual') === false && stripos($raw_notes, $payment_method) === false) {
+                                                $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($payment_method) . "</small>";
+                                            }
+                                        } elseif (!empty($payment_method) && !empty($bank_name)) {
+                                            $particulars = "{$payment_method} - {$bank_name}";
+                                        } elseif (!empty($payment_method)) {
+                                            $particulars = $payment_method;
+                                        } else {
+                                            $particulars = !empty($raw_notes) ? htmlspecialchars($raw_notes) : "-";
+                                        }
                                     }
-                                } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
-                                    $particulars = $raw_notes;
-                                } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
-                                    $particulars = "CD Applied";
-                                } elseif ($row['transaction_type'] === 'mrc_settlement') {
-                                    $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
-                                } elseif ($row['transaction_type'] === 'drc_settlement') {
-                                    $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
-                                } elseif ($row['transaction_type'] === 'asm_settlement') {
-                                    $particulars = "<span style='font-weight: 600;'>ASM Settlement</span>";
-                                } elseif ($row['transaction_type'] === 'settled_to_bill') {
-                                    $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
-                                } else {
-                                    if (!empty($payment_method) && !empty($bank_name)) {
-                                        $particulars = "{$payment_method} - {$bank_name}";
-                                    } elseif (!empty($payment_method)) {
-                                        $particulars = $payment_method;
-                                    } else {
-                                        $particulars = $raw_notes;
-                                    }
-                                }
 
                                 if (stripos($raw_notes, 'CD') !== false) {
                                     $credit = round($raw_amount);

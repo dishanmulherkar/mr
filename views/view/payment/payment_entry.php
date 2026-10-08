@@ -219,29 +219,51 @@ $(document).ready(function() {
 // Optional: Trigger the change event on page load to handle edit pages correctly
 $('#payment_method').trigger('change');
 
-    // 2. Fetch Outstanding Bills cleanly
-    $('#stockist_id').change(function() {
-    let stockistId = $(this).val();
-    
+// Global variable to track current net payable for live input feedback
+let currentStockistNetPayable = 0;
+
+// 2. Fetch Outstanding Bills cleanly
+// 2. Fetch Outstanding Bills cleanly
+$('#stockist_id').change(function() {
+    let stockistId = $(this).val();$('#advanceHint').remove();
+    currentStockistNetPayable = 0;
+
     if (stockistId) {
         $('#outstandingDisplay').html('<div class="alert alert-light border py-2"><i class="fa fa-spinner fa-spin"></i> Fetching bills...</div>');
         
         $.get('<?= BASE_URL ?>payment/get_outstanding', { stockist_id: stockistId }, function(res) {
             if (res.success) {
-                let amount = parseFloat(res.outstanding) || 0;
+                let amount = parseFloat(res.outstanding ?? res.total_outstanding ?? 0);
                 
-                if (amount < 0) {
-                    $('#outstandingDisplay').html(`<div class="alert alert-success py-2 mb-0"><i class="fa fa-info-circle"></i> <strong>Advance Credit: </strong> ₹${Math.abs(amount).toFixed(2)}</div>`);
-                    $('#amount_paid').removeAttr('max').removeAttr('title');
-                    return;
-                } else if (amount === 0) {
-                    $('#outstandingDisplay').html(`<div class="alert alert-success py-2 mb-0"><i class="fa fa-check-circle"></i> <strong>Fully Settled: </strong> ₹0.00</div>`);
-                    $('#amount_paid').removeAttr('max').removeAttr('title');
+                // ROUND OFF Net Payable to nearest whole rupee
+                let rawNetPayable = parseFloat(res.net_payable ?? 0);
+                let netPayable    = Math.round(rawNetPayable);
+                currentStockistNetPayable = netPayable > 0 ? netPayable : 0;
+
+                $('#amount_paid').removeAttr('max').removeAttr('title');
+
+                // Case 1: Advance credit or settled
+                if (amount < 0 || netPayable <= 0) {
+                    let advCredit = Math.abs(netPayable < 0 ? netPayable : amount);
+                    $('#outstandingDisplay').html(`
+                        <div class="alert alert-success py-2 mb-2">
+                            <i class="fa fa-check-circle"></i> 
+                            <strong>${advCredit > 0 ? 'Active Advance Credit: ₹' + advCredit.toFixed(2) : 'No Pending Dues (₹0.00)'}</strong>
+                            <div class="small text-muted">Any payment entered will be credited to Advance.</div>
+                        </div>
+                    `);
                     return;
                 }
 
+                // Case 2: Stockist has Pending Bills
                 let tableHtml = `
-                    <div class="mt-2 table-responsive shadow-sm border rounded">
+                    <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
+                        <span class="text-muted small fw-bold"><i class="fa fa-file-invoice"></i> Pending Bills Breakdown</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary py-0" id="btnFillExactNet" style="font-size: 11px;">
+                            <i class="fa fa-arrow-down"></i> Pay Exact: ₹${netPayable.toFixed(2)}
+                        </button>
+                    </div>
+                    <div class="table-responsive shadow-sm border rounded">
                         <table class="table table-sm table-hover table-striped mb-0" style="font-size: 0.8rem;">
                             <thead class="table-dark text-center">
                                 <tr>
@@ -261,11 +283,10 @@ $('#payment_method').trigger('change');
                         let cdBadge = '';
                         let net = pending;
 
-                        // 1. Check if this is an Opening Balance row
                         if (b.is_opening_balance == 1) {
                             cdAmountDisplay = `<span class="text-muted">-</span>`;
                             cdBadge = `<br><span class="badge bg-info text-dark" style="font-size: 0.65em;">Opening Balance</span>`;
-                            net = pending;
+                            net = Math.round(pending); // ROUND OFF
                         } else {
                             let sub_total = parseFloat(b.sub_total) || 0;
                             let existingCdPercent = parseFloat(b.cd_percent) || 0;
@@ -277,27 +298,16 @@ $('#payment_method').trigger('change');
                             let already2 = parseFloat(b.already_2_cd) || 0;
                             let alreadyCdAmount = already4 + already2; 
                             
-                            net = pending - newCdAmount + penaltyAmount;
+                            // ROUND OFF individual bill net payable
+                            net = Math.round(pending - newCdAmount + penaltyAmount);
 
                             if (penaltyAmount > 0) {
                                 cdAmountDisplay = `<span class="text-danger fw-bold">+₹${penaltyAmount.toFixed(2)}</span>`;
-                                let isDowngrade = false;
-
-                                if (b.is_downgraded == 1 || b.downgraded == 1 || b.cd_status === 'downgraded') {
-                                    isDowngrade = true;
-                                } else if (existingCdPercent == 4) {
-                                    let fullDiscount = alreadyCdAmount > 0 
-                                        ? alreadyCdAmount 
-                                        : (already4 > 0 ? already4 : (sub_total > 0 ? (sub_total * 0.04) : 0));
-
-                                    if (fullDiscount > 0) {
-                                        let halfDiscount = fullDiscount / 2;
-                                        let diffFromHalf = Math.abs(penaltyAmount - halfDiscount);
-                                        let diffFromFull = Math.abs(penaltyAmount - fullDiscount);
-                                        if (diffFromHalf < diffFromFull) {
-                                            isDowngrade = true;
-                                        }
-                                    } else if (eligible2 > 0) {
+                                let isDowngrade = (b.is_downgraded == 1 || b.downgraded == 1 || b.cd_status === 'downgraded');
+                                
+                                if (!isDowngrade && existingCdPercent == 4) {
+                                    let fullDiscount = alreadyCdAmount > 0 ? alreadyCdAmount : (already4 > 0 ? already4 : (sub_total * 0.04));
+                                    if (fullDiscount > 0 && Math.abs(penaltyAmount - (fullDiscount / 2)) < Math.abs(penaltyAmount - fullDiscount)) {
                                         isDowngrade = true;
                                     }
                                 }
@@ -330,7 +340,7 @@ $('#payment_method').trigger('change');
                                     ${cdAmountDisplay}
                                     ${cdBadge}
                                 </td>
-                                <td class="text-end fw-bold">₹${Math.round(net).toFixed(2)}</td>
+                                <td class="text-end fw-bold">₹${net.toFixed(2)}</td>
                             </tr>
                         `;
                     });
@@ -344,25 +354,22 @@ $('#payment_method').trigger('change');
                     }
 
                     tableHtml += `
-                            <tr class="table-secondary fw-bold">
-                                <td colspan="2" class="text-end">TOTAL:</td>
-                                <td class="text-end">${footerCdDisplay}</td>
-                                <td class="text-end text-primary">₹${Math.round(res.net_payable).toFixed(2)}</td>
-                            </tr>
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="2" class="text-end">ROUNDED NET TOTAL:</td>
+                            <td class="text-end">${footerCdDisplay}</td>
+                            <td class="text-end text-primary fs-6">₹${netPayable.toFixed(2)}</td>
+                        </tr>
                     `;
                 } else {
                     tableHtml += `<tr><td colspan="4" class="text-center text-muted py-3">No pending bills found.</td></tr>`;
                 }
                 
                 tableHtml += `</tbody></table></div>`;
-                
                 $('#outstandingDisplay').html(tableHtml);
-                
-                let finalMax = parseFloat(res.net_payable) || 0;
-                let roundedMax = Math.ceil(finalMax); 
 
-                $('#amount_paid').attr('max', roundedMax);
-                $('#amount_paid').attr('title', `Maximum allowed is ₹${roundedMax}`);
+                $('#btnFillExactNet').click(function() {
+                    $('#amount_paid').val(currentStockistNetPayable.toFixed(2)).trigger('input');
+                });
                 
             } else {
                 $('#outstandingDisplay').html('<div class="alert alert-danger py-2 mb-0">Error fetching data: ' + (res.msg || '') + '</div>');
@@ -373,6 +380,30 @@ $('#payment_method').trigger('change');
     } else {
         $('#outstandingDisplay').html('');
         $('#amount_paid').removeAttr('max').removeAttr('title');
+    }
+});
+
+// 3. Live Feedback with Rounded Settlements
+$('#amount_paid').on('input', function() {
+    let enteredAmt = parseFloat($(this).val()) || 0;
+    $('#advanceHint').remove();
+
+    if (enteredAmt <= 0) return;
+
+    if (currentStockistNetPayable <= 0) {
+        $(this).after(`
+            <small id="advanceHint" class="text-success fw-bold d-block mt-1">
+                <i class="fa fa-info-circle"></i> Entire ₹${enteredAmt.toFixed(2)} will be saved as Advance Credit.
+            </small>
+        `);
+    } else if (enteredAmt > currentStockistNetPayable) {
+        let excessAdvance = enteredAmt - currentStockistNetPayable;
+        $(this).after(`
+            <small id="advanceHint" class="text-primary fw-bold d-block mt-1">
+                <i class="fa fa-check-circle"></i> Settle Bills: ₹${currentStockistNetPayable.toFixed(2)} | 
+                <span class="text-success">Advance Credit: ₹${excessAdvance.toFixed(2)}</span>
+            </small>
+        `);
     }
 });
 

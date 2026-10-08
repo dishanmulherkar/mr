@@ -232,7 +232,7 @@ include 'view/layout/header.php';
                             $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
                             $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
                             
-                            if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
+                           if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
                                 if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)/i', $raw_notes, $matches)) {
                                     $particulars = $matches[1] . " on " . $matches[2];
                                 } else {
@@ -245,18 +245,28 @@ include 'view/layout/header.php';
                             } elseif ($row['transaction_type'] === 'mrc_settlement') {
                                 $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
                             } elseif ($row['transaction_type'] === 'drc_settlement') {
-                                $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                                // If a custom DRC note exists, show it directly; otherwise show "DRC Settlement"
+                                if (!empty($raw_notes) && stripos($raw_notes, 'drc_settlement') === false) {
+                                    $particulars = "<span style='font-weight: 600;'>" . htmlspecialchars($raw_notes) . "</span>";
+                                } else {
+                                    $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                                }
                             } elseif ($row['transaction_type'] === 'settled_to_bill') {
                                 $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
                             } elseif ($row['transaction_type'] === 'asm_settlement') {
                                 $particulars = "<span style='font-weight: 600;'>ASM Settlement</span>";
                             } else {
-                                if (!empty($payment_method) && !empty($bank_name)) {
+                                // 1. ONLY for DRC: If manual note contains "DRC" (e.g. "DRC (04/08)"), show the note directly
+                                if (!empty($raw_notes) && stripos($raw_notes, 'DRC') !== false) {
+                                    $particulars = "<span style='font-weight: 600;'>" . htmlspecialchars($raw_notes) . "</span>";
+                                } 
+                                // 2. All other normal payments keep standard Payment Method / Bank formatting
+                                elseif (!empty($payment_method) && !empty($bank_name)) {
                                     $particulars = "{$payment_method} - {$bank_name}";
                                 } elseif (!empty($payment_method)) {
                                     $particulars = $payment_method;
                                 } else {
-                                    $particulars = $raw_notes;
+                                    $particulars = !empty($raw_notes) ? htmlspecialchars($raw_notes) : "-";
                                 }
                             }
 

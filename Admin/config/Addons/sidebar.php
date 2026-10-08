@@ -233,6 +233,11 @@
                                 <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Approvel Payments
                             </a>
                         </li>
+                        <li class="nav-item searchable-item">
+                            <a href="<?= BASE_URL ?>payment/manual_entry" class="nav-link text-light py-1">
+                                <i class="fa-solid fa-users-viewfinder" style="width: 20px;"></i> Manual Payments Entry
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </li>

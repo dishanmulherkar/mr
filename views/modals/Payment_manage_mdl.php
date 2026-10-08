@@ -360,7 +360,7 @@ class Payment_model {
     // ==========================================
     // Fetch Outstanding and Eligible Cash Discount
     // ==========================================
-  public function getStockistOutstandingWithCD($stockist_id)
+    public function getStockistOutstandingWithCD($stockist_id)
     {
         $stockist_id = (int)$stockist_id;
 
@@ -391,6 +391,7 @@ class Payment_model {
                 'eligible_cd'       => 0.00,
                 'total_penalty'     => 0.00,
                 'net_payable'       => 0.00,
+                'advance_amount'    => 0.00,
                 'bill_details'      => []
             ];
         }
@@ -416,7 +417,7 @@ class Payment_model {
                 FROM payment_allocations pa
                 INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
                 WHERE pl.stockist_id = ? 
-                AND pa.inward_id IS NULL
+                AND (pa.inward_id IS NULL OR pa.inward_id = 0)
             ");
             $stmtOBPaid->bind_param("i", $stockist_id);
             $stmtOBPaid->execute();
@@ -427,8 +428,7 @@ class Payment_model {
             $pending_ob_debt = max(0, round($ob_amount - $allocated_ob, 2));
         }
 
-        // CASE B: Stockist has ADVANCE Credit (Opening Balance and/or Advance Payments)
-        // Tracks total advance credit and how much has been consumed by bills
+        // CASE B: Stockist has ADVANCE Credit (Payments & Credit Opening Balance)
         $stmtAdv = $this->con->prepare("
             SELECT 
                 COALESCE(SUM(adv.available_advance), 0) AS total_remaining_advance,
@@ -448,8 +448,14 @@ class Payment_model {
                 LEFT JOIN payment_allocations pa ON pa.ledger_id = pl.id
                 WHERE pl.stockist_id = ? 
                 AND (
+                    -- 1. Credit Opening Balance
                     (pl.transaction_type = 'opening_balance' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease'))
-                    OR (pl.transaction_type = 'payment_made' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease') AND (pl.reference_id = 0 OR pl.reference_id IS NULL))
+                    -- 2. Real Payments (excludes automatic CD discounts)
+                    OR (
+                        pl.transaction_type = 'payment_made' 
+                        AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease')
+                        AND (pl.notes IS NULL OR (pl.notes NOT LIKE '%CD on Invoice%' AND pl.notes NOT LIKE '%CD Reversed%'))
+                    )
                 )
                 GROUP BY pl.id
             ) AS adv
@@ -463,7 +469,7 @@ class Payment_model {
         $total_used_advance = (float)($advData['total_used_advance'] ?? 0.00);
         $total_orig_advance = (float)($advData['total_original_advance'] ?? 0.00);
 
-        // Fallback if ledger row is not yet created but stockist row has credit opening balance
+        // Fallback if stockists table has credit opening balance not recorded in payment_ledgers
         if ($total_orig_advance <= 0 && $ob_type === 'credit' && $ob_amount > 0) {
             $total_orig_advance = $ob_amount;
             $remaining_advance  = $ob_amount;
@@ -489,7 +495,7 @@ class Payment_model {
         $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
 
         /*
-        * 4. Get unpaid / partially paid bills (bills fully cleared by advance will NOT appear here)
+        * 4. Get unpaid / partially paid bills
         */
         $stmt = $this->con->prepare("
             SELECT 
@@ -580,23 +586,23 @@ class Payment_model {
             ];
         }
 
-        // Prepend Opening Balance if active advance credit is still remaining
+        // Prepend Advance Credit (Surplus from payment or opening balance credit)
         if ($remaining_advance > 0) {
             $total_pending -= $remaining_advance;
             $bills[] = [
                 'inward_id'          => 0,
-                'inward_no'          => 'OPENING-BAL (ADVANCE)',
+                'inward_no'          => 'ADVANCE CREDIT',
                 'inward_date'        => $ob_date,
                 'gross_amount'       => $total_orig_advance,
                 'sub_total'          => $total_orig_advance,
                 'cd_percent'         => 0,
-                'paid_amt'           => $total_used_advance,       // Shows how much advance was adjusted into bills
-                'pending_amount'     => -$remaining_advance,      // Remaining unused credit balance
+                'paid_amt'           => $total_used_advance,
+                'pending_amount'     => -$remaining_advance, // Negative amount denotes credit
                 'bill_age_days'      => 0,
                 'eligible_4_cd'      => 0,
                 'eligible_2_cd'      => 0,
                 'penalty_amount'     => 0,
-                'is_opening_balance' => 1,
+                'is_opening_balance' => ($ob_type === 'credit' && $total_orig_advance == $ob_amount) ? 1 : 0,
                 'balance_type'       => 'credit'
             ];
         }
@@ -624,6 +630,7 @@ class Payment_model {
             'eligible_cd'       => round($total_cd, 2),
             'total_penalty'     => round($total_penalty, 2),
             'net_payable'       => round($net_payable, 2),
+            'advance_amount'    => round($remaining_advance, 2), // Total unutilized advance
             'bill_details'      => $bills
         ];
     }
@@ -753,6 +760,68 @@ class Payment_model {
             'allocations' => $allocations,
             'adjustments' => $adjustments
         ];
+    }
+
+    public function deletePendingPayment($payment_id)
+    {
+        $payment_id = (int)$payment_id;
+
+        if ($payment_id <= 0) {
+            return ['success' => false, 'msg' => 'Invalid payment ID.'];
+        }
+
+        // 1. Fetch record using the correct column: screenshot_path
+        $stmt = $this->con->prepare("
+            SELECT id, screenshot_path, approval_status 
+            FROM payment_details 
+            WHERE id = ? 
+            LIMIT 1
+        ");
+        
+        if (!$stmt) {
+            return ['success' => false, 'msg' => 'Prepare failed: ' . $this->con->error];
+        }
+
+        $stmt->bind_param("i", $payment_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $payment = $res->fetch_assoc();
+        $stmt->close();
+
+        if (!$payment) {
+            return ['success' => false, 'msg' => 'Payment record not found.'];
+        }
+
+        // 2. Ensure only pending payments can be deleted
+        if (trim(strtolower($payment['approval_status'])) !== 'pending') {
+            return ['success' => false, 'msg' => 'Only pending payments can be deleted.'];
+        }
+
+        // 3. Delete from payment_details
+        $del_stmt = $this->con->prepare("DELETE FROM payment_details WHERE id = ? AND approval_status = 'pending'");
+        if (!$del_stmt) {
+            return ['success' => false, 'msg' => 'Delete prepare failed: ' . $this->con->error];
+        }
+
+        $del_stmt->bind_param("i", $payment_id);
+        
+        if ($del_stmt->execute()) {
+            $del_stmt->close();
+
+            // 4. Safely delete physical screenshot file if it exists on disk
+            if (!empty($payment['screenshot_path'])) {
+                $file_path = __DIR__ . '/../../' . ltrim($payment['screenshot_path'], '/\\');
+                if (file_exists($file_path) && is_file($file_path)) {
+                    @unlink($file_path);
+                }
+            }
+
+            return ['success' => true, 'msg' => 'Pending payment deleted successfully.'];
+        }
+
+        $error_msg = $del_stmt->error;
+        $del_stmt->close();
+        return ['success' => false, 'msg' => 'Database error: ' . $error_msg];
     }
 }
 ?>
