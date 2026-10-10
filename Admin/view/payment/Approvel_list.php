@@ -456,9 +456,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     let cdStatusHtml = cdAmountDisplay + cdBadge;
 
-                    let dateParts = b.inward_date.split('-');
-                    let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}` : b.inward_date;
+                  // Pick dispatch_date if present, otherwise fall back to inward_date
+                    let rawDate = (b.dispatch_date && b.dispatch_date.trim() !== '') ? b.dispatch_date : b.inward_date;
 
+                    let shortDate = rawDate;
+                    if (rawDate) {
+                        let dateParts = rawDate.split(' ')[0].split('-'); // Handles both 'YYYY-MM-DD' and 'YYYY-MM-DD HH:mm:ss'
+                        if (dateParts.length === 3) {
+                            shortDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}`; // DD/MM/YY
+                        }
+                    }
                     html += `
                         <tr>
                             <td class="fw-bold">${b.inward_no}</td>

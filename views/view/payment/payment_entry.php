@@ -329,9 +329,10 @@ $('#stockist_id').change(function() {
                             }
                         }
                         
-                        let dateParts = (b.inward_date || '').split('-');
-                        let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}` : b.inward_date;
-
+                       let targetDate = (b.dispatch_date && b.dispatch_date.trim() !== '') ? b.dispatch_date : (b.inward_date || '');
+                        let dateParts = targetDate.split(' ')[0].split('-');
+                        let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}` : targetDate;
+                        
                         tableHtml += `
                             <tr>
                                 <td class="fw-bold">${b.inward_no}</td>

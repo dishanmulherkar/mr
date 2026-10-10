@@ -217,7 +217,7 @@ include 'view/layout/header.php';
         </select>
 
         <a href="<?= BASE_URL ?>payment/entry" style="padding: 6px 9px;" class="btn-submit">
-            <i class="fa fa-plus"></i> Make Payment
+            <i class="fa fa-plus"></i>Update Payment
         </a>
     </div>
 
