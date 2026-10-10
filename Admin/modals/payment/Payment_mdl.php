@@ -221,19 +221,26 @@ class PaymentApproval_mdl {
                 }
 
                 // ==========================================
-                // STEP 6: Settle Invoices from stock_inward
+                // STEP 6: Settle Invoices from stock_inward (Using dispatch_date)
                 // ==========================================
                 if ($remaining_payment > 0) {
                     $stmt_bills = $this->con->prepare("
-                        SELECT inward_id, grand_total, paid_amt, inward_no, sub_total, 
-                            COALESCE(gst_amount, 0) AS gst_amount, 
-                            COALESCE(other_charges, 0) AS other_charges, 
-                            COALESCE(discount, 0) AS discount, 
-                            COALESCE(cd_percent, 0) AS cd_percent,
-                            DATEDIFF(CURDATE(), inward_date) AS age_days
-                        FROM stock_inward 
-                        WHERE stockist_id = ? AND pay_status != 'paid' 
-                        ORDER BY inward_date ASC
+                        SELECT 
+                            si.inward_id, 
+                            si.grand_total, 
+                            si.paid_amt, 
+                            si.inward_no, 
+                            si.sub_total, 
+                            COALESCE(si.gst_amount, 0) AS gst_amount, 
+                            COALESCE(si.other_charges, 0) AS other_charges, 
+                            COALESCE(si.discount, 0) AS discount, 
+                            COALESCE(si.cd_percent, 0) AS cd_percent,
+                            o.dispatch_date,
+                            DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) AS age_days
+                        FROM stock_inward si
+                        LEFT JOIN `orders` o ON si.order_id = o.order_id
+                        WHERE si.stockist_id = ? AND si.pay_status != 'paid' 
+                        ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
                         FOR UPDATE
                     ");
                     $stmt_bills->bind_param("i", $stockist_id);
@@ -1156,68 +1163,72 @@ class PaymentApproval_mdl {
         /*
         * 4. Get unpaid bills and calculate Exact Penalties / CD
         */
-        $stmt = $this->con->prepare("
+       $stmt = $this->con->prepare("
             SELECT 
-                inward_id,
-                inward_no,
-                inward_date,
-                grand_total AS gross_amount,
-                sub_total,
-                COALESCE(cd_percent, 0) AS cd_percent,
-                paid_amt,
-                (grand_total - paid_amt) AS pending_amount,
-                DATEDIFF(?, inward_date) AS bill_age_days,
+                si.inward_id,
+                si.inward_no,
+                si.inward_date,
+                o.dispatch_date,
+                si.grand_total AS gross_amount,
+                si.sub_total,
+                COALESCE(si.cd_percent, 0) AS cd_percent,
+                si.paid_amt,
+                (si.grand_total - si.paid_amt) AS pending_amount,
+                DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) AS bill_age_days,
 
                 -- ALREADY GIVEN 4% CD
                 CASE 
-                    WHEN COALESCE(cd_percent, 0) = 4 THEN 
-                        ROUND((sub_total * 100/96) + (COALESCE(gst_amount, 0) * 100/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
+                    WHEN COALESCE(si.cd_percent, 0) = 4 THEN 
+                        ROUND((si.sub_total * 100/96) + (COALESCE(si.gst_amount, 0) * 100/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
                     ELSE 0 
                 END AS already_4_cd,
                 
                 -- ALREADY GIVEN 2% CD
                 CASE 
-                    WHEN COALESCE(cd_percent, 0) = 2 THEN 
-                        ROUND((sub_total * 100/98) + (COALESCE(gst_amount, 0) * 100/98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
+                    WHEN COALESCE(si.cd_percent, 0) = 2 THEN 
+                        ROUND((si.sub_total * 100/98) + (COALESCE(si.gst_amount, 0) * 100/98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
                     ELSE 0 
                 END AS already_2_cd,
 
                 -- NEW ELIGIBLE 4% CD
                 CASE 
-                    WHEN DATEDIFF(?, inward_date) <= ? AND COALESCE(cd_percent, 0) = 0 
-                    THEN grand_total - ROUND((sub_total * 0.96) + (COALESCE(gst_amount, 0) * 0.96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) 
+                    WHEN DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) <= ? AND COALESCE(si.cd_percent, 0) = 0 
+                    THEN si.grand_total - ROUND((si.sub_total * 0.96) + (COALESCE(si.gst_amount, 0) * 0.96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
                     ELSE 0 
                 END AS eligible_4_cd,
 
                 -- NEW ELIGIBLE 2% CD
                 CASE 
-                    WHEN DATEDIFF(?, inward_date) > ? AND DATEDIFF(?, inward_date) <= ? AND COALESCE(cd_percent, 0) = 0 
-                    THEN grand_total - ROUND((sub_total * 0.98) + (COALESCE(gst_amount, 0) * 0.98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) 
+                    WHEN DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) > ? 
+                         AND DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) <= ? 
+                         AND COALESCE(si.cd_percent, 0) = 0 
+                    THEN si.grand_total - ROUND((si.sub_total * 0.98) + (COALESCE(si.gst_amount, 0) * 0.98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
                     ELSE 0 
                 END AS eligible_2_cd,
 
                 -- REVOKED PENALTY
                 CASE
-                    WHEN COALESCE(cd_percent, 0) = 4 THEN
+                    WHEN COALESCE(si.cd_percent, 0) = 4 THEN
                         CASE 
-                            WHEN DATEDIFF(?, inward_date) <= ? THEN 0 
-                            WHEN DATEDIFF(?, inward_date) <= ? THEN 
-                                ROUND((sub_total * 98/96) + (COALESCE(gst_amount, 0) * 98/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
+                            WHEN DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
+                            WHEN DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 
+                                ROUND((si.sub_total * 98/96) + (COALESCE(si.gst_amount, 0) * 98/96) + COALESCE(si.other_charges, 0) - COALESCE(discount, 0)) - si.grand_total
                             ELSE 
-                                ROUND((sub_total * 100/96) + (COALESCE(gst_amount, 0) * 100/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
+                                ROUND((si.sub_total * 100/96) + (COALESCE(si.gst_amount, 0) * 100/96) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - si.grand_total
                         END
-                    WHEN COALESCE(cd_percent, 0) = 2 THEN
-                        CASE
-                            WHEN DATEDIFF(?, inward_date) <= ? THEN 0
+                    WHEN COALESCE(si.cd_percent, 0) = 2 THEN
+                        CASE 
+                            WHEN DATEDIFF(?, COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
                             ELSE 
-                                ROUND((sub_total * 100/98) + (COALESCE(gst_amount, 0) * 100/98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - grand_total
+                                ROUND((si.sub_total * 100/98) + (COALESCE(si.gst_amount, 0) * 100/98) + COALESCE(other_charges, 0) - COALESCE(discount, 0)) - si.grand_total
                         END
-                    ELSE 0
+                    ELSE 0 
                 END AS penalty_amount
 
-            FROM stock_inward
-            WHERE stockist_id = ? AND pay_status != 'paid'
-            ORDER BY inward_date ASC
+            FROM stock_inward si
+            LEFT JOIN orders o ON si.order_id = o.order_id
+            WHERE si.stockist_id = ? AND si.pay_status != 'paid'
+            ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
         ");
 
         $stmt->bind_param(
@@ -1803,6 +1814,68 @@ public function getPaymentAllocations($payment_id) {
     }
 }
 
+
+   public function deletePendingPayment($payment_id)
+    {
+        $payment_id = (int)$payment_id;
+
+        if ($payment_id <= 0) {
+            return ['success' => false, 'msg' => 'Invalid payment ID.'];
+        }
+
+        // 1. Fetch record using the correct column: screenshot_path
+        $stmt = $this->con->prepare("
+            SELECT id, screenshot_path, approval_status 
+            FROM payment_details 
+            WHERE id = ? 
+            LIMIT 1
+        ");
+        
+        if (!$stmt) {
+            return ['success' => false, 'msg' => 'Prepare failed: ' . $this->con->error];
+        }
+
+        $stmt->bind_param("i", $payment_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $payment = $res->fetch_assoc();
+        $stmt->close();
+
+        if (!$payment) {
+            return ['success' => false, 'msg' => 'Payment record not found.'];
+        }
+
+        // 2. Ensure only pending payments can be deleted
+        if (trim(strtolower($payment['approval_status'])) !== 'pending') {
+            return ['success' => false, 'msg' => 'Only pending payments can be deleted.'];
+        }
+
+        // 3. Delete from payment_details
+        $del_stmt = $this->con->prepare("DELETE FROM payment_details WHERE id = ? AND approval_status = 'pending'");
+        if (!$del_stmt) {
+            return ['success' => false, 'msg' => 'Delete prepare failed: ' . $this->con->error];
+        }
+
+        $del_stmt->bind_param("i", $payment_id);
+        
+        if ($del_stmt->execute()) {
+            $del_stmt->close();
+
+            // 4. Safely delete physical screenshot file if it exists on disk
+            if (!empty($payment['screenshot_path'])) {
+                $file_path = __DIR__ . '/../../' . ltrim($payment['screenshot_path'], '/\\');
+                if (file_exists($file_path) && is_file($file_path)) {
+                    @unlink($file_path);
+                }
+            }
+
+            return ['success' => true, 'msg' => 'Pending payment deleted successfully.'];
+        }
+
+        $error_msg = $del_stmt->error;
+        $del_stmt->close();
+        return ['success' => false, 'msg' => 'Database error: ' . $error_msg];
+    }
    
 }
 ?>

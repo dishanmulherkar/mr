@@ -620,3 +620,23 @@ MODIFY COLUMN `ledger_type` ENUM(
     'drc_wallet', 
     'asm_wallet'
 ) NOT NULL;
+
+
+-- 09-10-26 -- - - - - -----   ---- - - -
+UPDATE financial_year
+SET start_date = '2026-02-01',
+    end_date   = '2027-01-31'
+WHERE fy_name = 'FY 2026-27';
+
+
+SET @fy_name    = 'FY 2026-27';
+SET @start_date = '2026-04-01';
+SET @end_date   = '2027-03-31';
+
+INSERT INTO financial_year
+    (hq_id, mr_id, fy_name, start_date, end_date, target_amount, status)
+SELECT u.hq_id, u.m_id, @fy_name, @start_date, @end_date, 0, 1
+FROM mr_users u
+WHERE NOT EXISTS (
+    SELECT 1 FROM financial_year f WHERE f.mr_id = u.m_id
+);

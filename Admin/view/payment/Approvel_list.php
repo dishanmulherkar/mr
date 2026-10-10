@@ -69,10 +69,12 @@ include 'view/layout/header.php';
                     <thead class="table-dark text-center">
                         <tr>
                             <th style="width: 5%;">#</th>
-                            <th style="width: 10%;">Date</th>
+                            <th style="width: 10%;">PMT Date</th>
                             <th style="width: 20%;">Stockist</th>
                             <th style="width: 15%;">Amount</th>
+                            <th style="width: 15%;">Bank</th>
                             <th style="width: 20%;">Method & Ref</th>
+
                             <th style="width: 10%;">Screenshot</th>
                             <th style="width: 10%;">Status</th>
                             <th style="width: 10%;">Action</th>
@@ -146,12 +148,17 @@ include 'view/layout/header.php';
 
                 </div>
             </div>
-            <div class="modal-footer bg-light d-flex justify-content-between">
+            <div class="modal-footer bg-light d-flex justify-content-between align-items-center">
                 <input type="hidden" id="revPaymentId">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" id="confirmApproveBtn" class="btn btn-success fw-bold px-4">
-                    <i class="fa fa-check-circle"></i> Confirm & Approve Payment
-                </button>
+                <div class="d-flex gap-2">
+                    <button type="button" id="confirmRejectBtn" class="btn btn-outline-danger fw-bold px-3">
+                        <i class="fa fa-times-circle"></i> Reject Payment
+                    </button>
+                    <button type="button" id="confirmApproveBtn" class="btn btn-success fw-bold px-4">
+                        <i class="fa fa-check-circle"></i> Confirm & Approve Payment
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -265,28 +272,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     let actions = '';
                     if (p.approval_status === 'pending') {
                         actions = `
-                            <div class="dropdown">
-                                <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                    <i class="fa fa-cog"></i> Actions
+                           <div class="d-flex justify-content-center align-items-center gap-1">
+                                <div class="dropdown">
+                                    <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        <i class="fa fa-cog"></i> Actions
+                                    </button>
+                                    <ul class="dropdown-menu shadow">
+                                        <li>
+                                            <a class="dropdown-item text-primary btn-review" href="#" 
+                                                data-id="${p.id}" data-stockist="${p.stockist_id}" 
+                                                data-name="${p.stockist_name}" data-amount="${p.amount_paid}"
+                                                data-method="${p.payment_method}" data-ref="${p.bank_details || ''}"
+                                                data-bank="${bankName}" data-date="${paymentDate}"
+                                                data-img="${p.screenshot_path}">
+                                                <i class="fa fa-search me-2 pointer-events-none"></i> Review & Approve
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-payment" data-id="${p.id}" title="Delete Record">
+                                    <i class="fa fa-trash"></i>
                                 </button>
-                                <ul class="dropdown-menu shadow">
-                                    <li>
-                                        <a class="dropdown-item text-primary btn-review" href="#" 
-                                            data-id="${p.id}" data-stockist="${p.stockist_id}" 
-                                            data-name="${p.stockist_name}" data-amount="${p.amount_paid}"
-                                            data-method="${p.payment_method}" data-ref="${p.bank_details || ''}"
-                                            data-bank="${bankName}" data-date="${paymentDate}"
-                                            data-img="${p.screenshot_path}">
-                                            <i class="fa fa-search me-2 pointer-events-none"></i> Review & Approve
-                                        </a>
-                                    </li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item text-danger action-btn" href="#" data-id="${p.id}" data-act="rejected">
-                                            <i class="fa fa-times-circle me-2 pointer-events-none"></i> Reject
-                                        </a>
-                                    </li>
-                                </ul>
                             </div>
                         `;
                     } else if (p.approval_status === 'approved') {
@@ -300,7 +306,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             <td class="text-center">${count++}</td>
                             <td class="text-center">${paymentDate}</td>
                             <td>${p.stockist_name || '<span class="text-muted">Unknown</span>'}</td>
+                           
                             <td class="text-end fw-bold text-success">₹${parseFloat(p.amount_paid).toFixed(2)}</td>
+                             <td>${bankName || '<span class="text-muted">Unknown</span>'}</td>
                             <td>${p.payment_method}<br><small class="text-muted">${p.bank_details || 'No Ref Provided'}</small></td>
                             <td class="text-center">${proofHTML}</td>
                             <td class="text-center"><span class="badge ${statusClass}">${displayStatus}</span></td>
@@ -517,6 +525,41 @@ document.addEventListener('DOMContentLoaded', function() {
     $('#confirmApproveBtn').click(function() {
         processPaymentAction($('#revPaymentId').val(), 'approved');
     });
+    
+    // Confirm Reject Button (Inside Modal)
+    $('#confirmRejectBtn').click(function() {
+        processPaymentAction($('#revPaymentId').val(), 'rejected');
+    });
+
+    // Delete Button (Directly beside Action dropdown)
+$(document).on('click', '.btn-delete-payment', function(e) {
+    e.preventDefault();
+    let paymentId = $(this).data('id');
+    
+    if (!confirm('Are you sure you want to permanently delete this pending payment entry?')) {
+        return;
+    }
+
+    let formData = new FormData();
+    formData.append('payment_id', paymentId);
+
+    fetch(BASE_URL + 'payment/delete', { 
+        method: 'POST', 
+        body: formData 
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.msg, 'success');
+            loadPayments();
+        } else {
+            showAlert(data.msg, 'danger');
+        }
+    })
+    .catch(() => {
+        showAlert('Network error while deleting payment.', 'danger');
+    });
+});
 
     // Reject Button (Directly from table dropdown)
     $(document).on('click', '.action-btn', function(e) {

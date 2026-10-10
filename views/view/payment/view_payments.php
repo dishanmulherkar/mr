@@ -211,8 +211,9 @@ include 'view/layout/header.php';
     <div class="page-header d-flex justify-content-between align-items-center mb-3">
         <!-- View Toggle Dropdown -->
         <select id="viewToggle" class="title-dropdown form-select-lg">
-            <option value="bills">Bill List</option>
+            
             <option value="payments"> Payment List</option>
+            <option value="bills">Bill List</option>
         </select>
 
         <a href="<?= BASE_URL ?>payment/entry" style="padding: 6px 9px;" class="btn-submit">
