@@ -166,7 +166,7 @@ include 'view/layout/header.php';
                             type="file"
                             id="customer_img"
                             name="customer_img"
-                            accept="image/jpeg,image/png,image/jpg,image/webp">
+                            accept="image/jpeg,image/png,image/jpg,image/webp" required>
                     </div>
                 </div>
             </div>

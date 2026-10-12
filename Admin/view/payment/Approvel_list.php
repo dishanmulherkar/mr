@@ -304,10 +304,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     return `
                         <tr>
                             <td class="text-center">${count++}</td>
-                            <td class="text-center">${paymentDate}</td>
+                            <td class="text-center">
+                              ${new Date(paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '-')}
+                            </td>
                             <td>${p.stockist_name || '<span class="text-muted">Unknown</span>'}</td>
                            
-                            <td class="text-end fw-bold text-success">₹${parseFloat(p.amount_paid).toFixed(2)}</td>
+                            <td class="text-end fw-bold text-success">
+                                ₹${Math.round(p.amount_paid).toLocaleString('en-IN')}
+                                </td>
                              <td>${bankName || '<span class="text-muted">Unknown</span>'}</td>
                             <td>${p.payment_method}<br><small class="text-muted">${p.bank_details || 'No Ref Provided'}</small></td>
                             <td class="text-center">${proofHTML}</td>
