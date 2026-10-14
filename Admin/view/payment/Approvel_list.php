@@ -2,7 +2,28 @@
 $pageTitle = "Payment Approvals";
 include 'view/layout/header.php'; 
 ?>
+<style>
+    /* Move modal to the right and fix width */
+@media (min-width: 992px) {
+    #reviewModal .review-modal-offset {
+        /* Set how far right it should sit (match your sidebar width, e.g., 250px or 260px) */
+        margin-left: calc(260px + 2rem) !important;
+        margin-right: 2rem !important;
+        
+        /* Calculate available width: 100vw minus sidebar width minus paddings */
+        max-width: calc(100vw - 320px) !important;
+        width: auto !important;
+    }
+}
 
+/* If the sidebar is appearing OVER the modal, fix the z-index stack: */
+#reviewModal {
+    z-index: 1060 !important; /* Standard Bootstrap modal is 1055 */
+}
+.modal-backdrop {
+    z-index: 1050 !important;
+}
+</style>
 <div id="container" class="container-fluid mt-3">
     
     <!-- Dynamic Alert Container for JS Responses -->
@@ -97,15 +118,15 @@ include 'view/layout/header.php';
 <!-- REVIEW & APPROVE MODAL                     -->
 <!-- ========================================== -->
 <div class="modal fade" id="reviewModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable review-modal-offset">
+        <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-dark text-white">
                 <h5 class="modal-title"><i class="fa fa-search"></i> Review Payment Allocation</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
+            
             <div class="modal-body">
                 <div class="row">
-                    
                     <!-- Left Column: Payment Proof -->
                     <div class="col-md-4 border-end">
                         <h6 class="text-primary fw-bold mb-3">Payment Details</h6>
@@ -145,9 +166,18 @@ include 'view/layout/header.php';
                             </table>
                         </div>
                     </div>
+                </div>
 
+                <!-- Rejection remarks placed inside modal-body -->
+                <div id="rejectReasonSection" class="mt-3 p-3 bg-light border border-danger rounded d-none">
+                    <label for="rejectionRemarks" class="form-label text-danger fw-bold mb-1">
+                        <i class="fa fa-exclamation-circle"></i> Reason for Rejection <span class="text-danger">*</span>
+                    </label>
+                    <textarea class="form-control" id="rejectionRemarks" rows="3" placeholder="Please specify why this payment is being rejected..."></textarea>
+                    <div class="invalid-feedback">A rejection reason is required.</div>
                 </div>
             </div>
+
             <div class="modal-footer bg-light d-flex justify-content-between align-items-center">
                 <input type="hidden" id="revPaymentId">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -296,7 +326,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                         `;
                     } else if (p.approval_status === 'approved') {
-                        actions = `<button class="btn btn-info btn-sm text-white btn-view-allocation" data-id="${p.id}" data-stockist="${p.stockist_name}" data-amount="${p.amount_paid}"><i class="fa fa-eye"></i> View</button>`;
+                        actions = `<button class="btn btn-info btn-sm text-white btn-view-allocation" data-id="${p.id}" data-stockist="${p.stockist_name}" data-amount="${p.amount_paid}" data-pmtdate= ${paymentDate}><i class="fa fa-eye"></i> View</button>`;
                     } else {
                         actions = '<span class="text-muted small fw-bold">Rejected</span>';
                     }
@@ -404,7 +434,8 @@ document.addEventListener('DOMContentLoaded', function() {
         $('#revBillsTable').html('<tr><td colspan="5" class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x text-primary"></i><br>Fetching stockist ledger...</td></tr>');
         
         // Fetch bills logic synchronized exactly with the MR Make Payment View
-        $.get(BASE_URL + 'payment/get_outstanding', { stockist_id: btn.data('stockist') }, function(res) {
+        let PmtDate = btn.data('date') || '';
+        $.get(BASE_URL + 'payment/get_outstanding', { stockist_id: btn.data('stockist'), date: PmtDate }, function(res) {
             if (res.success && res.bills && res.bills.length > 0) {
                 let html = '';
                 res.bills.forEach(b => {
@@ -507,13 +538,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // ==========================================
     // 2. PROCESS ACTION (APPROVE VIA MODAL OR REJECT VIA DROPDOWN)
     // ==========================================
-    function processPaymentAction(paymentId, action) {
+    function processPaymentAction(paymentId, action, remarks = '') {
         let actionText = action === 'approved' ? 'Approve' : 'Reject';
         if (!confirm(`Are you sure you want to ${actionText} this payment?`)) return;
 
         let formData = new FormData();
         formData.append('payment_id', paymentId);
         formData.append('action', action);
+        formData.append('remarks', remarks); // Passed to backend
 
         $('#reviewModal').modal('hide');
 
@@ -532,14 +564,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Confirm Approve Button (Inside Modal)
+// Reset reason box whenever modal opens or closes
+    $('#reviewModal').on('hidden.bs.modal', function () {
+        $('#rejectReasonSection').addClass('d-none');
+        $('#rejectionRemarks').val('').removeClass('is-invalid');
+    });
+
+    // Confirm Approve Button
     $('#confirmApproveBtn').click(function() {
         processPaymentAction($('#revPaymentId').val(), 'approved');
     });
-    
-    // Confirm Reject Button (Inside Modal)
+
+    // Confirm Reject Button
     $('#confirmRejectBtn').click(function() {
-        processPaymentAction($('#revPaymentId').val(), 'rejected');
+        let reasonSection = $('#rejectReasonSection');
+        let remarksInput = $('#rejectionRemarks');
+        
+        // First click reveals the remarks textarea if hidden
+        if (reasonSection.hasClass('d-none')) {
+            reasonSection.removeClass('d-none');
+            remarksInput.focus();
+            return;
+        }
+
+        // Validation
+        let remarks = remarksInput.val().trim();
+        if (!remarks) {
+            remarksInput.addClass('is-invalid').focus();
+            return;
+        }
+        remarksInput.removeClass('is-invalid');
+
+        processPaymentAction($('#revPaymentId').val(), 'rejected', remarks);
     });
 
     // Delete Button (Directly beside Action dropdown)

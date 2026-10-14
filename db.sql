@@ -640,3 +640,10 @@ FROM mr_users u
 WHERE NOT EXISTS (
     SELECT 1 FROM financial_year f WHERE f.mr_id = u.m_id
 );
+
+
+
+-- 13- 10-26 
+
+ALTER TABLE `payment_details` 
+ADD COLUMN `remarks` TEXT NULL AFTER `approved_at`;

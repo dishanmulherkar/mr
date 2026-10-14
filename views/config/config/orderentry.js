@@ -335,19 +335,27 @@ function renderCart() {
 }
 
 // Helper to update the mobile limit strip
-function updateLiveLimit(currentGrandTotal) {
+function updateLiveLimit(currentCartTotal) {
     const limitEl = document.getElementById('mr-live-limit');
     if (!limitEl || typeof baseAvailLimit === 'undefined') return;
 
-    const remaining = baseAvailLimit - currentGrandTotal;
+    const cartTotal = parseFloat(currentCartTotal) || 0;
+    const remaining = baseAvailLimit - cartTotal;
 
     if (remaining < 0) {
-        // Exceeded: Show negative deficit in red
-        limitEl.textContent = '- ₹ ' + Math.abs(remaining).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Exceeded: Show negative deficit in red (e.g., - ₹ 2,500.00)
+        const exceededBy = Math.abs(remaining);
+        limitEl.textContent = '- ₹ ' + exceededBy.toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
         limitEl.classList.add('exceeded');
     } else {
-        // Within limit: Show positive remaining balance in normal green
-        limitEl.textContent = '₹ ' + remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Within limit: Show remaining balance in normal green
+        limitEl.textContent = '₹ ' + remaining.toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
         limitEl.classList.remove('exceeded');
     }
 }

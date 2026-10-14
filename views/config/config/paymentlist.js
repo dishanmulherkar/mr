@@ -274,135 +274,144 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Render Logic for SUBMITTED PAYMENTS
     function renderPaymentCards(payments) {
-        cardContainer.innerHTML = '';
-        let count = 0;
+    cardContainer.innerHTML = '';
+    let count = 0;
 
-        if (!payments || payments.length === 0) {
-            cardContainer.innerHTML = '<div class="empty-state">No payments found for the selected filters.</div>';
-            paymentCount.textContent = 0;
+    if (!payments || payments.length === 0) {
+        cardContainer.innerHTML = '<div class="empty-state">No payments found for the selected filters.</div>';
+        paymentCount.textContent = 0;
+        return;
+    }
+
+    payments.forEach(p => {
+        // 1. Resolve paymentId checking pay_id first (common in your queries)
+        let paymentId = p.pay_id || p.id || p.payment_id || p.reference_no || 0;
+
+        let filterVal = statusFilter.value.toLowerCase();
+        let recordStatus = p.status ? p.status.toLowerCase() : 'pending';
+
+        if (filterVal !== 'all' && recordStatus !== filterVal) return;
+
+        count++;
+        let statusClass = 'badge-pending';
+        if (recordStatus === 'approved') statusClass = 'badge-approved';
+        if (recordStatus === 'rejected') statusClass = 'badge-rejected';
+
+        let displayStatus = recordStatus.charAt(0).toUpperCase() + recordStatus.slice(1);
+
+        let actionBtn = p.proof_image 
+            ? `<button type="button" class="view-proof-btn" data-img="${BASE_URL}../${p.proof_image}" style="background-color: #17a2b8; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;"><i class="fa fa-eye"></i> View Proof</button>` 
+            : `<span style="color:#aaa; font-size:13px;">No Proof</span>`;
+
+        // Only render delete button for pending payments
+        let deleteBtn = (recordStatus === 'pending') 
+            ? `<button type="button" class="btn-delete-payment" data-id="${paymentId}" style="background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; margin-left: 8px;"><i class="fa fa-trash"></i> Delete</button>` 
+            : '';
+
+        // Render reject reason row if status is rejected
+        let rejectReasonHtml = '';
+        if (recordStatus === 'rejected') {
+            const reason = p.reject_reason || p.rejection_reason || p.reason || p.remarks || 'Not specified';
+            rejectReasonHtml = `
+                <div class="card-row" style="background-color: #fdf2f2; border-left: 3px solid #dc3545; padding: 6px 8px; margin-top: 6px; border-radius: 3px;">
+                    <span style="color: #b91c1c; font-weight: 600; font-size: 12px;"><i class="fa fa-exclamation-circle"></i> Reason:</span>
+                    <span style="color: #991b1b; font-size: 12px; text-align: right; max-width: 70%; word-break: break-word;">${reason}</span>
+                </div>
+            `;
+        }
+
+        let card = document.createElement('div');
+        card.className = 'payment-card';
+        card.innerHTML = `
+            <div class="card-header">
+                <strong>Ref: ${p.reference_no || 'N/A'}</strong>
+                <span class="status-badge ${statusClass}">${displayStatus}</span>
+            </div>
+            <div class="card-body">
+                <div class="card-row">
+                    <span>Pay Date</span>
+                    <span>${p.payment_date || '-'}</span>
+                </div>
+                <div class="card-row">
+                    <span>Stockist</span>
+                    <span style="text-align: right; max-width: 60%;">${p.stockist_name || '-'}</span>
+                </div>
+                <div class="card-row">
+                    <span>Pay Mode</span>
+                    <span>${p.payment_mode || 'Bank'}</span>
+                </div>
+                <div class="card-row amount-highlight">
+                    <span>Amount</span>
+                    <strong style="color: #28a745;">₹${parseFloat(p.amount).toFixed(2)}</strong>
+                </div>
+                ${rejectReasonHtml}
+            </div>  
+            <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>${actionBtn}</div>
+                <div>${deleteBtn}</div>
+            </div>
+        `;
+        cardContainer.appendChild(card);
+    });
+
+    // View Proof Listener
+    document.querySelectorAll('.view-proof-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const imgSrc = this.getAttribute('data-img');
+            if (modalProofImage && proofModal) {
+                modalProofImage.src = imgSrc;
+                proofModal.style.display = 'flex';
+            }
+        });
+    });
+
+    // Delete Pending Payment Listener (Delegate click event)
+    cardContainer.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-delete-payment');
+        if (!btn) return;
+
+        const paymentId = btn.getAttribute('data-id');
+
+        if (!paymentId || paymentId === '0') {
+            alert('Invalid payment ID.');
             return;
         }
 
-        payments.forEach(p => {
-            // 1. Resolve paymentId checking pay_id first (common in your queries)
-            let paymentId = p.pay_id || p.id || p.payment_id || p.reference_no || 0;
-
-            let filterVal = statusFilter.value.toLowerCase();
-            let recordStatus = p.status ? p.status.toLowerCase() : 'pending';
-
-            if (filterVal !== 'all' && recordStatus !== filterVal) return;
-
-            count++;
-            let statusClass = 'badge-pending';
-            if (recordStatus === 'approved') statusClass = 'badge-approved';
-            if (recordStatus === 'rejected') statusClass = 'badge-rejected';
-
-            let displayStatus = recordStatus.charAt(0).toUpperCase() + recordStatus.slice(1);
-
-            let actionBtn = p.proof_image 
-                ? `<button type="button" class="view-proof-btn" data-img="${BASE_URL}../${p.proof_image}" style="background-color: #17a2b8; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;"><i class="fa fa-eye"></i> View Proof</button>` 
-                : `<span style="color:#aaa; font-size:13px;">No Proof</span>`;
-
-            // Only render delete button for pending payments
-            let deleteBtn = (recordStatus === 'pending') 
-                ? `<button type="button" class="btn-delete-payment" data-id="${paymentId}" style="background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; margin-left: 8px;"><i class="fa fa-trash"></i> Delete</button>` 
-                : '';
-
-            let card = document.createElement('div');
-            card.className = 'payment-card';
-            card.innerHTML = `
-                <div class="card-header">
-                    <strong>Ref: ${p.reference_no || 'N/A'}</strong>
-                    <span class="status-badge ${statusClass}">${displayStatus}</span>
-                </div>
-                <div class="card-body">
-                    <div class="card-row">
-                        <span>Pay Date</span>
-                        <span>${p.payment_date || '-'}</span>
-                    </div>
-                    <div class="card-row">
-                        <span>Stockist</span>
-                        <span style="text-align: right; max-width: 60%;">${p.stockist_name || '-'}</span>
-                    </div>
-                    <div class="card-row">
-                        <span>Pay Mode</span>
-                        <span>${p.payment_mode || 'Bank'}</span>
-                    </div>
-                    <div class="card-row amount-highlight">
-                        <span>Amount Paid</span>
-                        <strong style="color: #28a745;">₹${parseFloat(p.amount).toFixed(2)}</strong>
-                    </div>
-                </div>
-                <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>${actionBtn}</div>
-                    <div>${deleteBtn}</div>
-                </div>
-            `;
-            cardContainer.appendChild(card);
-        });
-
-        // View Proof Listener
-        document.querySelectorAll('.view-proof-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const imgSrc = this.getAttribute('data-img');
-                if (modalProofImage && proofModal) {
-                    modalProofImage.src = imgSrc;
-                    proofModal.style.display = 'flex';
-                }
-            });
-        });
-
-        // Delete Pending Payment Listener
-        // Attach Delete Listener
-   // Delegate click event to the container for dynamically created buttons
-cardContainer.addEventListener('click', function(e) {
-    const btn = e.target.closest('.btn-delete-payment');
-    if (!btn) return; // Exit if the click was not on a delete button
-
-    const paymentId = btn.getAttribute('data-id');
-    console.log('Delete button clicked for payment ID:', paymentId);
-
-    if (!paymentId || paymentId === '0') {
-        alert('Invalid payment ID.');
-        return;
-    }
-
-    if (!confirm('Are you sure you want to delete this pending payment?')) {
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('id', paymentId);
-
-    // If your project routes via query params (e.g. index.php?route=payment&action=delete), adjust URL accordingly
-    const targetUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + 'payment/delete';
-
-    fetch(targetUrl, {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => {
-        if (!res.ok) throw new Error('HTTP status ' + res.status);
-        return res.json();
-    })
-    .then(res => {
-        if (res.success) {
-            fetchPayments(); // Refresh list after deletion
-        } else {
-            alert(res.msg || 'Failed to delete payment.');
+        if (!confirm('Are you sure you want to delete this pending payment?')) {
+            return;
         }
-    })
-    .catch(err => {
-        console.error('Delete error:', err);
-        alert('Server error occurred while deleting payment.');
+
+        const formData = new FormData();
+        formData.append('id', paymentId);
+
+        const targetUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + 'payment/delete';
+
+        fetch(targetUrl, {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => {
+            if (!res.ok) throw new Error('HTTP status ' + res.status);
+            return res.json();
+        })
+        .then(res => {
+            if (res.success) {
+                fetchPayments();
+            } else {
+                alert(res.msg || 'Failed to delete payment.');
+            }
+        })
+        .catch(err => {
+            console.error('Delete error:', err);
+            alert('Server error occurred while deleting payment.');
+        });
     });
-});
 
-        if(count === 0) {
-            cardContainer.innerHTML = '<div class="empty-state">No matching payments found.</div>';
-        }
-        paymentCount.textContent = count;
+    if (count === 0) {
+        cardContainer.innerHTML = '<div class="empty-state">No matching payments found.</div>';
     }
+    paymentCount.textContent = count;
+}
 
     viewToggle.addEventListener('change', () => {
         updateStatusOptions();

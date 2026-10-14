@@ -117,10 +117,12 @@ class payment_manage_ctl {
         header('Content-Type: application/json');
         
         $stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
+
+        $payment_date = trim($_GET['payment_date'] ?? '');
         
         if ($stockist_id > 0) {
             // Fetch the comprehensive data from the model
-            $data = $this->model->getStockistOutstandingWithCD($stockist_id);
+            $data = $this->model->getStockistOutstandingWithCD($stockist_id, $payment_date);
             
             // Encode and send all required keys to the frontend
             echo json_encode([

@@ -678,138 +678,188 @@ class orderentry_mdl
         }
     }
 
-    public function getMrCreditLimitDetails($mr_id, $exclude_order_id = 0)
-    {
-        $mr_id            = (int)$mr_id;
-        $exclude_order_id = (int)$exclude_order_id;
+    public function getMrCreditLimitDetails($mr_id, $exclude_order_id = 0, $current_bill_amount = 0)
+{
+    $mr_id               = (int)$mr_id;
+    $exclude_order_id    = (int)$exclude_order_id;
+    $current_bill_amount = round((float)$current_bill_amount, 2);
 
-        // 1. Fetch MR details, HQ ID, and credit limit
-        $stmt_mr = $this->con->prepare("
-            SELECT m_id, mr_name, hq_id, credit_limit 
-            FROM mr_users 
-            WHERE m_id = ? 
-            LIMIT 1
-        ");
-        $stmt_mr->bind_param("i", $mr_id);
-        $stmt_mr->execute();
-        $mr = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
+    // 1. Fetch MR details, Headquarter ID, and Credit Limit
+    $stmt_mr = $this->con->prepare("
+        SELECT m_id, mr_name, hq_id, credit_limit 
+        FROM mr_users 
+        WHERE m_id = ? 
+        LIMIT 1
+    ");
+    $stmt_mr->bind_param("i", $mr_id);
+    $stmt_mr->execute();
+    $mr = $stmt_mr->get_result()->fetch_assoc();
+    $stmt_mr->close();
 
-        if (!$mr) {
-            return [
-                'success' => false,
-                'msg'     => 'MR not found'
-            ];
-        }
-
-        $credit_limit = (float)($mr['credit_limit'] ?? 0.00);
-        $hq_id        = (int)($mr['hq_id'] ?? 0);
-
-        // 2. Aggregate all pending bills across ALL stockists for this MR
-        // EXCLUDE the current order if we are editing/re-approving it
-        $sql_bills = "
-            SELECT 
-                COUNT(inward_id) AS pending_bill_count,
-                COALESCE(SUM(
-                    (COALESCE(grand_total, 0) + COALESCE(cd_penalty_amt, 0)) - 
-                    (COALESCE(paid_amt, 0) + COALESCE(cd_earned_amt, 0))
-                ), 0.00) AS total_pending_amount
-            FROM stock_inward
-            WHERE mr_id = ? 
-            AND pay_status != 'paid'
-        ";
-
-        if ($exclude_order_id > 0) {
-            $sql_bills .= " AND order_id != ?";
-            $stmt_bills = $this->con->prepare($sql_bills);
-            $stmt_bills->bind_param("ii", $mr_id, $exclude_order_id);
-        } else {
-            $stmt_bills = $this->con->prepare($sql_bills);
-            $stmt_bills->bind_param("i", $mr_id);
-        }
-
-        $stmt_bills->execute();
-        $bills_data = $stmt_bills->get_result()->fetch_assoc();
-        $stmt_bills->close();
-
-        $bills_pending = round((float)$bills_data['total_pending_amount'], 2);
-        $pending_count = (int)$bills_data['pending_bill_count'];
-
-        // 3. Aggregate Pending Opening Balance Debt for all stockists under this MR's HQ
-        $pending_ob_debt = 0.00;
-        if ($hq_id > 0) {
-            $stmt_ob = $this->con->prepare("
-                SELECT 
-                    COALESCE(SUM(
-                        GREATEST(0, s.opening_balance - COALESCE(ob_paid.allocated_ob, 0))
-                    ), 0.00) AS total_pending_ob_debt
-                FROM stockists s
-                LEFT JOIN (
-                    SELECT 
-                        pl.stockist_id,
-                        SUM(pa.amount_allocated) AS allocated_ob
-                    FROM payment_allocations pa
-                    INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
-                    WHERE (pa.inward_id IS NULL OR pa.inward_id = 0)
-                    GROUP BY pl.stockist_id
-                ) ob_paid ON ob_paid.stockist_id = s.stockist_id
-                WHERE s.hq_id = ? 
-                AND LOWER(s.opening_balance_type) = 'debt'
-                AND s.opening_balance > 0
-            ");
-            $stmt_ob->bind_param("i", $hq_id);
-            $stmt_ob->execute();
-            $ob_data = $stmt_ob->get_result()->fetch_assoc();
-            $stmt_ob->close();
-
-            $pending_ob_debt = round((float)($ob_data['total_pending_ob_debt'] ?? 0.00), 2);
-        }
-
-        // Gross Pending = Unpaid Bills + Unpaid Opening Balance Debt
-        $gross_pending = round($bills_pending + $pending_ob_debt, 2);
-
-        // 4. Subtract unallocated advances
-        $stmt_adv = $this->con->prepare("
-            SELECT 
-                COALESCE(
-                    (SELECT SUM(amount_paid) 
-                    FROM payment_details 
-                    WHERE mr_id = ? AND approval_status = 'approved'), 
-                    0
-                ) - 
-                COALESCE(
-                    (SELECT SUM(pa.amount_allocated) 
-                    FROM payment_allocations pa 
-                    INNER JOIN payment_ledgers pl ON pa.ledger_id = pl.id 
-                    WHERE pl.user_id = ?), 
-                    0
-                ) AS unallocated_advance
-        ");
-        $stmt_adv->bind_param("ii", $mr_id, $mr_id);
-        $stmt_adv->execute();
-        $adv_row = $stmt_adv->get_result()->fetch_assoc();
-        $stmt_adv->close();
-
-        $unallocated_advance = max(0, round((float)($adv_row['unallocated_advance'] ?? 0), 2));
-        $net_pending_amount  = max(0, round($gross_pending - $unallocated_advance, 2));
-
-        // Available capacity BEFORE considering this order
-        $available_to_bill = round(max(0, $credit_limit - $net_pending_amount), 2);
-        $is_exceeded       = ($net_pending_amount >= $credit_limit && $credit_limit > 0);
-
+    if (!$mr) {
         return [
-            'success'             => true,
-            'mr_id'               => $mr_id,
-            'mr_name'             => $mr['mr_name'],
-            'credit_limit'        => $credit_limit,
-            'total_pending_bills' => $pending_count,
-            'bills_pending'       => $bills_pending,
-            'pending_ob_debt'     => $pending_ob_debt,
-            'gross_pending'       => $gross_pending,
-            'unallocated_advance' => $unallocated_advance,
-            'pending_amount'      => $net_pending_amount,
-            'available_to_bill'   => $available_to_bill,
-            'is_exceeded'         => $is_exceeded
+            'success' => false,
+            'msg'     => 'MR not found'
         ];
     }
+
+    $credit_limit = (float)($mr['credit_limit'] ?? 0.00);
+    $hq_id        = (int)($mr['hq_id'] ?? 0);
+
+    // 2. Pending Inward Bills across MR's territory
+    $sql_bills = "
+        SELECT 
+            COUNT(inward_id) AS pending_bill_count,
+            COALESCE(SUM(
+                (COALESCE(grand_total, 0) + COALESCE(cd_penalty_amt, 0)) - 
+                (COALESCE(paid_amt, 0) + COALESCE(cd_earned_amt, 0))
+            ), 0.00) AS total_pending_amount
+        FROM stock_inward
+        WHERE mr_id = ? 
+          AND pay_status != 'paid'
+    ";
+
+    if ($exclude_order_id > 0) {
+        $sql_bills .= " AND order_id != ?";
+        $stmt_bills = $this->con->prepare($sql_bills);
+        $stmt_bills->bind_param("ii", $mr_id, $exclude_order_id);
+    } else {
+        $stmt_bills = $this->con->prepare($sql_bills);
+        $stmt_bills->bind_param("i", $mr_id);
+    }
+
+    $stmt_bills->execute();
+    $bills_data = $stmt_bills->get_result()->fetch_assoc();
+    $stmt_bills->close();
+
+    $bills_pending = round((float)$bills_data['total_pending_amount'], 2);
+    $pending_count = (int)$bills_data['pending_bill_count'];
+
+    // 3. Pending Opening Balance DEBT in MR's HQ
+    $pending_ob_debt = 0.00;
+    if ($hq_id > 0) {
+        $stmt_ob_debt = $this->con->prepare("
+            SELECT 
+                COALESCE(SUM(
+                    GREATEST(0, s.opening_balance - COALESCE(ob_paid.allocated_ob, 0))
+                ), 0.00) AS total_pending_ob_debt
+            FROM stockists s
+            LEFT JOIN (
+                SELECT 
+                    pl.stockist_id,
+                    SUM(pa.amount_allocated) AS allocated_ob
+                FROM payment_allocations pa
+                INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
+                WHERE (pa.inward_id IS NULL OR pa.inward_id = 0)
+                GROUP BY pl.stockist_id
+            ) ob_paid ON ob_paid.stockist_id = s.stockist_id
+            WHERE s.hq_id = ? 
+              AND LOWER(s.opening_balance_type) = 'debt'
+              AND s.opening_balance > 0
+        ");
+        $stmt_ob_debt->bind_param("i", $hq_id);
+        $stmt_ob_debt->execute();
+        $ob_debt_row = $stmt_ob_debt->get_result()->fetch_assoc();
+        $stmt_ob_debt->close();
+
+        $pending_ob_debt = round((float)($ob_debt_row['total_pending_ob_debt'] ?? 0.00), 2);
+    }
+
+    // 4. Unutilized Opening Balance CREDIT in MR's HQ
+    $unutilized_ob_advance = 0.00;
+    if ($hq_id > 0) {
+        $stmt_ob_credit = $this->con->prepare("
+            SELECT 
+                COALESCE(SUM(
+                    GREATEST(0, s.opening_balance - COALESCE(ob_used.used_ob_credit, 0))
+                ), 0.00) AS total_unutilized_ob_credit
+            FROM stockists s
+            LEFT JOIN (
+                SELECT 
+                    pl.stockist_id,
+                    SUM(pa.amount_allocated) AS used_ob_credit
+                FROM payment_allocations pa
+                INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
+                WHERE pl.transaction_type = 'opening_balance'
+                  AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease')
+                GROUP BY pl.stockist_id
+            ) ob_used ON ob_used.stockist_id = s.stockist_id
+            WHERE s.hq_id = ? 
+              AND LOWER(s.opening_balance_type) = 'credit'
+              AND s.opening_balance > 0
+        ");
+        $stmt_ob_credit->bind_param("i", $hq_id);
+        $stmt_ob_credit->execute();
+        $ob_credit_row = $stmt_ob_credit->get_result()->fetch_assoc();
+        $stmt_ob_credit->close();
+
+        $unutilized_ob_advance = round((float)($ob_credit_row['total_unutilized_ob_credit'] ?? 0.00), 2);
+    }
+
+    // 5. Unallocated Advances from Approved Payments
+    $stmt_adv = $this->con->prepare("
+        SELECT 
+            COALESCE(
+                (SELECT SUM(amount_paid) 
+                 FROM payment_details 
+                 WHERE mr_id = ? AND approval_status = 'approved'), 
+                0
+            ) - 
+            COALESCE(
+                (SELECT SUM(pa.amount_allocated) 
+                 FROM payment_allocations pa 
+                 INNER JOIN payment_ledgers pl ON pa.ledger_id = pl.id 
+                 WHERE (pl.user_id = ? OR pl.reference_id IN (
+                     SELECT id FROM payment_details WHERE mr_id = ? AND approval_status = 'approved'
+                 ))), 
+                0
+            ) AS unallocated_payment_advance
+    ");
+    $stmt_adv->bind_param("iii", $mr_id, $mr_id, $mr_id);
+    $stmt_adv->execute();
+    $adv_row = $stmt_adv->get_result()->fetch_assoc();
+    $stmt_adv->close();
+
+    $unallocated_payment_advance = max(0, round((float)($adv_row['unallocated_payment_advance'] ?? 0.00), 2));
+
+    // 6. Final Calculations
+    $gross_pending = round($bills_pending + $pending_ob_debt, 2);
+    $total_advance = round($unallocated_payment_advance + $unutilized_ob_advance, 2);
+
+    // Net existing debt liability
+    $net_pending_debt = round(max(0, $gross_pending - $total_advance), 2);
+
+    // Base available limit BEFORE adding this new order/bill
+    // Can be negative if net_pending_debt already exceeded credit_limit
+    $base_avail_limit = round($credit_limit - $net_pending_debt, 2);
+
+    // Projected debt after adding the current draft order/bill
+    $total_projected_debt = round($net_pending_debt + $current_bill_amount, 2);
+
+    // Final limit remaining after considering the current bill
+    $net_remaining_limit = round($base_avail_limit - $current_bill_amount, 2);
+
+    $is_exceeded     = ($net_remaining_limit < 0 && $credit_limit > 0);
+    $exceeded_amount = $is_exceeded ? abs($net_remaining_limit) : 0.00;
+
+    return [
+        'success'              => true,
+        'mr_id'                => $mr_id,
+        'mr_name'              => $mr['mr_name'],
+        'credit_limit'         => $credit_limit,
+        'total_pending_bills'  => $pending_count,
+        'bills_pending'        => $bills_pending,
+        'pending_ob_debt'      => $pending_ob_debt,
+        'gross_pending'        => $gross_pending,
+        'unallocated_advance'  => $total_advance,
+        'pending_amount'       => $net_pending_debt,    // Net existing debt
+        'base_avail_limit'     => $base_avail_limit,    // Limit - Pending Debt (Used by JS)
+        'current_bill_amount'  => $current_bill_amount,
+        'total_projected_debt' => $total_projected_debt,
+        'net_remaining_limit'  => $net_remaining_limit,
+        'available_to_bill'    => max(0, $net_remaining_limit),
+        'is_exceeded'          => $is_exceeded,
+        'exceeded_amount'      => $exceeded_amount
+    ];
+}
 }

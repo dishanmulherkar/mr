@@ -336,7 +336,8 @@ class Payment_model {
                 p.amount_paid as amount,
                 p.payment_method as payment_mode,
                 p.approval_status as status,
-                p.screenshot_path as proof_image
+                p.screenshot_path as proof_image,
+                p.remarks
             FROM payment_details p
             JOIN stockists s ON p.stockist_id = s.stockist_id
             WHERE $cond
@@ -360,284 +361,275 @@ class Payment_model {
     // ==========================================
     // Fetch Outstanding and Eligible Cash Discount
     // ==========================================
-    public function getStockistOutstandingWithCD($stockist_id)
-    {
-        $stockist_id = (int)$stockist_id;
+    public function getStockistOutstandingWithCD($stockist_id,$payment_date = null)
+{
+    $stockist_id = (int)$stockist_id;
 
-        /*
-        * 1. Get Super Stockist ID, Opening Balance details
-        */
-        $stmtSS = $this->con->prepare("
-            SELECT 
-                h.super_stockist_id,
-                s.opening_balance,
-                s.opening_balance_type,
-                s.opening_balance_date
-            FROM stockists s 
-            INNER JOIN headquarter h ON h.headquarter_id = s.hq_id
-            WHERE s.stockist_id = ?
-            LIMIT 1
-        ");
+    // Validate and sanitize date
+    if (empty($payment_date) || !strtotime($payment_date)) {$payment_date = date('Y-m-d');
+    } else {
+        $payment_date = date('Y-m-d', strtotime($payment_date));
+    }
+    $safe_payment_date = $this->con->real_escape_string($payment_date);
 
-        $stmtSS->bind_param("i", $stockist_id);
-        $stmtSS->execute();
-        $resultSS = $stmtSS->get_result();
-        $stockistData = $resultSS->fetch_assoc();
-        $stmtSS->close();
+    /*
+    * 1. Get Super Stockist ID, Opening Balance details
+    */
+    $stmtSS =$this->con->prepare("
+        SELECT 
+            h.super_stockist_id,
+            s.opening_balance,
+            s.opening_balance_type,
+            s.opening_balance_date
+        FROM stockists s 
+        INNER JOIN headquarter h ON h.headquarter_id = s.hq_id
+        WHERE s.stockist_id = ?
+        LIMIT 1
+    ");
 
-        if (!$stockistData) {
-            return [
-                'total_outstanding' => 0.00,
-                'eligible_cd'       => 0.00,
-                'total_penalty'     => 0.00,
-                'net_payable'       => 0.00,
-                'advance_amount'    => 0.00,
-                'bill_details'      => []
-            ];
-        }
+    $stmtSS->bind_param("i", $stockist_id);
+    $stmtSS->execute();$resultSS = $stmtSS->get_result();$stockistData = $resultSS->fetch_assoc();$stmtSS->close();
 
-        $super_stockist_id = (int)$stockistData['super_stockist_id'];
-
-        /*
-        * 2. Calculate Pending Opening Balance (Debit vs Credit)
-        */
-        $ob_amount = (float)($stockistData['opening_balance'] ?? 0);
-        $ob_type   = strtolower($stockistData['opening_balance_type'] ?? 'debt');
-        $ob_date   = !empty($stockistData['opening_balance_date']) ? $stockistData['opening_balance_date'] : date('Y-m-d');
-        
-        $pending_ob_debt    = 0.00;
-        $remaining_advance  = 0.00;
-        $total_used_advance = 0.00;
-        $total_orig_advance = 0.00;
-
-        // CASE A: Stockist has Pending DEBT Opening Balance
-        if ($ob_amount > 0 && $ob_type === 'debt') {
-            $stmtOBPaid = $this->con->prepare("
-                SELECT COALESCE(SUM(pa.amount_allocated), 0) as allocated_ob 
-                FROM payment_allocations pa
-                INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
-                WHERE pl.stockist_id = ? 
-                AND (pa.inward_id IS NULL OR pa.inward_id = 0)
-            ");
-            $stmtOBPaid->bind_param("i", $stockist_id);
-            $stmtOBPaid->execute();
-            $obPaidRes = $stmtOBPaid->get_result()->fetch_assoc();
-            $stmtOBPaid->close();
-
-            $allocated_ob    = (float)($obPaidRes['allocated_ob'] ?? 0);
-            $pending_ob_debt = max(0, round($ob_amount - $allocated_ob, 2));
-        }
-
-        // CASE B: Stockist has ADVANCE Credit (Payments & Credit Opening Balance)
-        $stmtAdv = $this->con->prepare("
-            SELECT 
-                COALESCE(SUM(adv.available_advance), 0) AS total_remaining_advance,
-                COALESCE(SUM(adv.amount), 0) AS total_original_advance,
-                COALESCE(SUM(adv.used_amount), 0) AS total_used_advance
-            FROM (
-                SELECT 
-                    pl.id,
-                    pl.amount,
-                    COALESCE(SUM(pa.amount_allocated), 0) AS used_amount,
-                    CASE 
-                        WHEN pl.amount > COALESCE(SUM(pa.amount_allocated), 0) 
-                        THEN (pl.amount - COALESCE(SUM(pa.amount_allocated), 0)) 
-                        ELSE 0 
-                    END AS available_advance
-                FROM payment_ledgers pl
-                LEFT JOIN payment_allocations pa ON pa.ledger_id = pl.id
-                WHERE pl.stockist_id = ? 
-                AND (
-                    -- 1. Credit Opening Balance
-                    (pl.transaction_type = 'opening_balance' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease'))
-                    -- 2. Real Payments (excludes automatic CD discounts)
-                    OR (
-                        pl.transaction_type = 'payment_made' 
-                        AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease')
-                        AND (pl.notes IS NULL OR (pl.notes NOT LIKE '%CD on Invoice%' AND pl.notes NOT LIKE '%CD Reversed%'))
-                    )
-                )
-                GROUP BY pl.id
-            ) AS adv
-        ");
-        $stmtAdv->bind_param("i", $stockist_id);
-        $stmtAdv->execute();
-        $advData = $stmtAdv->get_result()->fetch_assoc();
-        $stmtAdv->close();
-
-        $remaining_advance  = (float)($advData['total_remaining_advance'] ?? 0.00);
-        $total_used_advance = (float)($advData['total_used_advance'] ?? 0.00);
-        $total_orig_advance = (float)($advData['total_original_advance'] ?? 0.00);
-
-        // Fallback if stockists table has credit opening balance not recorded in payment_ledgers
-        if ($total_orig_advance <= 0 && $ob_type === 'credit' && $ob_amount > 0) {
-            $total_orig_advance = $ob_amount;
-            $remaining_advance  = $ob_amount;
-        }
-
-        /*
-        * 3. Get CD rules
-        */
-        $stmtRule = $this->con->prepare("
-            SELECT cd_4_percent_days, cd_2_percent_days
-            FROM super_stockist_cd_rules
-            WHERE super_stockist_id = ?
-            LIMIT 1
-        ");
-
-        $stmtRule->bind_param("i", $super_stockist_id);
-        $stmtRule->execute();
-        $resultRule = $stmtRule->get_result();
-        $rules = $resultRule->fetch_assoc();
-        $stmtRule->close();
-
-        $cd_4_days = isset($rules['cd_4_percent_days']) ? (int)$rules['cd_4_percent_days'] : 10;
-        $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
-
-        /*
-        * 4. Get unpaid / partially paid bills
-        */
-       $stmt =$this->con->prepare("
-            SELECT 
-                si.inward_id,
-                si.inward_no,
-                si.inward_date,
-                o.dispatch_date,
-                si.grand_total AS gross_amount,
-                si.sub_total,
-                COALESCE(si.cd_percent, 0) AS cd_percent,
-                si.paid_amt,
-                (si.grand_total - si.paid_amt) AS pending_amount,
-                DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) AS bill_age_days,
-
-                -- NEW ELIGIBLE 4% CD
-                CASE 
-                    WHEN DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) <= ? AND COALESCE(si.cd_percent, 0) = 0 
-                    THEN si.grand_total - ROUND((si.sub_total * 0.96) + (COALESCE(si.gst_amount, 0) * 0.96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
-                    ELSE 0 
-                END AS eligible_4_cd,
-
-                -- NEW ELIGIBLE 2% CD
-                CASE 
-                    WHEN DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) > ? 
-                         AND DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) <= ? 
-                         AND COALESCE(si.cd_percent, 0) = 0 
-                    THEN si.grand_total - ROUND((si.sub_total * 0.98) + (COALESCE(si.gst_amount, 0) * 0.98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
-                    ELSE 0 
-                END AS eligible_2_cd,
-
-                -- REVOKED PENALTY
-                CASE 
-                    WHEN COALESCE(si.cd_percent, 0) = 4 THEN
-                        CASE 
-                            WHEN DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
-                            WHEN DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 
-                                ROUND((si.sub_total * 98/96) + (COALESCE(si.gst_amount, 0) * 98/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
-                            ELSE 
-                                ROUND((si.sub_total * 100/96) + (COALESCE(si.gst_amount, 0) * 100/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
-                        END
-                    WHEN COALESCE(si.cd_percent, 0) = 2 THEN
-                        CASE 
-                            WHEN DATEDIFF(CURDATE(), COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
-                            ELSE 
-                                ROUND((si.sub_total * 100/98) + (COALESCE(si.gst_amount, 0) * 100/98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
-                        END
-                    ELSE 0 
-                END AS penalty_amount
-
-            FROM stock_inward si
-            LEFT JOIN `orders` o ON si.order_id = o.order_id
-            WHERE si.stockist_id = ? AND si.pay_status != 'paid'
-            ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
-        ");
-
-        $stmt->bind_param(
-            "iiiiiii",
-            $cd_4_days,
-            $cd_4_days, $cd_2_days,
-            $cd_4_days, $cd_2_days,
-            $cd_2_days,
-            $stockist_id
-        );
-
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        $total_pending       = 0.00;
-        $total_eligible_4_cd = 0.00;
-        $total_eligible_2_cd = 0.00;
-        $total_penalty       = 0.00;
-        $bills               = [];
-
-        // Prepend Opening Balance if active debt exists
-        if ($pending_ob_debt > 0) {
-            $total_pending += $pending_ob_debt;
-            $bills[] = [
-                'inward_id'          => 0,
-                'inward_no'          => 'OPENING-BAL (DEBT)',
-                'inward_date'        => $ob_date,
-                'gross_amount'       => $ob_amount,
-                'sub_total'          => $ob_amount,
-                'cd_percent'         => 0,
-                'paid_amt'           => ($ob_amount - $pending_ob_debt),
-                'pending_amount'     => $pending_ob_debt,
-                'bill_age_days'      => 0,
-                'eligible_4_cd'      => 0,
-                'eligible_2_cd'      => 0,
-                'penalty_amount'     => 0,
-                'is_opening_balance' => 1,
-                'balance_type'       => 'debt'
-            ];
-        }
-
-        // Prepend Advance Credit (Surplus from payment or opening balance credit)
-        if ($remaining_advance > 0) {
-            $total_pending -= $remaining_advance;
-            $bills[] = [
-                'inward_id'          => 0,
-                'inward_no'          => 'ADVANCE CREDIT',
-                'inward_date'        => $ob_date,
-                'gross_amount'       => $total_orig_advance,
-                'sub_total'          => $total_orig_advance,
-                'cd_percent'         => 0,
-                'paid_amt'           => $total_used_advance,
-                'pending_amount'     => -$remaining_advance, // Negative amount denotes credit
-                'bill_age_days'      => 0,
-                'eligible_4_cd'      => 0,
-                'eligible_2_cd'      => 0,
-                'penalty_amount'     => 0,
-                'is_opening_balance' => ($ob_type === 'credit' && $total_orig_advance == $ob_amount) ? 1 : 0,
-                'balance_type'       => 'credit'
-            ];
-        }
-
-        while ($row = $result->fetch_assoc()) {
-            $pending = (float)$row['pending_amount'];
-
-            if ($pending > 0) {
-                $total_pending       += $pending;
-                $total_eligible_4_cd += (float)$row['eligible_4_cd'];
-                $total_eligible_2_cd += (float)$row['eligible_2_cd'];
-                $total_penalty       += (float)$row['penalty_amount'];
-            }
-            $row['is_opening_balance'] = 0;
-            $row['balance_type']       = 'debt';
-            $bills[] = $row;
-        }
-        $stmt->close();
-
-        $total_cd    = $total_eligible_4_cd + $total_eligible_2_cd;
-        $net_payable = $total_pending - $total_cd + $total_penalty;
-
+    if (!$stockistData) {
         return [
-            'total_outstanding' => round($total_pending, 2),
-            'eligible_cd'       => round($total_cd, 2),
-            'total_penalty'     => round($total_penalty, 2),
-            'net_payable'       => round($net_payable, 2),
-            'advance_amount'    => round($remaining_advance, 2), // Total unutilized advance
-            'bill_details'      => $bills
+            'total_outstanding' => 0.00,
+            'eligible_cd'       => 0.00,
+            'total_penalty'     => 0.00,
+            'net_payable'       => 0.00,
+            'advance_amount'    => 0.00,
+            'bills'             => [],
+            'bill_details'      => []
         ];
     }
+
+    $super_stockist_id = (int)$stockistData['super_stockist_id'];
+
+    /*
+    * 2. Calculate Pending Opening Balance (Debit vs Credit)
+    */
+    $ob_amount = (float)($stockistData['opening_balance'] ?? 0);
+    $ob_type   = strtolower($stockistData['opening_balance_type'] ?? 'debt');
+    $ob_date   = !empty($stockistData['opening_balance_date']) ? $stockistData['opening_balance_date'] :$payment_date;
+    
+    $pending_ob_debt    = 0.00;
+    $remaining_advance  = 0.00;
+    $total_used_advance = 0.00;
+    $total_orig_advance = 0.00;
+
+    // CASE A: Stockist has Pending DEBT Opening Balance
+    if ($ob_amount > 0 &&$ob_type === 'debt') {
+        $stmtOBPaid =$this->con->prepare("
+            SELECT COALESCE(SUM(pa.amount_allocated), 0) as allocated_ob 
+            FROM payment_allocations pa
+            INNER JOIN payment_ledgers pl ON pl.id = pa.ledger_id
+            WHERE pl.stockist_id = ? 
+            AND (pa.inward_id IS NULL OR pa.inward_id = 0)
+        ");
+        $stmtOBPaid->bind_param("i", $stockist_id);
+        $stmtOBPaid->execute();$obPaidRes = $stmtOBPaid->get_result()->fetch_assoc();$stmtOBPaid->close();
+
+        $allocated_ob    = (float)($obPaidRes['allocated_ob'] ?? 0);$pending_ob_debt = max(0, round($ob_amount -$allocated_ob, 2));
+    }
+
+    // CASE B: Stockist has ADVANCE Credit (Payments & Credit Opening Balance)
+    $stmtAdv =$this->con->prepare("
+        SELECT 
+            COALESCE(SUM(adv.available_advance), 0) AS total_remaining_advance,
+            COALESCE(SUM(adv.amount), 0) AS total_original_advance,
+            COALESCE(SUM(adv.used_amount), 0) AS total_used_advance
+        FROM (
+            SELECT 
+                pl.id,
+                pl.amount,
+                COALESCE(SUM(pa.amount_allocated), 0) AS used_amount,
+                CASE 
+                    WHEN pl.amount > COALESCE(SUM(pa.amount_allocated), 0) 
+                    THEN (pl.amount - COALESCE(SUM(pa.amount_allocated), 0)) 
+                    ELSE 0 
+                END AS available_advance
+            FROM payment_ledgers pl
+            LEFT JOIN payment_allocations pa ON pa.ledger_id = pl.id
+            WHERE pl.stockist_id = ? 
+            AND (
+                (pl.transaction_type = 'opening_balance' AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease'))
+                OR (
+                    pl.transaction_type = 'payment_made' 
+                    AND (pl.ledger_type = 'credit' OR pl.balance_action = 'decrease')
+                    AND (pl.notes IS NULL OR (pl.notes NOT LIKE '%CD on Invoice%' AND pl.notes NOT LIKE '%CD Reversed%'))
+                )
+            )
+            GROUP BY pl.id
+        ) AS adv
+    ");
+    $stmtAdv->bind_param("i", $stockist_id);
+    $stmtAdv->execute();$advData = $stmtAdv->get_result()->fetch_assoc();$stmtAdv->close();
+
+    $remaining_advance  = (float)($advData['total_remaining_advance'] ?? 0.00);
+    $total_used_advance = (float)($advData['total_used_advance'] ?? 0.00);
+    $total_orig_advance = (float)($advData['total_original_advance'] ?? 0.00);
+
+    if ($total_orig_advance <= 0 && $ob_type === 'credit' &&$ob_amount > 0) {
+        $total_orig_advance =$ob_amount;
+        $remaining_advance  =$ob_amount;
+    }
+
+    /*
+    * 3. Get CD rules
+    */
+    $stmtRule =$this->con->prepare("
+        SELECT cd_4_percent_days, cd_2_percent_days
+        FROM super_stockist_cd_rules
+        WHERE super_stockist_id = ?
+        LIMIT 1
+    ");
+
+    $stmtRule->bind_param("i", $super_stockist_id);
+    $stmtRule->execute();$resultRule = $stmtRule->get_result();$rules = $resultRule->fetch_assoc();$stmtRule->close();
+
+    $cd_4_days = isset($rules['cd_4_percent_days']) ? (int)$rules['cd_4_percent_days'] : 10;
+    $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
+
+    /*
+    * 4. Get unpaid / partially paid bills using quoted date literal
+    */
+    $stmt =$this->con->prepare("
+        SELECT 
+            si.inward_id,
+            si.inward_no,
+            si.inward_date,
+            o.dispatch_date,
+            si.grand_total AS gross_amount,
+            si.sub_total,
+            COALESCE(si.cd_percent, 0) AS cd_percent,
+            si.paid_amt,
+            (si.grand_total - si.paid_amt) AS pending_amount,
+            DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) AS bill_age_days,
+
+            -- NEW ELIGIBLE 4% CD
+            CASE 
+                WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? AND COALESCE(si.cd_percent, 0) = 0 
+                THEN si.grand_total - ROUND((si.sub_total * 0.96) + (COALESCE(si.gst_amount, 0) * 0.96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
+                ELSE 0 
+            END AS eligible_4_cd,
+
+            -- NEW ELIGIBLE 2% CD
+            CASE 
+                WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) > ? 
+                     AND DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? 
+                     AND COALESCE(si.cd_percent, 0) = 0 
+                THEN si.grand_total - ROUND((si.sub_total * 0.98) + (COALESCE(si.gst_amount, 0) * 0.98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
+                ELSE 0 
+            END AS eligible_2_cd,
+
+            -- REVOKED PENALTY
+            CASE 
+                WHEN COALESCE(si.cd_percent, 0) = 4 THEN
+                    CASE 
+                        WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
+                        WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 
+                            ROUND((si.sub_total * 98/96) + (COALESCE(si.gst_amount, 0) * 98/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
+                        ELSE 
+                            ROUND((si.sub_total * 100/96) + (COALESCE(si.gst_amount, 0) * 100/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
+                    END
+                WHEN COALESCE(si.cd_percent, 0) = 2 THEN
+                    CASE 
+                        WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
+                        ELSE 
+                            ROUND((si.sub_total * 100/98) + (COALESCE(si.gst_amount, 0) * 100/98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
+                    END
+                ELSE 0 
+            END AS penalty_amount
+
+        FROM stock_inward si
+        LEFT JOIN `orders` o ON si.order_id = o.order_id
+        WHERE si.stockist_id = ? AND si.pay_status != 'paid'
+        ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
+    ");
+
+    $stmt->bind_param(
+        "iiiiiii",
+        $cd_4_days,
+        $cd_4_days,$cd_2_days,
+        $cd_4_days,$cd_2_days,
+        $cd_2_days,$stockist_id
+    );
+
+    $stmt->execute();
+    $result =$stmt->get_result();
+
+    $total_pending       = 0.00;
+    $total_eligible_4_cd = 0.00;
+    $total_eligible_2_cd = 0.00;
+    $total_penalty       = 0.00;
+    $bills               = [];
+
+    // Prepend Opening Balance if active debt exists
+    if ($pending_ob_debt > 0) {
+        $total_pending +=$pending_ob_debt;
+        $bills[] = [
+            'inward_id'          => 0,
+            'inward_no'          => 'OPENING-BAL (DEBT)',
+            'inward_date'        => $ob_date,
+            'gross_amount'       => $ob_amount,
+            'sub_total'          => $ob_amount,
+            'cd_percent'         => 0,
+            'paid_amt'           => ($ob_amount -$pending_ob_debt),
+            'pending_amount'     => $pending_ob_debt,
+            'bill_age_days'      => 0,
+            'eligible_4_cd'      => 0,
+            'eligible_2_cd'      => 0,
+            'penalty_amount'     => 0,
+            'is_opening_balance' => 1,
+            'balance_type'       => 'debt'
+        ];
+    }
+
+    // Prepend Advance Credit
+    if ($remaining_advance > 0) {
+        $total_pending -=$remaining_advance;
+        $bills[] = [
+            'inward_id'          => 0,
+            'inward_no'          => 'ADVANCE CREDIT',
+            'inward_date'        => $ob_date,
+            'gross_amount'       => $total_orig_advance,
+            'sub_total'          => $total_orig_advance,
+            'cd_percent'         => 0,
+            'paid_amt'           => $total_used_advance,
+            'pending_amount'     => -$remaining_advance,
+            'bill_age_days'      => 0,
+            'eligible_4_cd'      => 0,
+            'eligible_2_cd'      => 0,
+            'penalty_amount'     => 0,
+            'is_opening_balance' => ($ob_type === 'credit' && $total_orig_advance ==$ob_amount) ? 1 : 0,
+            'balance_type'       => 'credit'
+        ];
+    }
+
+    while ($row =$result->fetch_assoc()) {
+        $pending = (float)$row['pending_amount'];
+
+        if ($pending > 0) {
+            $total_pending       +=$pending;
+            $total_eligible_4_cd += (float)$row['eligible_4_cd'];
+            $total_eligible_2_cd += (float)$row['eligible_2_cd'];
+            $total_penalty       += (float)$row['penalty_amount'];
+        }
+        $row['is_opening_balance'] = 0;
+        $row['balance_type']       = 'debt';
+        $bills[] =$row;
+    }
+    $stmt->close();
+
+    $total_cd    = $total_eligible_4_cd +$total_eligible_2_cd;
+    $net_payable =$total_pending - $total_cd +$total_penalty;
+
+    return [
+        'total_outstanding' => round($total_pending, 2), 'eligible_cd'       => round($total_cd, 2),
+        'total_penalty'     => round($total_penalty, 2), 'net_payable'       => round($net_payable, 2),
+        'advance_amount'    => round($remaining_advance, 2), 'bills'             =>$bills,        // Compatible with frontend res.bills
+        'bill_details'      => $bills         // Backwards compatibility
+    ];
+}
     
      public function getSuperStockistIdByMr($mr_id)
     {

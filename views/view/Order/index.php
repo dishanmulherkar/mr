@@ -27,6 +27,16 @@ include 'view/layout/header.php';
     .mr-limit-strip .limit-val.exceeded {
         color: #dc2626 !important; /* Exceeded red */
     }
+
+    .limit-val {
+    font-weight: 700;
+    color: #198754; /* Green when positive */
+    transition: color 0.2s ease;
+    }
+
+    .limit-val.exceeded {
+        color: #dc3545 !important; /* Red when exceeded */
+    }
 </style>
 
 <div class="page-content">
@@ -55,10 +65,9 @@ include 'view/layout/header.php';
 
     <!-- ── Mobile Single Available Limit Display ────────── -->
     <div class="mr-limit-strip">
-        <span class="text-muted fw-bold">Avail Limit</span>
+        <span class="text-muted fw-bold">Avail Limit:</span>
         <span id="mr-live-limit" class="limit-val">₹ <?= number_format($base_avail_limit ?? 0, 2); ?></span>
     </div>
-
     <!-- ── Medicine search row ──────────────────────── -->
     <div class="entry-row">
         <div class="col-lg-8">

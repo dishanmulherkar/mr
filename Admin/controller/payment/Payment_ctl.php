@@ -85,13 +85,13 @@ class PaymentApproval_ctl {
         $admin_id = $_SESSION['admin_id'];
         $payment_id = isset($_POST['payment_id']) ? (int)$_POST['payment_id'] : 0;
         $action = isset($_POST['action']) ? $_POST['action'] : ''; 
-
+        $remarks       = trim($_POST['remarks'] ?? '');
         if ($payment_id <= 0 || !in_array($action, ['approved', 'rejected'])) {
             echo json_encode(['success' => false, 'msg' => 'Invalid request data.']);
             exit;
         }
 
-        $result = $this->model->processApproval($payment_id, $admin_id, $action);
+        $result = $this->model->processApproval($payment_id, $admin_id, $action,$remarks);
         echo json_encode($result);
         exit;
     }
