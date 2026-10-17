@@ -10,7 +10,13 @@ include 'view/layout/header.php';
 
     <div class="card shadow-sm border-0">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="fa fa-plus-circle"></i> Manual Payment Entry</h5>
+            <h5 class="mb-0">
+                <i class="fa <?= !empty($edit_data) ? 'fa-eye' : 'fa-plus-circle' ?>"></i> 
+                <?= !empty($edit_data) ? 'View / Reverse Manual Payment' : 'Manual Payment Entry' ?>
+            </h5>
+            <a href="<?= BASE_URL ?>payment/manual_pay_list" class="btn btn-sm btn-light text-primary fw-bold">
+                <i class="fa fa-list"></i> Back to List
+            </a>
         </div>
         
         <div class="card-body">
@@ -90,7 +96,7 @@ include 'view/layout/header.php';
                         </div>
                     </div>
 
-                    <!-- Detailed Bills Table -->
+                    <!-- Detailed Bills Table (Create Mode) -->
                     <div class="col-lg-12 mt-3" id="billsTableContainer" style="display: none;">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="fw-bold text-secondary mb-0"><i class="fa fa-file-invoice"></i> Pending Bills & Applicable CD</h6>
@@ -143,16 +149,12 @@ include 'view/layout/header.php';
 
                 <!-- ROW 3: Payment Details -->
                 <div class="row g-3 mb-4">
-                   
-
                     <div class="col-lg-3">
                         <div class="form-group">
                             <label class="fw-bold">Amount Paid (₹) <span class="text-danger">*</span></label>
                             <input type="number" name="amount" id="amount" class="form-control fw-bold text-success" step="0.01" min="0.01" placeholder="Enter amount" required>
                         </div>
                     </div>
-
-                   
                 </div>
 
                 <!-- ROW 4: Notes -->
@@ -176,6 +178,7 @@ include 'view/layout/header.php';
 
 <script>
     const BASE_URL = "<?= BASE_URL ?>";
+    const editData = <?= $is_edit ? json_encode($edit_data) : 'null' ?>;
 </script>
 
 <?php include 'view/layout/footer.php'; ?>
@@ -259,7 +262,7 @@ $(document).ready(function() {
         let stockistId     = $('#stockist_id').val();
         let settlementDate = $('#settlement_date').val();
         
-        if(editData !== null) return; 
+        if (editData !== null) return; 
 
         if (stockistId && settlementDate) {
             $('#outstandingSummary').html('<div class="text-center py-2"><i class="fa fa-spinner fa-spin"></i> Fetching bills & calculating CD...</div>');
@@ -271,7 +274,9 @@ $(document).ready(function() {
                     let netPayable   = parseFloat(res.net_payable ?? 0);
                     let eligibleCd   = parseFloat(res.eligible_cd ?? 0);
                     let totalPenalty = parseFloat(res.total_penalty ?? 0);
-                    let bills        = res.bill_details || res.bills || [];
+                    
+                    // Supports both response key variations
+                    let bills = res.bill_details || res.bills || [];
 
                     currentNetPayable = netPayable > 0 ? netPayable : 0;
 
@@ -303,28 +308,29 @@ $(document).ready(function() {
                         bills.forEach(b => {
                             let cd4 = parseFloat(b.eligible_4_cd || 0);
                             let cd2 = parseFloat(b.eligible_2_cd || 0);
-                            let cdEarned = cd4 + cd2;
-                            let pen = parseFloat(b.penalty_amount || 0);
+                            let cdEarned = (cd4 + cd2 > 0) ? (cd4 + cd2) : parseFloat(b.eligible_cd || 0);
+                            let pen = parseFloat(b.penalty_amount || b.cd_penalty_amt || 0);
                             let pending = parseFloat(b.pending_amount || 0);
-                            let gross = parseFloat(b.gross_amount || 0);
+                            let gross = parseFloat(b.business_value || b.grand_total || 0);
                             let paid = parseFloat(b.paid_amt || 0);
                             
                             let cdBadge = '';
                             if (cd4 > 0) cdBadge = '<span class="badge bg-success ms-1">4% CD</span>';
                             else if (cd2 > 0) cdBadge = '<span class="badge bg-info text-dark ms-1">2% CD</span>';
+                            else if (cdEarned > 0) cdBadge = '<span class="badge bg-success ms-1">CD</span>';
 
-                            let isAdvance = (b.balance_type === 'credit' || pending < 0 || b.inward_no.includes('ADVANCE'));
+                            let isAdvance = (b.balance_type === 'credit' || pending < 0 || (b.inward_no && b.inward_no.includes('ADVANCE')));
                             let billNetPayable = isAdvance ? pending : (pending - cdEarned + pen);
 
                             rows += `
                                 <tr class="${isAdvance ? 'table-success' : ''}">
                                     <td>
-                                        <strong>${b.inward_no}</strong>
+                                        <strong>${b.inward_no || 'OB'}</strong>
                                         ${cdBadge}
                                     </td>
                                     <td>
-                                        ${b.inward_date}<br>
-                                        <small class="text-muted">${b.bill_age_days ? b.bill_age_days + ' Days Old' : '-'}</small>
+                                        ${b.dispatch_date || b.inward_date}<br>
+                                        <small class="text-muted">${b.bill_age_days ? b.bill_age_days + ' Days Old' : ''}</small>
                                     </td>
                                     <td class="text-end">₹${gross.toFixed(2)}</td>
                                     <td class="text-end text-primary">₹${paid.toFixed(2)}</td>
@@ -405,13 +411,9 @@ $(document).ready(function() {
     // ==========================================
     // AUTO-FILL DATA IF IN EDIT (VIEW / REVERSE) MODE
     // ==========================================
-    let editData = <?= $is_edit ? json_encode($edit_data) : 'null' ?>;
-    
     if (editData !== null) {
         $('#amount').val(editData.amount_paid).prop('readonly', true);
-        $('#payment_date').val(editData.payment_date).prop('readonly', true);
-        $('#payment_method').val(editData.payment_method).prop('disabled', true);
-        $('#bank_details').val(editData.bank_details).prop('readonly', true);
+        $('#settlement_date').val(editData.payment_date).prop('readonly', true);
         $('#notes').val(editData.notes || editData.bank_details).prop('readonly', true);
 
         $('#state_id, #hq_id, #mr_id, #stockist_id, #settlement_date').prop('disabled', true);
@@ -497,10 +499,11 @@ $(document).ready(function() {
         
         let paymentId = $('#edit_payment_id').val();
 
-        $.post(BASE_URL + 'payment/reverse_manual_entry', { payment_id: paymentId }, function(res) {
+        // Correct endpoint matching controller method
+        $.post(BASE_URL + 'payment/reverse_manual_entrys', { payment_id: paymentId }, function(res) {
             if (res.success) {
                 showAlert(res.msg, 'success');
-                setTimeout(() => { window.location.href = BASE_URL + 'payment/payment_list'; }, 2000); 
+                setTimeout(() => { window.location.href = BASE_URL + 'payment/manual_pay_list'; }, 2000); 
             } else {
                 showAlert(res.msg, 'danger');
                 btn.html('<i class="fa fa-undo"></i> Reverse Payment').prop('disabled', false);

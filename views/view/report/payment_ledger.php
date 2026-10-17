@@ -187,7 +187,7 @@ include 'view/layout/header.php';
                 // 2. Render In-Period Transactions
                 if ($has_rows):
                     while($row = mysqli_fetch_assoc($query)) {
-                        $date = date('d-M', strtotime($row['created_at']));
+                        $date = date('d-M-y', strtotime($row['payment_date'] ?? $row['created_at'] ?? '')); 
                         $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "";
                         $vch_no = htmlspecialchars($row['inward_no'] ?? '');
                         
@@ -238,6 +238,8 @@ include 'view/layout/header.php';
                                 } else {
                                     $particulars = explode(':', $raw_notes)[0]; 
                                 }
+                            } elseif (stripos($raw_notes, 'From Comm') !== false) {
+                                $particulars = $raw_notes;
                             } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
                                 $particulars = $raw_notes;
                             } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {

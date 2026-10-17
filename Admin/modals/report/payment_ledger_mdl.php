@@ -53,6 +53,8 @@ class payment_ledger_mdl
     }
 
 // Filtered to show debt and credit advance transactions
+
+// Filtered to show debt and credit advance transactions
 public function getReport($stockist_id, $from_date, $to_date)
 {
     $stockist_id = (int)$stockist_id;
@@ -63,19 +65,31 @@ public function getReport($stockist_id, $from_date, $to_date)
                 pl.*, 
                 si.inward_no, 
                 pd.id AS pay_id, 
-                pd.payment_method, 
-                b.bank_name
+                COALESCE(pd.payment_method, CASE WHEN pl.notes LIKE '%CD on Invoice%' THEN 'Cash Discount' ELSE NULL END) AS payment_method, 
+                b.bank_name,
+                COALESCE(pd.payment_date, DATE(pl.created_at)) AS payment_date
             FROM payment_ledgers pl 
+
+            -- 1. Join stock_inward for:
+            --    a) Normal bills ('bill_added')
+            --    b) CD entries (where transaction_type = 'payment_made' but reference_id is inward_id)
             LEFT JOIN stock_inward si 
                 ON si.inward_id = pl.reference_id 
-                AND pl.transaction_type = 'bill_added'
+                AND (
+                    pl.transaction_type = 'bill_added' 
+                    OR pl.notes LIKE '%CD on Invoice%'
+                )
+
+            -- 2. Join payment_details ONLY for actual payment entries (excluding CD discount entries)
             LEFT JOIN payment_details pd 
                 ON pd.id = pl.reference_id 
                 AND pl.transaction_type = 'payment_made'
+                AND pl.notes NOT LIKE '%CD on Invoice%'
+
             LEFT JOIN banks b 
                 ON b.bank_id = pd.bank_id
+
             WHERE pl.stockist_id = '$stockist_id' 
-              -- 1. Allow both 'debt' and 'credit' ledgers
               AND pl.ledger_type IN ('debt', 'credit')
               AND pl.transaction_type IN (
                   'opening_balance', 
@@ -86,14 +100,13 @@ public function getReport($stockist_id, $from_date, $to_date)
                   'asm_settlement', 
                   'settled_to_bill'
               )
-              -- 2. Allow opening_balance or transactions within date range
               AND (
                   pl.transaction_type = 'opening_balance' 
                   OR (DATE(pl.created_at) >= '$from_date' AND DATE(pl.created_at) <= '$to_date')
               )
             ORDER BY 
                 CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE 1 END ASC,
-                pl.created_at ASC, 
+                COALESCE(pd.payment_date, DATE(pl.created_at)) ASC, 
                 pl.id ASC";
             
     return mysqli_query($this->con, $sql);

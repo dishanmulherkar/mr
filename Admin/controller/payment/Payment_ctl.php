@@ -399,6 +399,29 @@ public function get_payment_allocations() {
 }
 
 
+
+// 2. Controller method to process reversal
+public function reverse_manual_entrys() {
+    header('Content-Type: application/json');
+
+    if (!isset($_SESSION['admin_id'])) {
+        echo json_encode(['success' => false, 'msg' => 'Unauthorized']);
+        exit;
+    }
+
+    $payment_id = isset($_POST['payment_id']) ? (int)$_POST['payment_id'] : 0;
+    if ($payment_id <= 0) {
+        echo json_encode(['success' => false, 'msg' => 'Invalid payment ID.']);
+        exit;
+    }
+
+    $admin_id = $_SESSION['admin_id'];
+    $result = $this->model->reverseManualPayment($payment_id, $admin_id);
+    echo json_encode($result);
+    exit;
+}
+
+
 public function delete()
 {
     header('Content-Type: application/json');
@@ -422,5 +445,36 @@ public function delete()
     exit;
 }
 
+   public function manual_pay_list() {
+        if (!isset($_SESSION['admin_id'])) {
+            header('Location: index');
+            exit;
+        }
+        $states = $this->model->getStates();
+        $current_page = 'manual payment list';
+        // Loads the new view file we are about to create
+        include 'view/payment/manual_pay_list.php';
+    }
+
+    public function manual_pay_lists() 
+    {
+        header('Content-Type: application/json');
+        
+        if (!isset($_SESSION['admin_id'])) {
+            echo json_encode(['success' => false, 'msg' => 'Unauthorized']);
+            exit;
+        }
+
+        $filters = [
+            'start_date' => isset($_GET['start_date']) ? trim($_GET['start_date']) : '',
+            'end_date'   => isset($_GET['end_date'])   ? trim($_GET['end_date'])   : '',
+            'state_id'   => isset($_GET['state_id'])   ? (int)$_GET['state_id']    : 0,
+            'hq_id'      => isset($_GET['hq_id'])      ? (int)$_GET['hq_id']       : 0,
+        ];
+
+        $result = $this->model->getManualPaymentList($filters);
+        echo json_encode($result);
+        exit;
+    }
 }
 ?>

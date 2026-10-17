@@ -49,49 +49,61 @@ class payment_ledger_mdl
     }
 
 // Filtered to show bill_added, payment_made, commission settlements, and opening balances (debt + credit advance)
-    public function getReport($stockist_id, $from_date, $to_date)
-    {
-        $stockist_id = (int)$stockist_id;
+  public function getReport($stockist_id, $from_date, $to_date)
+{
+    $stockist_id = (int)$stockist_id;
 
-        $sql = "SELECT 
-                    pl.*, 
-                    si.inward_no, 
-                    si.pay_status,
-                    pd.id AS pay_id, 
-                    s.stockist_name, 
-                    pd.payment_method, 
-                    b.bank_name
-                FROM payment_ledgers pl 
-                LEFT JOIN stock_inward si 
-                    ON si.inward_id = pl.reference_id 
-                    AND pl.transaction_type = 'bill_added'
-                LEFT JOIN payment_details pd 
-                    ON pd.id = pl.reference_id 
-                    AND pl.transaction_type = 'payment_made'
-                LEFT JOIN stockists s 
-                    ON pl.stockist_id = s.stockist_id
-                LEFT JOIN banks b 
-                    ON b.bank_id = pd.bank_id
-                WHERE pl.stockist_id = ? 
-                -- 1. Allow both debt and credit advances
-                AND pl.ledger_type IN ('debt', 'credit')
-                AND pl.transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
-                -- 2. Keep opening_balance visible OR filter by date range
+    $sql = "SELECT 
+                pl.*, 
+                si.inward_no, 
+                si.pay_status,
+                pd.id AS pay_id, 
+                s.stockist_name, 
+                COALESCE(pd.payment_method, CASE WHEN pl.notes LIKE '%CD on Invoice%' THEN 'Cash Discount' ELSE NULL END) AS payment_method, 
+                b.bank_name,
+                COALESCE(pd.payment_date, DATE(pl.created_at)) AS payment_date
+            FROM payment_ledgers pl 
+
+            -- 1. Join stock_inward for normal bills AND cash discount adjustments
+            LEFT JOIN stock_inward si 
+                ON si.inward_id = pl.reference_id 
                 AND (
-                    pl.transaction_type = 'opening_balance' 
-                    OR (DATE(pl.created_at) >= ? AND DATE(pl.created_at) <= ?)
+                    pl.transaction_type = 'bill_added' 
+                    OR pl.notes LIKE '%CD on Invoice%'
                 )
-                ORDER BY 
-                    CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE 1 END ASC,
-                    pl.created_at ASC, 
-                    pl.id ASC";
-                
-        $stmt = $this->con->prepare($sql);
-        $stmt->bind_param("iss", $stockist_id, $from_date, $to_date);
-        $stmt->execute();
-        
-        return $stmt->get_result();
-    }
+
+            -- 2. Join payment_details ONLY for actual payment entries (not CD entries)
+            LEFT JOIN payment_details pd 
+                ON pd.id = pl.reference_id 
+                AND pl.transaction_type = 'payment_made'
+                AND pl.notes NOT LIKE '%CD on Invoice%'
+
+            LEFT JOIN stockists s 
+                ON pl.stockist_id = s.stockist_id
+
+            LEFT JOIN banks b 
+                ON b.bank_id = pd.bank_id
+
+            WHERE pl.stockist_id = ? 
+              -- Allow both debt and credit advances
+              AND pl.ledger_type IN ('debt', 'credit')
+              AND pl.transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+              -- Keep opening_balance visible OR filter by date range
+              AND (
+                  pl.transaction_type = 'opening_balance' 
+                  OR (DATE(pl.created_at) >= ? AND DATE(pl.created_at) <= ?)
+              )
+            ORDER BY 
+                CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE 1 END ASC,
+                COALESCE(pd.payment_date, DATE(pl.created_at)) ASC, 
+                pl.id ASC";
+            
+    $stmt = $this->con->prepare($sql);
+    $stmt->bind_param("iss", $stockist_id, $from_date, $to_date);
+    $stmt->execute();
+    
+    return $stmt->get_result();
+}
 
     public function getOpeningBalance($stockist_id, $from_date)
     {

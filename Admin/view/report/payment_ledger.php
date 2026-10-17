@@ -140,7 +140,7 @@ include 'view/layout/header.php';
                                 continue;
                             }
 
-                            $date = date('d-M-y', strtotime($row['created_at']));
+                            $date = date('d-M-y', strtotime($row['payment_date'] ?? $row['created_at'] ?? '')); 
                             $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "";
                             $raw_amount = (float)$row['amount'];
                             $debit = 0;
@@ -240,6 +240,8 @@ include 'view/layout/header.php';
                                             $particulars = "{$payment_method} - {$bank_name}";
                                         } elseif (!empty($payment_method)) {
                                             $particulars = $payment_method;
+                                        }elseif ($payment_method == "Manual Adjustment") {
+                                            $particulars = !empty($raw_notes) ? htmlspecialchars($raw_notes) : "";
                                         } else {
                                             $particulars = !empty($raw_notes) ? htmlspecialchars($raw_notes) : "-";
                                         }

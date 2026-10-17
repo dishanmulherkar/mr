@@ -361,7 +361,7 @@ class Payment_model {
     // ==========================================
     // Fetch Outstanding and Eligible Cash Discount
     // ==========================================
-    public function getStockistOutstandingWithCD($stockist_id,$payment_date = null)
+public function getStockistOutstandingWithCD($stockist_id,$payment_date = null)
 {
     $stockist_id = (int)$stockist_id;
 
@@ -373,8 +373,8 @@ class Payment_model {
     $safe_payment_date = $this->con->real_escape_string($payment_date);
 
     /*
-    * 1. Get Super Stockist ID, Opening Balance details
-    */
+     * 1. Get Super Stockist ID, Opening Balance details
+     */
     $stmtSS =$this->con->prepare("
         SELECT 
             h.super_stockist_id,
@@ -395,7 +395,7 @@ class Payment_model {
             'total_outstanding' => 0.00,
             'eligible_cd'       => 0.00,
             'total_penalty'     => 0.00,
-            'net_payable'       => 0.00,
+            'net_payable'       => 0,
             'advance_amount'    => 0.00,
             'bills'             => [],
             'bill_details'      => []
@@ -405,8 +405,8 @@ class Payment_model {
     $super_stockist_id = (int)$stockistData['super_stockist_id'];
 
     /*
-    * 2. Calculate Pending Opening Balance (Debit vs Credit)
-    */
+     * 2. Calculate Pending Opening Balance (Debit vs Credit)
+     */
     $ob_amount = (float)($stockistData['opening_balance'] ?? 0);
     $ob_type   = strtolower($stockistData['opening_balance_type'] ?? 'debt');
     $ob_date   = !empty($stockistData['opening_balance_date']) ? $stockistData['opening_balance_date'] :$payment_date;
@@ -474,8 +474,8 @@ class Payment_model {
     }
 
     /*
-    * 3. Get CD rules
-    */
+     * 3. Get CD rules
+     */
     $stmtRule =$this->con->prepare("
         SELECT cd_4_percent_days, cd_2_percent_days
         FROM super_stockist_cd_rules
@@ -490,8 +490,8 @@ class Payment_model {
     $cd_2_days = isset($rules['cd_2_percent_days']) ? (int)$rules['cd_2_percent_days'] : 30;
 
     /*
-    * 4. Get unpaid / partially paid bills using quoted date literal
-    */
+     * 4. Get unpaid / partially paid bills using quoted date literal
+     */
     $stmt =$this->con->prepare("
         SELECT 
             si.inward_id,
@@ -500,42 +500,47 @@ class Payment_model {
             o.dispatch_date,
             si.grand_total AS gross_amount,
             si.sub_total,
+            COALESCE(si.business_value, si.sub_total, 0) AS business_value,
             COALESCE(si.cd_percent, 0) AS cd_percent,
             si.paid_amt,
             (si.grand_total - si.paid_amt) AS pending_amount,
             DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) AS bill_age_days,
 
-            -- NEW ELIGIBLE 4% CD
+            -- NEW ELIGIBLE 4% CD (Direct 4% on business_value as float)
             CASE 
-                WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? AND COALESCE(si.cd_percent, 0) = 0 
-                THEN si.grand_total - ROUND((si.sub_total * 0.96) + (COALESCE(si.gst_amount, 0) * 0.96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
+                WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? 
+                    AND COALESCE(si.cd_percent, 0) = 0 
+                THEN ROUND(COALESCE(si.business_value, si.sub_total, 0) * 0.04, 2)
                 ELSE 0 
             END AS eligible_4_cd,
 
-            -- NEW ELIGIBLE 2% CD
+            -- NEW ELIGIBLE 2% CD (Direct 2% on business_value as float)
             CASE 
                 WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) > ? 
-                     AND DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? 
-                     AND COALESCE(si.cd_percent, 0) = 0 
-                THEN si.grand_total - ROUND((si.sub_total * 0.98) + (COALESCE(si.gst_amount, 0) * 0.98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) 
+                    AND DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? 
+                    AND COALESCE(si.cd_percent, 0) = 0 
+                THEN ROUND(COALESCE(si.business_value, si.sub_total, 0) * 0.02, 2)
                 ELSE 0 
             END AS eligible_2_cd,
 
-            -- REVOKED PENALTY
+            -- REVOKED PENALTY (Direct percentage differences on business_value as float)
             CASE 
                 WHEN COALESCE(si.cd_percent, 0) = 4 THEN
                     CASE 
                         WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
+                        -- Reduced from 4% to 2% (2% penalty)
                         WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 
-                            ROUND((si.sub_total * 98/96) + (COALESCE(si.gst_amount, 0) * 98/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
+                            ROUND(COALESCE(si.business_value, si.sub_total, 0) * 0.02, 2)
+                        -- Reduced from 4% to 0% (full 4% penalty)
                         ELSE 
-                            ROUND((si.sub_total * 100/96) + (COALESCE(si.gst_amount, 0) * 100/96) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
+                            ROUND(COALESCE(si.business_value, si.sub_total, 0) * 0.04, 2)
                     END
                 WHEN COALESCE(si.cd_percent, 0) = 2 THEN
                     CASE 
                         WHEN DATEDIFF('{$safe_payment_date}', COALESCE(o.dispatch_date, si.inward_date)) <= ? THEN 0 
+                        -- Reduced from 2% to 0% (full 2% penalty)
                         ELSE 
-                            ROUND((si.sub_total * 100/98) + (COALESCE(si.gst_amount, 0) * 100/98) + COALESCE(si.other_charges, 0) - COALESCE(si.discount, 0)) - si.grand_total
+                            ROUND(COALESCE(si.business_value, si.sub_total, 0) * 0.02, 2)
                     END
                 ELSE 0 
             END AS penalty_amount
@@ -545,7 +550,6 @@ class Payment_model {
         WHERE si.stockist_id = ? AND si.pay_status != 'paid'
         ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
     ");
-
     $stmt->bind_param(
         "iiiiiii",
         $cd_4_days,
@@ -570,15 +574,13 @@ class Payment_model {
             'inward_id'          => 0,
             'inward_no'          => 'OPENING-BAL (DEBT)',
             'inward_date'        => $ob_date,
-            'gross_amount'       => $ob_amount,
-            'sub_total'          => $ob_amount,
+            'gross_amount'       => round($ob_amount, 0), 'sub_total'          =>$ob_amount,
             'cd_percent'         => 0,
-            'paid_amt'           => ($ob_amount -$pending_ob_debt),
-            'pending_amount'     => $pending_ob_debt,
+            'paid_amt'           => round($ob_amount - $pending_ob_debt, 2), 'pending_amount'     =>$pending_ob_debt,
             'bill_age_days'      => 0,
-            'eligible_4_cd'      => 0,
-            'eligible_2_cd'      => 0,
-            'penalty_amount'     => 0,
+            'eligible_4_cd'      => 0.00,
+            'eligible_2_cd'      => 0.00,
+            'penalty_amount'     => 0.00,
             'is_opening_balance' => 1,
             'balance_type'       => 'debt'
         ];
@@ -591,15 +593,14 @@ class Payment_model {
             'inward_id'          => 0,
             'inward_no'          => 'ADVANCE CREDIT',
             'inward_date'        => $ob_date,
-            'gross_amount'       => $total_orig_advance,
-            'sub_total'          => $total_orig_advance,
+            'gross_amount'       => round($total_orig_advance, 0), 'sub_total'          =>$total_orig_advance,
             'cd_percent'         => 0,
             'paid_amt'           => $total_used_advance,
             'pending_amount'     => -$remaining_advance,
             'bill_age_days'      => 0,
-            'eligible_4_cd'      => 0,
-            'eligible_2_cd'      => 0,
-            'penalty_amount'     => 0,
+            'eligible_4_cd'      => 0.00,
+            'eligible_2_cd'      => 0.00,
+            'penalty_amount'     => 0.00,
             'is_opening_balance' => ($ob_type === 'credit' && $total_orig_advance ==$ob_amount) ? 1 : 0,
             'balance_type'       => 'credit'
         ];
@@ -608,11 +609,19 @@ class Payment_model {
     while ($row =$result->fetch_assoc()) {
         $pending = (float)$row['pending_amount'];
 
+        // Gross formatted to round whole number
+        $row['gross_amount']   = round((float)$row['gross_amount'], 0);
+
+        // CD & Penalty kept in decimal float
+        $row['eligible_4_cd']  = round((float)$row['eligible_4_cd'], 2);
+        $row['eligible_2_cd']  = round((float)$row['eligible_2_cd'], 2);
+        $row['penalty_amount'] = round((float)$row['penalty_amount'], 2);
+
         if ($pending > 0) {
             $total_pending       +=$pending;
-            $total_eligible_4_cd += (float)$row['eligible_4_cd'];
-            $total_eligible_2_cd += (float)$row['eligible_2_cd'];
-            $total_penalty       += (float)$row['penalty_amount'];
+            $total_eligible_4_cd +=$row['eligible_4_cd'];
+            $total_eligible_2_cd +=$row['eligible_2_cd'];
+            $total_penalty       +=$row['penalty_amount'];
         }
         $row['is_opening_balance'] = 0;
         $row['balance_type']       = 'debt';
@@ -620,14 +629,18 @@ class Payment_model {
     }
     $stmt->close();
 
-    $total_cd    = $total_eligible_4_cd +$total_eligible_2_cd;
-    $net_payable =$total_pending - $total_cd +$total_penalty;
+    $total_cd    = round($total_eligible_4_cd +$total_eligible_2_cd, 2);
+    $total_pen   = round($total_penalty, 2);
+
+    // Final Net Payable always rounded to nearest whole number
+    $net_payable = (int)round($total_pending - $total_cd +$total_pen, 0);
 
     return [
-        'total_outstanding' => round($total_pending, 2), 'eligible_cd'       => round($total_cd, 2),
-        'total_penalty'     => round($total_penalty, 2), 'net_payable'       => round($net_payable, 2),
-        'advance_amount'    => round($remaining_advance, 2), 'bills'             =>$bills,        // Compatible with frontend res.bills
-        'bill_details'      => $bills         // Backwards compatibility
+        'total_outstanding' => round($total_pending, 2), 'eligible_cd'       =>$total_cd,
+        'total_penalty'     => $total_pen,
+        'net_payable'       => $net_payable,
+        'advance_amount'    => round($remaining_advance, 2), 'bills'             =>$bills,
+        'bill_details'      => $bills
     ];
 }
     
