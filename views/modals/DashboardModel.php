@@ -148,5 +148,157 @@ private $db;
 
         return true;
     }
+
+     public function getMrDetails($mr_id)
+    {
+        $query = "
+            SELECT hq.hq_name, mr.mr_name 
+            FROM mr_users mr 
+            INNER JOIN headquarter hq ON mr.hq_id = hq.headquarter_id
+
+            WHERE m_id='$mr_id'
+        ";
+
+        $result = mysqli_query($this->db, $query);
+
+        return mysqli_fetch_assoc($result);
+    }
+
+
+    // public function getRecentActivities($userId = null, $limit = 10)
+    // {
+    //     $limit = (int)$limit;
+
+    //     if (!empty($userId)) {
+    //         $stmt = $this->db->prepare("
+    //             SELECT id, user_id, activity_type, title, message, reference_id, amount, created_at 
+    //             FROM activity_logs 
+    //             WHERE user_id = ? OR user_id IS NULL 
+    //             ORDER BY id DESC 
+    //             LIMIT ?
+    //         ");
+    //         $stmt->bind_param("ii", $userId, $limit);
+    //     } else {
+    //         $stmt = $this->db->prepare("
+    //             SELECT id, user_id, activity_type, title, message, reference_id, amount, created_at 
+    //             FROM activity_logs 
+    //             ORDER BY id DESC 
+    //             LIMIT ?
+    //         ");
+    //         $stmt->bind_param("i", $limit);
+    //     }
+
+    //     $stmt->execute();
+    //     $res = $stmt->get_result();
+
+    //     $activities = [];
+    //     while ($row = $res->fetch_assoc()) {
+    //         $activities[] = $row;
+    //     }
+
+    //     $stmt->close();
+    //     return $activities;
+    // }
+
+    public function getFilteredDashboardActivities($user_id)
+{
+    $user_id = (int)$user_id;
+
+    $sql = "
+        SELECT 
+            id,
+            activity_type,
+            title,
+            message,
+            reference_id,
+            created_at,
+            priority
+        FROM activity_logs
+        WHERE is_read = 0
+          AND (user_id = ? OR user_id IS NULL)
+          AND (
+              -- Rule A: High Priority / Rejections stay until explicitly clicked
+              priority = 'high' 
+              OR activity_type LIKE '%REJECTED%'
+              OR title LIKE '%rejected%'
+              
+              -- Rule B: Normal alerts show ONLY today; tomorrow they vanish automatically
+              OR DATE(created_at) = CURRENT_DATE()
+          )
+        ORDER BY created_at DESC 
+        LIMIT 25
+    ";
+
+    $stmt = $this->db->prepare($sql);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    return $stmt->get_result();
+}
+
+/**
+ * Fetch unread activities:
+ * - High priority (rejections) stay until clicked.
+ * - Standard activities show only today (disappear tomorrow even if unclicked).
+ */
+public function getRecentActivities($mr_id, $limit = 10)
+{
+    $mr_id = (int)$mr_id;
+    $limit = (int)$limit;
+
+    $sql = "
+        SELECT 
+            al.id,
+            al.activity_type,
+            al.title,
+            al.message,
+            al.reference_id,
+            al.created_at,
+            al.priority
+        FROM activity_logs al
+        WHERE (al.user_id = ? OR al.user_id IS NULL OR al.user_id = 0)
+          AND COALESCE(al.is_read, 0) = 0
+          AND (
+              al.priority = 'high' 
+              OR al.activity_type LIKE '%REJECTED%'
+              OR al.title LIKE '%rejected%'
+              OR DATE(al.created_at) = CURRENT_DATE()
+          )
+        ORDER BY al.created_at DESC 
+        LIMIT ?
+    ";
+
+    $stmt = $this->db->prepare($sql);
+    $stmt->bind_param("ii", $mr_id, $limit);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $activities = [];
+    while ($row = $result->fetch_assoc()) {
+        $activities[] = $row;
+    }
+    $stmt->close();
+
+    return $activities;
+}
+
+/**
+ * Marks specified activity IDs as read
+ */
+public function markActivitiesAsRead($mr_id, array $activity_ids)
+{
+    $activity_ids = array_filter(array_map('intval', $activity_ids));
+    if (empty($activity_ids)) {
+        return false;
+    }
+
+    $in_clause = implode(',', $activity_ids);
+
+    // If using the activity_logs table is_read column:
+    $sql = "UPDATE activity_logs 
+            SET is_read = 1, read_at = NOW() 
+            WHERE id IN ({$in_clause})";
+
+    return (bool)$this->db->query($sql);
+}
 }
 ?>

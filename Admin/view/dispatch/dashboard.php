@@ -28,7 +28,15 @@ include 'view/layout/mobile_header.php';
             <div class="card-body">
                 
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0 text-primary"><?= $order['inward_no'] ?></h6>
+                        <h6 class="mb-0 text-primary">
+                            <?= htmlspecialchars($order['inward_no']) ?>
+                            <?php if ($order['title'] === 'Order Updated' && !empty($order['created_at'])): ?>
+                                <span class="badge badge-warning text-dark ml-2">
+                                    Revised: <?= date('d M, h:i A', strtotime($order['created_at'])) ?>
+                                </span>
+                            <?php endif; ?>
+                        </h6>
+                
                     <?php if($order['status'] === 'Approved'): ?>
                         <span class="badge bg-warning text-dark">Pending</span>
                     <?php else: ?>

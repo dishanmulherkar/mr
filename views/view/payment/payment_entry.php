@@ -126,9 +126,9 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
             <select name="payment_method" id="payment_method" class="form-control" required>
                 <option value="">-- Select Method --</option>
                 <option value="UPI">UPI</option>
-                <option value="Bank Transfer (NEFT/RTGS)">Bank Transfer (NEFT/RTGS)</option>
+                <option value="Bank Transfer (NEFT/RTGS)">Cash To Bank</option>
                 <option value="Cheque">Cheque</option>
-                <option value="Cash">Cash</option>
+                <option value="Cash">Cash To Person</option>
                 <option value="Other">Other</option>
             </select>
         </div>

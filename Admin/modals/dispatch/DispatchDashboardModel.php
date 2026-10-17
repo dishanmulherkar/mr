@@ -12,49 +12,60 @@ class DispatchDashboardModel
     /**
      * Fetch orders filtered by Super Stockist, Status, and Date
      */
-    public function getFilteredOrders($super_stockist_id, $status, $date)
-    {
-        $super_stockist_id = (int)$super_stockist_id;
-        $status = mysqli_real_escape_string($this->con, $status);
-        
-        // We join stock_inward to securely match the super_stockist_id
-        $sql = "
-            SELECT 
-                o.order_id,
-                si.inward_no,
-                o.order_date, 
-                o.total_amt, 
-                o.status,
-                s.stockist_name 
-            FROM orders o
-            JOIN stock_inward si ON o.order_id = si.order_id
-            LEFT JOIN stockists s ON o.stockist_id = s.stockist_id
-            WHERE o.status = '$status'
-            AND si.super_stockist_id = $super_stockist_id
-        ";
+public function getFilteredOrders($super_stockist_id, $status, $date)
+{
+    $super_stockist_id = (int)$super_stockist_id;
+    $status = mysqli_real_escape_string($this->con, $status);
+    
+    $sql = "
+        SELECT 
+            o.order_id,
+            si.inward_no,
+            o.order_date, 
+            o.total_amt, 
+            o.status,
+            s.stockist_name,
+            latest_al.title,
+            latest_al.created_at
+        FROM orders o
+        JOIN stock_inward si ON o.order_id = si.order_id
+        LEFT JOIN stockists s ON o.stockist_id = s.stockist_id
+        LEFT JOIN (
+            SELECT al1.reference_id, al1.title, al1.created_at
+            FROM activity_logs al1
+            INNER JOIN (
+                SELECT MAX(id) AS max_id
+                FROM activity_logs
+                WHERE title = 'Order Updated'
+                GROUP BY reference_id
+            ) al2 ON al1.id = al2.max_id
+        ) latest_al ON o.order_id = latest_al.reference_id
+        WHERE o.status = '$status'
+        AND si.super_stockist_id = $super_stockist_id
+    ";
 
-        // Add date filter if a date is selected
-        if (!empty($date)) {
-            $safe_date = mysqli_real_escape_string($this->con, $date);
-            $sql .= " AND DATE(o.order_date) = '$safe_date' ";
-        }
-
-        $sql .= " ORDER BY o.order_date DESC, o.order_id DESC";
-
-        $result = mysqli_query($this->con, $sql);
-
-        if (!$result) {
-            die("Database Error: " . mysqli_error($this->con));
-        }
-
-        $orders = [];
-        while ($row = mysqli_fetch_assoc($result)) {
-            $orders[] = $row;
-        }
-
-        return $orders;
+    // Add date filter before ORDER BY
+    if (!empty($date)) {
+        $safe_date = mysqli_real_escape_string($this->con, $date);
+        $sql .= " AND DATE(o.order_date) = '$safe_date' ";
     }
 
+    // Single ORDER BY clause at the end
+    $sql .= " ORDER BY o.order_date DESC, o.order_id DESC";
+
+    $result = mysqli_query($this->con, $sql);
+
+    if (!$result) {
+        die("Database Error: " . mysqli_error($this->con));
+    }
+
+    $orders = [];
+    while ($row = mysqli_fetch_assoc($result)) {
+        $orders[] = $row;
+    }
+
+    return $orders;
+}
     /**
      * Fetch Products, Qty, MRP, and Invoice Number for a specific order
      */

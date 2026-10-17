@@ -40,18 +40,18 @@ include 'view/layout/header.php';
 @media (max-width: 480px) {
     .inv-table th {
         background: var(--bg);
-        font-size: 9px;
+        font-size: 12px;
         font-weight: 700;
         color: var(--txt-muted);
         text-transform: uppercase;
         letter-spacing: .4px;
-        padding: 8px 9px;
+        padding: 8px 14px;
         text-align: left;
         border-bottom: 1px solid var(--border);
     }
 
     .inv-table td {
-        font-size: 10px;
+        font-size: 13px;
         color: var(--txt-mid);
         padding: 9px 11px;
         border-bottom: 1px solid var(--border);
