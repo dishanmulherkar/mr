@@ -45,7 +45,8 @@ $dbOther = (float)($invoice['other_charges'] ?? 0);
 $dbGrandTotal = (float)($invoice['grand_total'] ?? 0);
 
 $additionalDiscount = (float)($invoice['additional_discount'] ?? 0);
-
+ $discount_amt = (float)($invoice['discount_amt'] ?? 0);
+    $discount_percent = (float)($invoice['discount_percent'] ?? 0);
 // Calculate totals dynamically from items
 $trueGrossAmount = 0;
 $calcSubTotal = 0;
@@ -68,6 +69,7 @@ foreach ($items as $item) {
     $taxRate = (float)($item['gst_percent'] ?? 0);
     $taxAmount = (float)($item['gst_amount'] ?? ($amt * ($taxRate / 100)));
     $net_total = (float)($item['net_total'] ?? ($amt + $taxAmount));
+   
 
     $trueGrossAmount += $rowBase;
     $calcSubTotal += $amt;
@@ -79,8 +81,14 @@ foreach ($items as $item) {
 if ($dbSubTotal == 0) $dbSubTotal = $calcSubTotal;
 if ($dbGrandTotal == 0) $dbGrandTotal = $calcGrandTotal;
 
-$netAmountRounded = round($dbGrandTotal);
-$roundOff = $netAmountRounded - $dbGrandTotal;
+// 1. Subtract discount first
+$netBeforeRound = $dbGrandTotal - (float)$discount_amt;
+
+// 2. Round the net payable amount to the nearest whole rupee
+$netAmountRounded = round($netBeforeRound);
+
+// 3. Round-off is strictly the difference between rounded and unrounded net (always between -0.49 and +0.50)
+$roundOff = round($netAmountRounded - $netBeforeRound, 2);
 
 $taxPercentVal = !empty($items) && isset($items[0]['gst_percent']) ? $items[0]['gst_percent'] : '0';
 
@@ -145,6 +153,7 @@ body {
 }
 table { border-collapse: collapse; width: 100%; }
 .section-space { height: 3px; }
+@page { size: A4; margin: 10mm; }
 </style>
 </head>
 <body>
@@ -304,17 +313,19 @@ table { border-collapse: collapse; width: 100%; }
             <!-- EXTRA BLANK ROWS -->
             <?php
             $itemCount = count($items);
-            $minimumRows = 9;
+            $minimumRows = 15;
             $columnCount = 10; 
 
             for ($i = $itemCount; $i < $minimumRows; $i++):
             ?>
-            <tr style="height: 22px;">
+            <tr style="height: 25px;">
                 <?php for ($col = 0; $col < $columnCount; $col++): ?>
-                    <td style="border-right: 1px solid #000; padding: 2px 0; height: 22px; font-size: 8pt;">&nbsp;</td>
+                    <td style="border-right: 1px solid #000; padding: 2px 0; height: 25px; font-size: 8pt;">&nbsp;</td>
                 <?php endfor; ?>
             </tr>
             <?php endfor; ?>
+
+            
 
             <!-- TOTALS ROW -->
             <tr style="font-weight: bold;">
@@ -357,8 +368,16 @@ table { border-collapse: collapse; width: 100%; }
             <td style="width: 55%; ">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
-                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: left;  width: 33%;">MRP Amount</td>
+                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: left;  width: 33%;">MRP Amt</td>
                         <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 38%; border-right: 1px solid #000;"><?= number_format($trueGrossAmount, 2) ?></td>
+                        <td style="border: none; padding: 3px 3px;  border-right: 1px solid #000;font-size: 8pt; text-align: right; width: 27%;"></td>
+                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 33%;">
+
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: left;  width: 33%;">Disc(<?= number_format($discount_percent, 2) ?> %)</td>  
+                        <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 38%; border-right: 1px solid #000;"><?= number_format($discount_amt, 2) ?></td>
                         <td style="border: none; padding: 3px 3px;  border-right: 1px solid #000;font-size: 8pt; text-align: right; width: 27%;"></td>
                         <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 33%;">
 
@@ -382,14 +401,14 @@ table { border-collapse: collapse; width: 100%; }
                         <td style="border: none;  font-size: 8pt; ">
                             <div>Amount in Words: </div>
                         </td>
-                        <td style="border: none; padding: 0px 0px; font-size: 8pt; "> <?= htmlspecialchars($amountInWords ?? 'Total Amount In Words') ?></td>
+                        <td style="border: none; padding: 0px 0px; font-size: 7pt; "> <?= htmlspecialchars($amountInWords ?? 'Total Amount In Words') ?></td>
                     </tr>
                 </table>
             </td>
             <td style="width: 25%; ">
                 <table>
                     <tr style="font-weight: bold; border-left: 1px solid #161515;  ">
-                        <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: left; width: 33%">MRP Total</td>
+                        <td style="border: none; padding: 0px 3px; font-size: 8pt; text-align: left; width: 33%"> Net Total</td>
                         <td style="border: none; padding: 0px 0px; font-size: 8pt; text-align: right; width: 38%; border-right: 1px solid #000;"><?= number_format($netAmountRounded, 2) ?></td>
                         <td style="border: none; padding: 3px 3px;  font-size: 8pt; text-align: right; width: 27%;"></td>
                         <td style="border: none; padding: 3px 3px; font-size: 8pt; text-align: right; width: 33%; ">

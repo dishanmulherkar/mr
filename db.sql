@@ -647,3 +647,30 @@ WHERE NOT EXISTS (
 
 ALTER TABLE `payment_details` 
 ADD COLUMN `remarks` TEXT NULL AFTER `approved_at`;
+
+-- 14-10-26 ----  - - -- 
+CREATE TABLE `activity_logs` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT NULL,                         -- Target user (MR/Doctor/Admin) or NULL for global
+  `activity_type` VARCHAR(50) NOT NULL,       -- ORDER_APPROVED, ORDER_REJECTED, PAYMENT_APPROVED, etc.
+  `title` VARCHAR(255) NOT NULL,              -- Short heading
+  `message` TEXT NOT NULL,                    -- Description / details
+  `reference_id` INT NULL,                    -- ID of the order, payment, or commission
+  `amount` DECIMAL(12,2) DEFAULT 0.00,        -- Optional amount for commission/payment/order
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 17-10-26 -
+ALTER TABLE activity_logs 
+ADD COLUMN is_read TINYINT(1) NOT NULL DEFAULT 0,
+ADD COLUMN read_at DATETIME NULL DEFAULT NULL;
+
+ALTER TABLE `activity_logs` 
+ADD COLUMN `priority` ENUM('normal', 'medium', 'high') NOT NULL DEFAULT 'normal' AFTER `message`,
+ADD INDEX `idx_priority` (`priority`);
+SELECT * FROM `stock_ledger` WHERE `p_id` = "6" AND `trans_type` = "INWARD";
+
+ALTER TABLE `sales_entries`
+    ADD COLUMN `discount_percent` DECIMAL(5, 2) NOT NULL DEFAULT 0.00 AFTER `total_amt`,
+    ADD COLUMN `discount_amt` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER `discount_percent`,
+    ADD COLUMN `net_amt` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER `discount_amt`;

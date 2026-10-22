@@ -21,7 +21,7 @@
     box-shadow: 0 6px 20px rgba(0,0,0,.12);
 }
 .ac-item {
-    padding: 10px 14px; cursor: pointer; font-size: 14px;
+    padding: 8px 9px; cursor: pointer; font-size: 14px;
     display: block; border-bottom: 1px solid var(--border);
 }
 .ac-item:last-child { border-bottom: none; }
@@ -133,7 +133,7 @@
 
 /* ─── Footer / Submit ─────────────────────────────── */
 .footer-total {
-    background: var(--surface2); padding: 14px 18px;
+    background: var(--surface2); padding: 7px 16px;
     border: 1px solid var(--border); font-weight: 700;
     text-align: right; margin-bottom: 16px; font-size: 16px;
     border-radius: var(--radius-sm);

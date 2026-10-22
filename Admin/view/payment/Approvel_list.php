@@ -92,9 +92,10 @@ include 'view/layout/header.php';
                             <th style="width: 5%;">#</th>
                             <th style="width: 10%;">PMT Date</th>
                             <th style="width: 20%;">Stockist</th>
+                            <th style="width: 15%;">HQ</th>
                             <th style="width: 15%;">Amount</th>
-                            <th style="width: 15%;">Bank</th>
-                            <th style="width: 20%;">Method & Ref</th>
+                            <th style="width: 10%;">Bank</th>
+                            <th style="width: 10%;">Method & Ref</th>
 
                             <th style="width: 10%;">Screenshot</th>
                             <th style="width: 10%;">Status</th>
@@ -338,6 +339,7 @@ document.addEventListener('DOMContentLoaded', function() {
                               ${new Date(paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '-')}
                             </td>
                             <td>${p.stockist_name || '<span class="text-muted">Unknown</span>'}</td>
+                            <td>${p.hq_name || '<span class="text-muted">Unknown</span>'}</td>
                            
                             <td class="text-end fw-bold text-success">
                                 ₹${Math.round(p.amount_paid).toLocaleString('en-IN')}
