@@ -49,25 +49,31 @@ include 'view/layout/header.php';
     <div class="filter-bar entry-row">
         <label for="stockist-select">Stockist</label>
         <select id="stockist-select" class="filter-pill" <?= $isEdit ? 'disabled' : '' ?>>
-            <option value="">— Stockist —</option>
+            <option value="" data-gst-type="">— Stockist —</option>
             <?php 
             $selected_stockist = $isEdit ? $order_data['stockist_id'] : '';
-            foreach ($stockists as $s): 
-                $selected = ($s['stockist_id'] == $selected_stockist) ? 'selected' : '';
+            foreach ($stockists as $s):$selected = ($s['stockist_id'] ==$selected_stockist) ? 'selected' : '';
+                // Make sure the key matches your DB column (e.g., $s['gst_type'])
+                $gstType =$s['gst_type'] ?? ''; 
             ?>
-                <option value="<?= $s['stockist_id'] ?>" <?= $selected ?>><?= htmlspecialchars($s['stockist_name']) ?></option>
+                <option value="<?= $s['stockist_id'] ?>" data-gst-type="<?= htmlspecialchars($gstType) ?>" <?= $selected ?>>
+                    <?= htmlspecialchars($s['stockist_name']) ?>
+                </option>
             <?php endforeach; ?>
         </select>
         <?php if($isEdit): ?>
             <input type="hidden" id="hidden-stockist" value="<?= $order_data['stockist_id'] ?>">
+            <input type="hidden" id="hidden-gst-type" value="<?= htmlspecialchars($order_data['gst_type'] ?? '') ?>">
         <?php endif; ?>
     </div>
 
     <!-- ── Mobile Single Available Limit Display ────────── -->
     <div class="mr-limit-strip">
-        <span class="text-muted fw-bold">Avail Limit:</span>
-        <span id="mr-live-limit" class="limit-val">₹ <?= number_format($base_avail_limit ?? 0, 2); ?></span>
-    </div>
+    <span class="text-muted fw-bold">Avail Limit:</span>
+    <span id="mr-live-limit" class="limit-val">₹ <?= number_format($base_avail_limit ?? 0, 2); ?></span>
+    <!-- <span class="text-muted fw-bold ms-3">Max Bill Limit:</span>
+    <span id="gst-bill-limit" class="limit-val">₹ 0.00</span> -->
+</div>
     <!-- ── Medicine search row ──────────────────────── -->
     <div class="entry-row">
         <div class="col-lg-8">

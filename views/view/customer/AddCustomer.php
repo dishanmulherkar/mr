@@ -147,30 +147,37 @@ include 'view/layout/header.php';
 
                 <div class="form-grid-2">
 
-            <div class="form-field">
-                <label>Upload Image</label>
-                <?php
-                $img = !empty($customer['customer_img'])
-                    ? BASE_URL . "../Admin/uploads/customers/" . $customer['customer_img']
-                    : BASE_URL . "../Admin/uploads/customers/no-image.png";
-                ?>
-                <div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap;">
-                    <img
-                        id="previewImage"
-                        src="<?= !empty($img) ? htmlspecialchars($img) : '../admin/uploads/customers/no-image.png'; ?>"
-                        alt="Customer Image"
-                        style="width:100px;height:100px;border-radius:8px;border:1px solid #ddd;object-fit:cover;">
+           <div class="form-field">
+                    <label>Upload Image <?= empty($customer['customer_img']) ? '<span class="text-danger">*</span>' : '' ?></label>
+                    <?php
+                    $hasExistingImage = !empty($customer['customer_img']);
+                    $img = $hasExistingImage
+                        ? BASE_URL . "../Admin/uploads/customers/" . $customer['customer_img']
+                        : BASE_URL . "../Admin/uploads/customers/no-image.png";
+                    ?>
+                    <div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap;">
+                        <img
+                            id="previewImage"
+                            src="<?= htmlspecialchars($img); ?>"
+                            alt="Customer Image"
+                            style="width:100px;height:100px;border-radius:8px;border:1px solid #ddd;object-fit:cover;">
 
-                    <div style="flex:1;">
-                        <input
-                            type="file"
-                            id="customer_img"
-                            name="customer_img"
-                            accept="image/jpeg,image/png,image/jpg,image/webp" required>
+                        <div style="flex:1;">
+                            <!-- Hidden input to keep old image when not uploading a new one -->
+                            <input 
+                                type="hidden" 
+                                name="old_customer_img" 
+                                value="<?= htmlspecialchars($customer['customer_img'] ?? '') ?>">
+
+                            <input
+                                type="file"
+                                id="customer_img"
+                                name="customer_img"
+                                accept="image/jpeg,image/png,image/jpg,image/webp"
+                                <?= !$hasExistingImage ? 'required' : '' ?>>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
               <div class="form-field">
                     <label>Address</label>

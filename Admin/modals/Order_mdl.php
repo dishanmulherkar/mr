@@ -642,6 +642,24 @@ class OrderModel
                 }
             }
 
+           // Insert into activity_logs
+                $act_type     = 'ORDER_APPROVED';
+                $act_title    = 'Order Approved';
+                $act_message  = "Invoice #" . $inward_no . " for " . ($stockist_name ?: 'Stockist') . " approved.";
+                $target_user  = ($mr_id > 0) ? (int)$mr_id : null;
+                $act_priority = 'normal'; // Orders approved vanish tomorrow if not clicked
+
+                $stmt_act = $this->con->prepare("
+                    INSERT INTO activity_logs (user_id, activity_type, title, message, reference_id, amount, priority, is_read, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())
+                ");
+
+                // Bind params: user_id (i), activity_type (s), title (s), message (s), reference_id (i), amount (d), priority (s)
+                $stmt_act->bind_param("isssids", $target_user, $act_type, $act_title, $act_message, $order_id, $rounded_net_amount, $act_priority);
+                $stmt_act->execute();
+                $stmt_act->close();
+
+
             $stmt_update_item->close();
             $stmt_insert_item->close();
             $stmt_inward_det->close();
@@ -928,6 +946,34 @@ class OrderModel
                     $stmt_ledger_in->execute();
                 }
             }
+
+           // Insert update event into activity_logs
+            $safe_order_id = (int)$order_id;
+            $order_info    = $this->con->query("
+                SELECT o.order_no, o.mr_id, s.stockist_name 
+                FROM orders o 
+                LEFT JOIN stockists s ON s.stockist_id = o.stockist_id 
+                WHERE o.order_id = {$safe_order_id}
+            ")->fetch_assoc();
+
+            $order_num      = !empty($order_info['order_no']) ? $order_info['order_no'] : ('#' . $safe_order_id);
+            $stockist_title = !empty($order_info['stockist_name']) ? $order_info['stockist_name'] : 'Stockist';
+            $target_user    = !empty($order_info['mr_id']) ? (int)$order_info['mr_id'] : null;
+
+            $act_type       = 'ORDER_UPDATED';
+            $act_title      = 'Order Updated';
+            $act_message    = "Invoice #" . $order_num . " for " . $stockist_title . " updated.";
+            $act_priority   = 'normal'; // Vanishes tomorrow if not clicked
+
+            $stmt_act = $this->con->prepare("
+                INSERT INTO activity_logs (user_id, activity_type, title, message, reference_id, amount, priority, is_read, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())
+            ");
+
+            // Bind params: user_id (i), activity_type (s), title (s), message (s), reference_id (i), amount (d), priority (s)
+            $stmt_act->bind_param("isssids", $target_user, $act_type, $act_title, $act_message, $safe_order_id, $rounded_net_amount, $act_priority);
+            $stmt_act->execute();
+            $stmt_act->close();
 
             $stmt_update_item->close();
             $stmt_insert_item->close();

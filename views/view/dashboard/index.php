@@ -125,7 +125,7 @@ include 'view/layout/header.php';
     }
 
     .feed-desc {
-        font-size: 11.5px;
+        font-size: 12px;
         color: #64748b;
         margin: 0 0 0px 0;
         line-height: 1.45;
@@ -497,9 +497,9 @@ if (isset($notification_query) && mysqli_num_rows($notification_query) > 0) {
     payload.append('id', logId);
 
     if (navigator.sendBeacon) {
-        navigator.sendBeacon('<?= BASE_URL ?>index.php?action=mark_activity_read', payload);
+        navigator.sendBeacon('<?= BASE_URL ?>dashboard/markNotificationsSeen', payload);
     } else {
-        fetch('<?= BASE_URL ?>index.php?action=mark_activity_read', {
+        fetch('<?= BASE_URL ?>dashboard/markNotificationsSeen', {
             method: 'POST',
             body: payload
         });
@@ -545,9 +545,9 @@ function dismissNotification(event, logId, isDownload = false, targetUrl = '') {
     payload.append('id', logId);
 
     if (navigator.sendBeacon) {
-        navigator.sendBeacon('index.php?action=mark_activity_read', payload);
+        navigator.sendBeacon('dashboard/markNotificationsSeen', payload);
     } else {
-        fetch('index.php?action=mark_activity_read', {
+        fetch('dashboard/markNotificationsSeen', {
             method: 'POST',
             body: payload
         });

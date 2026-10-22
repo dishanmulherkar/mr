@@ -185,21 +185,21 @@ include 'view/layout/header.php';
                                 $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
                                 $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
                                 
-                                if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
+                                 if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
                                         if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)/i', $raw_notes, $matches)) {
                                             $particulars = "<span style='font-weight: 600;'>" . $matches[1] . " on " . $matches[2] . "</span>";
                                             $extra_note = trim(preg_replace('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)(:\s*₹?[0-9,.]+)?/i', '', $raw_notes));
                                             $extra_note = ltrim($extra_note, '| -:');
-                                            if (!empty($extra_note)) {
-                                                $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($extra_note) . "</small>";
-                                            }
+                                            // if (!empty($extra_note)) {
+                                            //     $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($extra_note) . "</small>";
+                                            // }
                                         } else {
-                                            $particulars = "<span style='font-weight: 600;'>Cash Discount</span>";
-                                            if (!empty($raw_notes)) {
-                                                $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
-                                            }
+                                            $particulars = "<span style='font-weight: 600;'>$raw_notes</span>";
+                                            // if (!empty($raw_notes)) {
+                                            //     $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
+                                            // }
                                         }
-                                    } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
+                                    }elseif (stripos($raw_notes, 'CD Reversed') !== false) {
                                         $particulars = "<span style='font-weight: 600; color: #dc2626;'>CD Reversed</span>";
                                         if (!empty($raw_notes)) {
                                             $particulars .= "<br><small style='color: #64748b;'>" . htmlspecialchars($raw_notes) . "</small>";
@@ -325,82 +325,117 @@ $(document).ready(function () {
     var hq_id = <?= (int)$hq_id ?>;
     var stockist_id = <?= (int)$stockist_id ?>;
 
-    $('#ledgerReportTable').DataTable({
-        destroy: true,
-        ordering: false, 
-        paging: false,
-        info: false,
-        dom: 'Bfrtip',
-        buttons: [
-            {
-                extend: 'pdfHtml5',
-                text: '<i class="fa fa-file-pdf"></i> Export PDF',
-                className: 'btn btn-danger',
-                title: '', 
-                customize: function (doc) {
-                    
-                    var customHeader = {
-                        columns: [
-                            {
-                                width: '33%',
-                                text: [
-                                    { text: 'RUDRADEO INCORPORATES - (from 1-Apr-2019)\n', bold: true },
-                                    'Railway Co-Operative Colony,\n',
-                                    'Digha Ghat,\n',
-                                    'Patna,\n',
-                                    'Bihar.'
-                                ],
-                                fontSize: 9,
-                                alignment: 'left'
-                            },
-                            {
-                                width: '34%',
-                                text: [
-                                    { text: '<?= addslashes($stockist_name ?? "Ledger Report") ?>\n', fontSize: 13, bold: true },
-                                    { text: 'Ledger Account\n', fontSize: 11 },
-                                    { text: '<?= date("j-M-y", strtotime($from_date)) ?> to <?= date("j-M-y", strtotime($to_date)) ?>', fontSize: 9 }
-                                ],
-                                alignment: 'center',
-                                margin: [0, 5, 0, 0]
-                            },
-                            {
-                                width: '33%',
-                                text: [
-                                    'Registry Office\n',
-                                    'Cinema Road\n',
-                                    'Sheohar 843329, Bihar'
-                                ],
-                                fontSize: 9,
-                                alignment: 'right'
-                            }
-                        ],
-                        margin: [0, 0, 0, 15] 
-                    };
+   $('#ledgerReportTable').DataTable({
+    destroy: true,
+    ordering: false, 
+    paging: false,
+    info: false,
+    dom: 'Bfrtip',
+    buttons: [
+        {
+            extend: 'pdfHtml5',
+            text: '<i class="fa fa-file-pdf"></i> Export PDF',
+            className: 'btn btn-danger',
+            title: '', 
+            exportOptions: {
+                columns: [0, 1, 2, 3, 4, 5],
+                footer: false // Handled manually below to support colspan perfectly
+            },
+            customize: function (doc) {
+                
+                // 1. Company Header
+                var customHeader = {
+                    columns: [
+                        {
+                            width: '33%',
+                            text: [
+                                { text: 'RUDRADEO INCORPORATES - (from 1-Apr-2019)\n', bold: true },
+                                'Railway Co-Operative Colony,\n',
+                                'Digha Ghat,\n',
+                                'Patna,\n',
+                                'Bihar.'
+                            ],
+                            fontSize: 9,
+                            alignment: 'left'
+                        },
+                        {
+                            width: '34%',
+                            text: [
+                                { text: '<?= addslashes($stockist_name ?? "Ledger Report") ?>\n', fontSize: 13, bold: true },
+                                { text: 'Ledger Account\n', fontSize: 11 },
+                                { text: '<?= date("j-M-y", strtotime($from_date)) ?> to <?= date("j-M-y", strtotime($to_date)) ?>', fontSize: 9 }
+                            ],
+                            alignment: 'center',
+                            margin: [0, 5, 0, 0]
+                        },
+                        {
+                            width: '33%',
+                            text: [
+                                'Registry Office\n',
+                                'Cinema Road\n',
+                                'Sheohar 843329, Bihar'
+                            ],
+                            fontSize: 9,
+                            alignment: 'right'
+                        }
+                    ],
+                    margin: [0, 0, 0, 15] 
+                };
 
-                    doc.content.unshift(customHeader);
+                doc.content.unshift(customHeader);
 
-                    doc.content[1].table.widths = ['12%', '38%', '15%', '10%', '12.5%', '12.5%'];
-                    doc.styles.tableHeader.alignment = 'left';
-                    
-                    var rowCount = doc.content[1].table.body.length;
-                    for (i = 1; i < rowCount; i++) {
-                        doc.content[1].table.body[i][4].alignment = 'right';
-                        doc.content[1].table.body[i][5].alignment = 'right';
+                // Table reference
+                var tableNode = doc.content[1].table;
+                tableNode.widths = ['12%', '38%', '15%', '10%', '12.5%', '12.5%'];
+                doc.styles.tableHeader.alignment = 'left';
+                
+                // 2. Align body row amounts to the right
+                var bodyRowCount = tableNode.body.length;
+                for (var i = 1; i < bodyRowCount; i++) {
+                    if (tableNode.body[i] && tableNode.body[i].length >= 6) {
+                        tableNode.body[i][4].alignment = 'right';
+                        tableNode.body[i][5].alignment = 'right';
                     }
-
-                    // Apply UI Borders to the PDF export to match the HTML Table
-                    doc.content[1].layout = {
-                        hLineWidth: function (i, node) { return 1; },
-                        vLineWidth: function (i, node) { return 1; },
-                        hLineColor: function (i) { return '#dee2e6'; },
-                        vLineColor: function (i) { return '#dee2e6'; },
-                        paddingTop: function(i, node) { return 5; },
-                        paddingBottom: function(i, node) { return 5; }
-                    };
                 }
+
+                // 3. Append the 3 Bottom Footer Rows (Total, Closing Balance, Grand Total)
+                // Total Row
+                tableNode.body.push([
+                    { text: 'Total', colSpan: 4, alignment: 'right', bold: true, fillColor: '#f8f9fa' },
+                    {}, {}, {},
+                    { text: '<?= number_format($total_debit, 2) ?>', alignment: 'right', bold: true, fillColor: '#f8f9fa' },
+                    { text: '<?= number_format($total_credit, 2) ?>', alignment: 'right', bold: true, fillColor: '#f8f9fa' }
+                ]);
+
+                // Closing Balance Row
+                tableNode.body.push([
+                    { text: '<?= $closing_balance > 0 ? "By Closing Balance" : "To Closing Balance" ?>', colSpan: 4, alignment: 'right', bold: true },
+                    {}, {}, {},
+                    { text: '<?= $closing_balance < 0 ? number_format(abs($closing_balance), 2) : "" ?>', alignment: 'right', bold: true, color: '#dc2626' },
+                    { text: '<?= $closing_balance > 0 ? number_format($closing_balance, 2) : "" ?>', alignment: 'right', bold: true, color: '#dc2626' }
+                ]);
+
+                // Grand Total Row
+                tableNode.body.push([
+                    { text: 'Grand Total', colSpan: 4, alignment: 'right', bold: true, fillColor: '#e9ecef' },
+                    {}, {}, {},
+                    { text: '<?= number_format($grand_total, 2) ?>', alignment: 'right', bold: true, fillColor: '#e9ecef' },
+                    { text: '<?= number_format($grand_total, 2) ?>', alignment: 'right', bold: true, fillColor: '#e9ecef' }
+                ]);
+
+                // 4. Borders and cell padding
+                doc.content[1].layout = {
+                    hLineWidth: function (i, node) { return 1; },
+                    vLineWidth: function (i, node) { return 1; },
+                    hLineColor: function (i) { return '#dee2e6'; },
+                    vLineColor: function (i) { return '#dee2e6'; },
+                    paddingTop: function(i, node) { return 4; },
+                    paddingBottom: function(i, node) { return 4; }
+                };
             }
-        ]
-    });
+        }
+    ]
+});
 
     $('.select2').select2({ theme: 'bootstrap-5' });
 

@@ -38,6 +38,26 @@ function saveFormState() {
     }
 }
 
+function getStockistGstType() {
+    const hiddenGst = document.getElementById('hidden-gst-type');
+    if (hiddenGst && hiddenGst.value) {
+        return hiddenGst.value.trim().toUpperCase();
+    }
+    const stockistEl = document.getElementById('stockist-select');
+    if (!stockistEl || stockistEl.selectedIndex < 0) return '';
+    const selectedOpt = stockistEl.options[stockistEl.selectedIndex];
+    return selectedOpt ? (selectedOpt.getAttribute('data-gst-type') || '').trim().toUpperCase() : '';
+}
+
+function getMaxBillLimit() {
+    const gstType = getStockistGstType();
+    if (gstType === 'IGST') {
+        return 50000;
+    } else if (gstType === 'CGST_SGST' || gstType === 'CGST/SGST') {
+        return 100000;
+    }
+    return 100000; // Default limit
+}
 /* ════════════════════════════════════════════════════
     TOAST
 ════════════════════════════════════════════════════ */
@@ -67,6 +87,7 @@ stockistSel.addEventListener('change', function () {
     }
     
     activeStockistId = this.value;
+  
 
     selectedProduct           = null;
     searchInput.value         = '';
@@ -76,7 +97,6 @@ stockistSel.addEventListener('change', function () {
     setAcError('');
     if (this.value) { fetchMedicines(''); searchInput.focus(); }
 });
-
 // Typing → debounced search
 searchInput.addEventListener('input', function () {
     selectedProduct = null;
@@ -294,7 +314,6 @@ function renderCart() {
         if (document.getElementById('sub-total')) document.getElementById('sub-total').textContent = '₹ 0.00';
         document.getElementById('btn-submit').disabled = true;
 
-        // Reset limit to base available when cart is emptied
         updateLiveLimit(0);
         return;
     }
@@ -327,10 +346,24 @@ function renderCart() {
     if (document.getElementById('sub-total')) document.getElementById('sub-total').textContent = '₹ ' + subTotal.toFixed(2);
     if (document.getElementById('gst-amount')) document.getElementById('gst-amount').textContent = '₹ ' + totalTax.toFixed(2);
     
-    document.getElementById('total-amount').textContent = '₹ ' + grandTotal.toFixed(2);
-    document.getElementById('btn-submit').disabled = false;
+    const totalEl = document.getElementById('total-amount');
+    totalEl.textContent = '₹ ' + grandTotal.toFixed(2);
 
-    // Recalculate remaining limit against the current Grand Total
+    // ── Check against GST Maximum Bill Limit ──
+    const maxLimit = getMaxBillLimit();
+    const gstType = getStockistGstType();
+    const btnSubmit = document.getElementById('btn-submit');
+
+    if (grandTotal > maxLimit) {
+        totalEl.style.color = '#dc3545'; // Highlight total in red
+        btnSubmit.disabled = true;
+        setAcError(`Order total (₹${grandTotal.toFixed(2)}) exceeds maximum allowed bill of ₹${maxLimit.toLocaleString('en-IN')} for ${gstType}.`);
+    } else {
+        totalEl.style.color = '';
+        btnSubmit.disabled = false;
+        setAcError('');
+    }
+
     updateLiveLimit(grandTotal);
 }
 
@@ -390,6 +423,14 @@ document.getElementById('btn-submit').addEventListener('click', function () {
         
         return sum + taxableAmt + taxAmt;
     }, 0);
+
+    // ── Enforce Bill Limit ──
+    const maxLimit = getMaxBillLimit();
+    const gstType = getStockistGstType();
+    if (net_total > maxLimit) {
+        showToast(`Bill total cannot exceed ₹${maxLimit.toLocaleString('en-IN')} for ${gstType} stockists.`, 'error');
+        return;
+    }
 
     const btn = this;
     btn.disabled = true;
@@ -530,4 +571,6 @@ $(document).ready(function(){
         }
         loadCartSession();
     }
+
+
 });

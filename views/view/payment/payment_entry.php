@@ -126,8 +126,9 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
             <select name="payment_method" id="payment_method" class="form-control" required>
                 <option value="">-- Select Method --</option>
                 <option value="UPI">UPI</option>
-                <option value="Bank Transfer (NEFT/RTGS)">Cash To Bank</option>
-                <option value="Cheque">Cheque</option>
+                <option value="NEFT/RTGS">NEFT/RTGS</option>
+                <option value="Cheque">Cheque To Bank</option>
+                <option value="Bank Transfer">Cash To Bank</option>
                 <option value="Cash">Cash To Person</option>
                 <option value="Other">Other</option>
             </select>
@@ -159,7 +160,7 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
             <input type="text" name="other_payment_method" id="other_payment_method" class="form-control" placeholder="Enter payment method...">
         </div>
 
-        <div class="form-group">
+        <div class="form-group" id ="bank_details_wrapper">
             <label for="bank_details">Reference No / Bank Details</label>
             <input type="text" name="bank_details" id="bank_details" class="form-control" placeholder="UTR, Cheque No, or Transaction ID">
         </div>
@@ -179,7 +180,7 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
         </div>
 
         <div class="form-group" style="margin-top: 20px;">
-            <button type="submit" class="btn-submit-form">
+           <button type="submit" id="btnSubmitPayment" class="btn-submit-form">
                 <i class="fa fa-save"></i> Submit Payment
             </button>
         </div>
@@ -193,6 +194,21 @@ $selected_stockist_id = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] 
 <?php include 'view/layout/footer.php'; ?>
 <script>
 $(document).ready(function() {
+
+$('#paymentForm').on('submit', function(e) {
+    let $btn = $('#btnSubmitPayment');
+
+    // If already submitting, prevent a second submission
+    if ($btn.data('submitting')) {
+        e.preventDefault();
+        return false;
+    }
+
+    // Mark as submitting and disable
+    $btn.data('submitting', true);
+    $btn.prop('disabled', true);
+    $btn.html('<i class="fa fa-spinner fa-spin"></i> Processing Payment...');
+});
     
  $('#payment_method').on('change', function() {
     let method = $(this).val();
@@ -210,9 +226,11 @@ $(document).ready(function() {
     if (method === 'Cash') {
         $('#bank_id').closest('.form-group').slideUp(); // Hides the whole wrapper including label
         $('#bank_id').prop('required', false).val('');  // Removes required attribute and clears selection
+        $('#bank_details_wrapper').hide();
     } else {
         $('#bank_id').closest('.form-group').slideDown();
         $('#bank_id').prop('required', true);
+        $('#bank_details_wrapper').show();
     }
 });
 

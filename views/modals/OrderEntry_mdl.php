@@ -17,7 +17,8 @@ class orderentry_mdl
             SELECT 
                 s.stockist_id,
                 s.stockist_name,
-                h.hq_name
+                h.hq_name,
+                s.gst_type
             FROM stockists s
             INNER JOIN mr_users m ON m.hq_id = s.hq_id
             LEFT JOIN headquarter h ON h.headquarter_id = s.hq_id
