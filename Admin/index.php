@@ -231,6 +231,11 @@ switch($page)
     $controller = new primary_sale_ctl($con);
     break;
 
+     case 'OutstandingReport':
+    include 'controller/report/outstanding_ctl.php';
+    $controller = new outstanding_ctl($con);
+    break;
+
 
     case 'dashboard':
     default:

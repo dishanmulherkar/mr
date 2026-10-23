@@ -311,7 +311,13 @@ include 'view/layout/header.php';
     </div>
     <?php endif; ?>
 </div>
-
+<?php
+// Ensure totals are rounded and balance variables exist before JS/PDF generation
+$total_debit     = round($total_debit ?? 0, 2);
+$total_credit    = round($total_credit ?? 0, 2);
+$closing_balance = round($total_debit - $total_credit, 2);
+$grand_total     = max($total_debit, $total_credit);
+?>
 <?php include 'view/layout/footer.php'; ?>
 
 <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
@@ -399,6 +405,8 @@ $(document).ready(function () {
                 }
 
                 // 3. Append the 3 Bottom Footer Rows (Total, Closing Balance, Grand Total)
+                // 3. Append the 3 Bottom Footer Rows (Total, Closing Balance, Grand Total)
+
                 // Total Row
                 tableNode.body.push([
                     { text: 'Total', colSpan: 4, alignment: 'right', bold: true, fillColor: '#f8f9fa' },
