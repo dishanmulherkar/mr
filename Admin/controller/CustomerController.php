@@ -125,7 +125,7 @@ class CustomerController
         {
             $selected = ($row['headquarter_id'] == $selected_id) ? 'selected' : '';
             echo '<option value="'.$row['headquarter_id'].'" '.$selected.'>';
-            echo htmlspecialchars($row['hq_name']);
+            echo htmlspecialchars($row['hq_name']).' ('.$row['mr_name'].')';
             echo '</option>';
         }
         

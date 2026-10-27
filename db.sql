@@ -674,3 +674,25 @@ ALTER TABLE `sales_entries`
     ADD COLUMN `discount_percent` DECIMAL(5, 2) NOT NULL DEFAULT 0.00 AFTER `total_amt`,
     ADD COLUMN `discount_amt` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER `discount_percent`,
     ADD COLUMN `net_amt` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER `discount_amt`;
+
+    ALTER TABLE `stockists` 
+   ADD COLUMN commission_rate DECIMAL(5,2) NOT NULL DEFAULT 7.00;
+
+
+
+DROP TABLE IF EXISTS invoice_number_pool;
+CREATE TABLE invoice_number_pool (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  super_stockist_id INT NOT NULL,
+  fy VARCHAR(9) NOT NULL,
+  sequence_no INT NOT NULL,
+  released_at DATETIME NOT NULL,
+  UNIQUE KEY uq_pool (super_stockist_id, fy, sequence_no)
+);
+
+ALTER TABLE invoice_number_pool
+  ADD COLUMN invoice_date DATE NOT NULL AFTER sequence_no;
+
+  ALTER TABLE activity_logs 
+ADD COLUMN is_read_asm TINYINT(1) NOT NULL DEFAULT 0,
+ADD COLUMN read_at_asm DATETIME NULL DEFAULT NULL;

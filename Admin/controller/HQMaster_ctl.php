@@ -110,7 +110,7 @@ class HeadquarterController
             echo '<option value="">Select Head Quarter</option>';
             while ($row = mysqli_fetch_assoc($hq_result)) {
                 $isSelected = ($selected_hq == $row['headquarter_id']) ? 'selected' : '';
-                echo '<option value="' . htmlspecialchars($row['headquarter_id']) . '" ' . $isSelected . '>' . htmlspecialchars($row['hq_name']) . '</option>';
+                echo '<option value="' . htmlspecialchars($row['headquarter_id']) . '" ' . $isSelected . '>' . htmlspecialchars($row['hq_name']) .'('.htmlspecialchars($row['mr_name']) .')' .'</option>';
             }
         }
     }

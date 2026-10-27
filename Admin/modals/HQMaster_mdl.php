@@ -176,7 +176,7 @@ class HeadquarterModel
         $state_id = (int)$state_id;
         return mysqli_query(
             $this->con,
-            "SELECT headquarter_id, hq_name FROM headquarter WHERE state_id = '$state_id' ORDER BY hq_name ASC"
+            "SELECT h.headquarter_id, h.hq_name, mr.mr_name FROM headquarter h INNER JOIN mr_users mr ON h.headquarter_id =  mr.hq_id WHERE h.state_id = '$state_id' AND mr.status = '1' ORDER BY h.hq_name ASC"
         );
     }
 
