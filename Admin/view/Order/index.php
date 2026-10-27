@@ -164,9 +164,15 @@ include 'view/layout/header.php';
 
                                                 <!-- 3. Delete -->
                                                 <li>
-                                                    <a class="dropdown-item text-danger" href="<?= BASE_URL ?>order/delete/<?= $row['order_id']; ?>" 
+                                                    <a class="dropdown-item text-danger" href="<?= BASE_URL ?>Order/DeleteApproved/<?= $row['order_id']; ?>" 
                                                     onclick="return confirm('Are you sure you want to delete this order?');" title="Delete Order">
                                                         <i class="fa fa-trash me-2"></i> Delete
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-item text-danger" href="<?= BASE_URL ?>Order/Unapprove/<?= $row['order_id']; ?>" 
+                                                    onclick="return confirm('Are you sure you want to unapprove this order?');" title="Unapprove Order">
+                                                        <i class="fa fa-trash me-2"></i> UNAPPROVE
                                                     </a>
                                                 </li>
                                             </ul>

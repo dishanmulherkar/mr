@@ -132,7 +132,7 @@ class payment_ledger_ctl
             include 'view/report/drc_ledger_report.php';
         }
 
-            // ==========================================
+    // ==========================================
     // Asm Commission (ASM) Ledger Controller
     // ==========================================
     public function asm_ledger()
@@ -164,6 +164,34 @@ class payment_ledger_ctl
         include 'view/Asm/report/asm_commision_ledger.php';
     }
 
+     public function asm_drc_ledger()
+        {
+            $asm_id = $_SESSION['admin_id'];
+            $hq = $this->model->getHQbyAsm($asm_id);
+            $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
+            $start_date = $_GET['start_date'] ?? '';
+            $end_date   = $_GET['end_date'] ?? '';
+
+            $from_date = !empty($start_date) ? $start_date : date('Y-m-01');
+            $to_date   = !empty($end_date) ? $end_date : date('Y-m-d');
+            // Dropdowns
+           
+            // Report Data & Opening Balance
+            $query = null;
+            $opening_balance = 0;
+            // Get opening balance calculated before the start date
+            if ($hq_id > 0) {
+            $opening_balance = $this->model->getOpeningBalancedrc($hq_id, $from_date);
+            
+            // Get the actual ledger rows for the date range
+            $query = $this->model->getReportdrcAsm(
+                $hq_id,
+                $from_date,
+                $to_date
+            ); 
+            }
+            include 'view/Asm/report/drc_ledger.php';
+        }
 
 }
 ?>

@@ -137,62 +137,85 @@ include 'view/layout/header-asm.php';
     <!-- ── Report Table ───────────────────────────────── -->
     <div class="rpt-table-wrap">
         <table>
-           <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Particulars</th>
-                    <th>Vch Type</th>
-                    <th>Ref / Bill No</th>
-                    <th class="text-right">Debit (+) (₹)</th>
-                    <th class="text-right">Credit (-) (₹)</th>
-                </tr>
-            </thead>
-            
-            <tbody id="rpt-tbody">
-                <?php if (isset($query) && $query && mysqli_num_rows($query) > 0): ?>
-                    <?php
-                    $total_debit = 0;
-                    $total_credit = 0;
-                    
-                    // Handle Opening Balance
-                    if (isset($opening_balance) && $opening_balance > 0) {
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Particulars</th>
+                <!--<th>Vch Type</th>-->
+                <th>Ref / Bill No</th>
+                <th class="text-right">Debit (+) (₹)</th>
+                <th class="text-right">Credit (-) (₹)</th>
+            </tr>
+        </thead>
+        
+        <tbody id="rpt-tbody">
+            <?php 
+            $has_rows = isset($query) && $query && mysqli_num_rows($query) > 0;
+            $has_ob = isset($opening_balance) && abs($opening_balance) > 0;
+
+            if ($has_rows || $has_ob): 
+                $total_debit = 0;
+                $total_credit = 0;
+                
+                // 1. Render Opening Balance at the top
+                if ($has_ob) {
+                    if ($opening_balance > 0) {
                         $total_debit += $opening_balance;
                         echo "<tr>
-                                <td>".date('d-M', strtotime($from_date))."</td>
+                                <td>" . date('d-M-Y', strtotime($from_date)) . "</td>
                                 <td><strong>To Opening Balance</strong></td>
-                                <td></td>
-                                <td></td>
-                                <td class='text-right'><strong>".number_format($opening_balance, 2)."</strong></td>
+                                <td>Opening</td>
+                                <td>-</td>
+                                <td class='text-right'><strong>" . number_format($opening_balance, 2) . "</strong></td>
                                 <td class='text-right'></td>
                             </tr>";
-                    } elseif (isset($opening_balance) && $opening_balance < 0) {
+                    } else {
                         $total_credit += abs($opening_balance);
                         echo "<tr>
-                                <td>".date('d-M', strtotime($from_date))."</td>
-                                <td><strong>By Opening Balance</strong></td>
-                                <td></td>
-                                <td></td>
+                                <td>" . date('d-M-Y', strtotime($from_date)) . "</td>
+                                <td><strong>By Opening Balance (Advance)</strong></td>
+                                <td>Opening</td>
+                                <td>-</td>
                                 <td class='text-right'></td>
-                                <td class='text-right'><strong>".number_format(abs($opening_balance), 2)."</strong></td>
+                                <td class='text-right'><strong>" . number_format(abs($opening_balance), 2) . "</strong></td>
                             </tr>";
                     }
+                }
 
+                // 2. Render In-Period Transactions
+                if ($has_rows):
                     while($row = mysqli_fetch_assoc($query)) {
-                        $date = date('d-M', strtotime($row['created_at']));
-                        
-                        // Fetch basic variables used by both blocks
+                        $date = date('d-M-y', strtotime($row['payment_date'] ?? $row['created_at'] ?? '')); 
                         $raw_notes = !empty($row['notes']) ? htmlspecialchars($row['notes']) : "";
                         $vch_no = htmlspecialchars($row['inward_no'] ?? '');
                         
-                        if ($row['transaction_type'] == 'bill_added') {
-                            // 1. Check if this is a CD Reversal saved as a bill
+                        $row_class = "";
+                        $status_badge = "";
+
+                        if ($row['transaction_type'] == 'opening_balance') {
+                            $particulars = "Opening Balance Brought Forward";
+                            $vch_type = "Opening";
+                            $vch_no = "OB";
+                            $debit = ($row['balance_action'] === 'increase') ? round((float)$row['amount'], 2) : 0;
+                            $credit = ($row['balance_action'] === 'decrease') ? round((float)$row['amount'], 2) : 0;
+                            $total_debit += $debit;
+                            $total_credit += $credit;
+
+                        } elseif ($row['transaction_type'] == 'bill_added') {
                             if (stripos($raw_notes, 'CD Reversed') !== false) {
-                                $particulars = $raw_notes; // Shows "CD Reversed for T-127"
+                                $particulars = $raw_notes;
                                 $vch_type = "Adjustment";
                             } else {
-                                // Normal Sales Bill
                                 $particulars = "Sales Bill";
                                 $vch_type = "Tax Invoice";
+
+                                $pay_status = strtolower($row['pay_status'] ?? '');
+                                if ($pay_status === 'paid') {
+                                    $row_class = "bill-paid-row";
+                                    $status_badge = "<span class='badge-bill-paid'>✓ PAID</span>";
+                                } elseif ($pay_status === 'partial') {
+                                    $status_badge = "<span class='badge-bill-partial'>PARTIAL</span>";
+                                }
                             }
                             
                             $debit = round((float)$row['amount'], 2);
@@ -200,49 +223,54 @@ include 'view/layout/header-asm.php';
                             $total_debit += $debit;
                             
                         } else {
-                            // 2. Credits (Payments & Commission Settlements)
+                            // Credits (Receipts, Settlements)
                             $vch_no = htmlspecialchars($row['pay_id'] ?? '');
                             if (empty($raw_notes)) $raw_notes = "By Receipt";
                             
                             $bank_name = !empty($row['bank_name']) ? htmlspecialchars($row['bank_name']) : "";
                             $payment_method = !empty($row['payment_method']) ? htmlspecialchars($row['payment_method']) : "";
                             
-                            $stockist_name = htmlspecialchars($row['stockist_name'] ?? 'Unknown');
-                            $stockist_badge = "<br><button type='button' class='btn btn-sm btn-light' style='font-size: 10px; padding: 2px 6px; margin-top: 3px; border: 1px solid #dee2e6;'><i class='fa fa-user text-primary'></i> {$stockist_name}</button>";
-                            
-                            // Particulars Logic
-                            if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
-                                if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z]+-\d+)/i', $raw_notes, $matches)) {
+                           if (stripos($raw_notes, '4% CD') !== false || stripos($raw_notes, '2% CD') !== false) {
+                                if (preg_match('/((?:4%|2%) CD) on Invoice ([a-zA-Z0-9\-\/]+)/i', $raw_notes, $matches)) {
                                     $particulars = $matches[1] . " on " . $matches[2];
                                 } else {
                                     $particulars = explode(':', $raw_notes)[0]; 
                                 }
+                            } elseif (stripos($raw_notes, 'From Comm') !== false) {
+                                $particulars = $raw_notes;
                             } elseif (stripos($raw_notes, 'CD Reversed') !== false) {
-                                // Failsafe in case transaction_type was somehow set to something else
                                 $particulars = $raw_notes;
                             } elseif (stripos($raw_notes, 'CD on Invoice') !== false || stripos($raw_notes, 'CD Applied') !== false) {
                                 $particulars = "CD Applied";
                             } elseif ($row['transaction_type'] === 'mrc_settlement') {
                                 $particulars = "<span style='font-weight: 600;'>MRC Settlement</span>";
                             } elseif ($row['transaction_type'] === 'drc_settlement') {
-                                $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                                // If a custom DRC note exists, show it directly; otherwise show "DRC Settlement"
+                                if (!empty($raw_notes) && stripos($raw_notes, 'drc_settlement') === false) {
+                                    $particulars = "<span style='font-weight: 600;'>" . htmlspecialchars($raw_notes) . "</span>";
+                                } else {
+                                    $particulars = "<span style='font-weight: 600;'>DRC Settlement</span>";
+                                }
                             } elseif ($row['transaction_type'] === 'settled_to_bill') {
                                 $particulars = "<span style='font-weight: 600;'>Bill Adjusted</span>";
-                            }elseif ($row['transaction_type'] === 'asm_settlement') {
+                            } elseif ($row['transaction_type'] === 'asm_settlement') {
                                 $particulars = "<span style='font-weight: 600;'>ASM Settlement</span>";
                             } else {
-                                // Proper fallback for payments
-                                if (!empty($payment_method) && !empty($bank_name)) {
+                                // 1. ONLY for DRC: If manual note contains "DRC" (e.g. "DRC (04/08)"), show the note directly
+                                if (!empty($raw_notes) && stripos($raw_notes, 'DRC') !== false) {
+                                    $particulars = "<span style='font-weight: 600;'>" . htmlspecialchars($raw_notes) . "</span>";
+                                } 
+                                // 2. All other normal payments keep standard Payment Method / Bank formatting
+                                elseif (!empty($payment_method) && !empty($bank_name)) {
                                     $particulars = "{$payment_method} - {$bank_name}";
                                 } elseif (!empty($payment_method)) {
                                     $particulars = $payment_method;
                                 } else {
-                                    $particulars = $raw_notes;
+                                    $particulars = !empty($raw_notes) ? htmlspecialchars($raw_notes) : "-";
                                 }
                             }
 
-                            // Differentiate Voucher Type
-                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill','asm_settlement'])) {
+                            if (in_array($row['transaction_type'], ['mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement'])) {
                                 $vch_type = "Adjustment"; 
                             } else {
                                 $vch_type = "Receipt";    
@@ -251,7 +279,6 @@ include 'view/layout/header-asm.php';
                             $raw_amount = (float)$row['amount'];
                             $debit = 0;
                             
-                            // ROUND OFF CD AMOUNTS
                             if (stripos($raw_notes, 'CD') !== false) {
                                 $credit = round($raw_amount); 
                             } else {
@@ -261,68 +288,81 @@ include 'view/layout/header-asm.php';
                             $total_credit += $credit;
                         }
                     ?>
-                        <tr>
+                        <tr class="<?= $row_class ?>">
                             <td><?= $date ?></td>
-                            <td><?= $particulars ?></td>
-                            <td><?= $vch_type ?></td>
+                            <td><?= $particulars ?> <?= $status_badge ?></td>
+                            <!--<td><?= $vch_type ?></td>-->
                             <td><?= $vch_no ?></td>
-                            <td class="text-right"><?= $debit > 0 ? number_format($debit, 2) : '' ?></td>
-                            <td class="text-right" style="color: #5cb85c;"><?= $credit > 0 ? number_format($credit, 2) : '' ?></td>
+                            <td class="text-right" <?= ($row_class ? 'style="color: #166534; font-weight: 600;"' : '') ?>>
+                                <?= $debit > 0 ? number_format($debit, 2) : '' ?>
+                            </td>
+                            <td class="text-right" style="color: #5cb85c;">
+                                <?= $credit > 0 ? number_format($credit, 2) : '' ?>
+                            </td>
                         </tr>
                     <?php
                     }
-                    ?>
-                    
-                <?php elseif (isset($_GET['stockist_id']) && !empty($_GET['stockist_id'])): ?>
-                    <tr>
-                        <td colspan="6">
-                            <div class="state-screen" style="padding: 30px; text-align: center;">
-                                <div class="state-msg">No transactions found</div>
-                                No data available for the selected dates.
-                            </div>
-                        </td>
-                    </tr>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="6">
-                            <div class="state-screen" style="padding: 30px; text-align: center;">
-                                <div class="state-icon" style="font-size: 30px;">📋</div>
-                                <div class="state-msg">Select a stockist and date</div>
-                                Choose filters above and hit Search to load the ledger report.
-                            </div>
-                        </td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-            <!-- Balancing Footer -->
-            <?php if (isset($query) && $query && mysqli_num_rows($query) > 0): ?>
-            <?php
-                // Explicitly Round to avoid floating point math errors
-                $total_debit = round($total_debit, 2);
-                $total_credit = round($total_credit, 2);
-                
-                $closing_balance = round($total_debit - $total_credit, 2);
-                $grand_total = max($total_debit, $total_credit);
-            ?>
-            <tfoot id="rpt-tfoot">
-                <tr class="tally-footer" style="background: #f8f9fa;">
-                    <td colspan="4"></td>
-                    <td class="text-right" style="border-top: 1px solid #ccc;"><strong><?= number_format($total_debit, 2) ?></strong></td>
-                    <td class="text-right" style="border-top: 1px solid #ccc;"><strong><?= number_format($total_credit, 2) ?></strong></td>
+                endif;
+            elseif (isset($_GET['stockist_id']) && !empty($_GET['stockist_id'])): ?>
+                <tr>
+                    <td colspan="5">
+                        <div class="state-screen" style="padding: 30px; text-align: center;">
+                            <div class="state-msg">No transactions found</div>
+                            No data available for the selected dates.
+                        </div>
+                    </td>
                 </tr>
-                <tr style="background: #f8f9fa; border-top:none !important; border-bottom:none !important;">
-                    <td colspan="4" class="text-right" style="border:none !important; padding-right: 15px;"><strong><?= $closing_balance > 0 ? 'By' : 'To' ?> Closing Balance</strong></td>
-                    <td class="text-right text-danger" style="border:none !important;"><strong><?= $closing_balance < 0 ? number_format(abs($closing_balance), 2) : '' ?></strong></td>
-                    <td class="text-right text-danger" style="border:none !important;"><strong><?= $closing_balance > 0 ? number_format($closing_balance, 2) : '' ?></strong></td>
+            <?php else: ?>
+                <tr>
+                    <td colspan="5">
+                        <div class="state-screen" style="padding: 30px; text-align: center;">
+                            <div class="state-icon" style="font-size: 30px;">📋</div>
+                            <div class="state-msg">Select a stockist and date</div>
+                            Choose filters above and hit Search to load the ledger report.
+                        </div>
+                    </td>
                 </tr>
-                <tr class="tally-grand-total" style="background: #f8f9fa;">
-                    <td colspan="4" class="text-right" style="padding-right: 15px;"><strong>Grand Total</strong></td>
-                    <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333;"><strong><?= number_format($grand_total, 2) ?></strong></td>
-                    <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333;"><strong><?= number_format($grand_total, 2) ?></strong></td>
-                </tr>
-            </tfoot>
             <?php endif; ?>
-        </table>
+        </tbody>
+
+        <!-- Balancing Footer -->
+        <?php if ($has_rows || $has_ob): ?>
+        <?php
+            $total_debit = round($total_debit, 2);
+            $total_credit = round($total_credit, 2);
+            
+            $closing_balance = round($total_debit - $total_credit, 2);
+            $grand_total = max($total_debit, $total_credit);
+        ?>
+        <tfoot id="rpt-tfoot">
+            <tr class="tally-footer" style="background: #f8f9fa;">
+                <td colspan="3" class="text-right"><strong>Total</strong></td>
+                <td class="text-right" style="border-top: 1px solid #ccc;"><strong><?= number_format($total_debit, 2) ?></strong></td>
+                <td class="text-right" style="border-top: 1px solid #ccc;"><strong><?= number_format($total_credit, 2) ?></strong></td>
+            </tr>
+            <tr style="background: #f8f9fa; border-top:none !important; border-bottom:none !important;">
+                <td colspan="3" class="text-right" style="border:none !important; padding-right: 15px;">
+                    <strong><?= $closing_balance > 0 ? 'By Closing Balance (Receivable)' : 'To Closing Balance (Advance)' ?></strong>
+                </td>
+                <td class="text-right text-danger" style="border:none !important;">
+                    <strong><?= $closing_balance < 0 ? number_format(abs($closing_balance), 2) : '' ?></strong>
+                </td>
+                <td class="text-right text-danger" style="border:none !important;">
+                    <strong><?= $closing_balance > 0 ? number_format($closing_balance, 2) : '' ?></strong>
+                </td>
+            </tr>
+            <tr class="tally-grand-total" style="background: #f8f9fa;">
+                <td colspan="3" class="text-right" style="padding-right: 15px;"><strong>Grand Total</strong></td>
+                <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333;">
+                    <strong><?= number_format($grand_total, 2) ?></strong>
+                </td>
+                <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333;">
+                    <strong><?= number_format($grand_total, 2) ?></strong>
+                </td>
+            </tr>
+        </tfoot>
+        <?php endif; ?>
+    </table>
     </div>
 
 </div><!-- /.page-content -->

@@ -164,42 +164,6 @@ private $db;
         return mysqli_fetch_assoc($result);
     }
 
-
-    // public function getRecentActivities($userId = null, $limit = 10)
-    // {
-    //     $limit = (int)$limit;
-
-    //     if (!empty($userId)) {
-    //         $stmt = $this->db->prepare("
-    //             SELECT id, user_id, activity_type, title, message, reference_id, amount, created_at 
-    //             FROM activity_logs 
-    //             WHERE user_id = ? OR user_id IS NULL 
-    //             ORDER BY id DESC 
-    //             LIMIT ?
-    //         ");
-    //         $stmt->bind_param("ii", $userId, $limit);
-    //     } else {
-    //         $stmt = $this->db->prepare("
-    //             SELECT id, user_id, activity_type, title, message, reference_id, amount, created_at 
-    //             FROM activity_logs 
-    //             ORDER BY id DESC 
-    //             LIMIT ?
-    //         ");
-    //         $stmt->bind_param("i", $limit);
-    //     }
-
-    //     $stmt->execute();
-    //     $res = $stmt->get_result();
-
-    //     $activities = [];
-    //     while ($row = $res->fetch_assoc()) {
-    //         $activities[] = $row;
-    //     }
-
-    //     $stmt->close();
-    //     return $activities;
-    // }
-
     public function getFilteredDashboardActivities($user_id)
 {
     $user_id = (int)$user_id;

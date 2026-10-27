@@ -268,4 +268,42 @@ public function list_orders()
         echo json_encode($details);
         exit;
     }
+
+    // Un-approve: reverse approval, order goes back to Pending
+    public function Unapprove($order_id)
+    {
+        if (empty($order_id)) {
+            header("Location: " . BASE_URL . "Order?error=" . urlencode("Invalid Order ID"));
+            exit;
+        }
+
+        $result = $this->model->unapproveOrder($order_id);
+
+        if ($result['success']) {
+            header("Location: " . BASE_URL . "Order?error=" . urlencode("Order Un-approved Successfully"));
+            exit;
+        } else {
+            header("Location: " . BASE_URL . "Order?error=" . urlencode($result['msg']));
+            exit;
+        }
+    }
+
+    // Delete an approved order completely (stock + ledger reversed)
+    public function DeleteApproved($order_id)
+    {
+        if (empty($order_id)) {
+            header("Location: " . BASE_URL . "Order?error=" . urlencode("Invalid Order ID"));
+            exit;
+        }
+
+        $result = $this->model->deleteApprovedOrder($order_id);
+
+        if ($result['success']) {
+            header("Location: " . BASE_URL . "Order?error=" . urlencode("Order Deleted Successfully"));
+            exit;
+        } else {
+            header("Location: " . BASE_URL . "Order?error=" . urlencode($result['msg']));
+            exit;
+        }
+    }
 }

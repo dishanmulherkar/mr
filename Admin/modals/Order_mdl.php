@@ -200,7 +200,6 @@ class OrderModel
 
     public function getBatchesByStockistAndProduct($stockist_id, $product_id, $current_order_id = 0)
     {
-        // 1. Get inward_id for the current order to ignore its allocated stock
         $inward_id = 0;
         if ((int)$current_order_id > 0) {
             $stmt_inw = $this->con->prepare("SELECT inward_id FROM stock_inward WHERE order_id = ?");
@@ -213,7 +212,6 @@ class OrderModel
             $stmt_inw->close();
         }
 
-        // 2. Updated SQL: Adds back the reserved quantity for this order directly into the stock math
         $stmt = $this->con->prepare("
             SELECT
                 pb.batch_id,
@@ -223,14 +221,8 @@ class OrderModel
                 pb.sale_rate,
                 pb.sale_tax,
                 ROUND(
-                    (SUM(COALESCE(sl.qty_in, 0)) - 
-                    SUM(IF(sl.reference_table = 'stock_inward' AND sl.reference_id = ?, 0, COALESCE(sl.qty_out, 0))))
-                    + 
-                    COALESCE((
-                        SELECT SUM(od.approved_qty) 
-                        FROM order_details od 
-                        WHERE od.order_id = ? AND od.batch_id = pb.batch_id
-                    ), 0)
+                    SUM(COALESCE(sl.qty_in, 0)) - 
+                    SUM(IF(sl.reference_table = 'stock_inward' AND sl.reference_id = ?, 0, COALESCE(sl.qty_out, 0)))
                 , 3) AS current_qty
             FROM product_batches pb
             INNER JOIN stock_ledger sl
@@ -243,31 +235,25 @@ class OrderModel
             ORDER BY pb.expiry_date ASC, pb.batch_id ASC
         ");
 
-        $stmt->bind_param("iiii", $inward_id, $current_order_id, $stockist_id, $product_id);
+        $stmt->bind_param("iii", $inward_id, $stockist_id, $product_id);
         $stmt->execute();
         $result = $stmt->get_result();
 
         $batches = [];
 
-        while($row = $result->fetch_assoc())
-        {
-            if($row['expiry_date'] && $row['expiry_date'] != '0000-00-00')
-            {
+        while($row = $result->fetch_assoc()) {
+            if ($row['expiry_date'] && $row['expiry_date'] != '0000-00-00') {
                 $row['expiry_formatted'] = date('m/Y', strtotime($row['expiry_date']));
-            }
-            else
-            {
+            } else {
                 $row['expiry_formatted'] = '';
             }
-
             $batches[] = $row;
         }
 
         $stmt->close();
-
         return $batches;
     }
-
+    
     public function getProductsBySuperStockist($super_stockist_id)
     {
         $stmt = $this->con->prepare("
@@ -290,81 +276,99 @@ class OrderModel
      * Generates a unique, gapless INVOICE sequence using your existing 'order_' columns
      * Call this ONLY when an order is Approved.
      */
-    private function generateInvoiceNo($stockist_id) 
+    private function generateInvoiceNo($stockist_id)
     {
         $stmt = $this->con->prepare("
-            SELECT 
-                ss.super_stockist_id, 
-                ss.order_prefix, 
-                ss.tally_start_no, 
-                ss.fy_start_month, 
-                ss.financial_year, 
-                ss.order_sequence 
+            SELECT ss.super_stockist_id, ss.order_prefix, ss.tally_start_no,
+                ss.fy_start_month, ss.financial_year, ss.order_sequence
             FROM stockists st
             INNER JOIN headquarter hq ON st.hq_id = hq.headquarter_id
             INNER JOIN super_stockist ss ON hq.super_stockist_id = ss.super_stockist_id
-            WHERE st.stockist_id = ? 
+            WHERE st.stockist_id = ?
             FOR UPDATE
         ");
-        
         $stmt->bind_param("i", $stockist_id);
         $stmt->execute();
         $result = $stmt->get_result();
-        
+
         if ($result->num_rows === 0) {
             throw new Exception("Super Stockist configuration not found for this Stockist.");
         }
-        
+
         $stockist = $result->fetch_assoc();
         $stmt->close();
 
-        $super_stockist_id = $stockist['super_stockist_id'];
+        $super_stockist_id = (int)$stockist['super_stockist_id'];
         $currentMonth = (int)date('m');
-        $currentYear = (int)date('Y');
-        
-        // Calculate the Financial Year
+        $currentYear  = (int)date('Y');
+
+        // Financial Year
         if ($currentMonth >= (int)$stockist['fy_start_month']) {
             $active_fy = $currentYear . '-' . substr($currentYear + 1, 2);
         } else {
             $active_fy = ($currentYear - 1) . '-' . substr($currentYear, 2);
         }
 
-        // Determine next sequence based on existing database columns
+        // ---- NEW: try a released number first (same super stockist + same FY) ----
+        // The super_stockist row is already locked above, so no concurrent
+        // approval for this super stockist can grab the same pool row.
+        $poolStmt = $this->con->prepare("
+            SELECT id, sequence_no, invoice_date
+            FROM invoice_number_pool
+            WHERE super_stockist_id = ? AND fy = ?
+            ORDER BY sequence_no ASC
+            LIMIT 1
+        ");
+        $poolStmt->bind_param("is", $super_stockist_id, $active_fy);
+        $poolStmt->execute();
+        $poolStmt->bind_result($pool_id, $pool_seq, $pool_date);
+        $found = $poolStmt->fetch();
+        $poolStmt->close();
+
+        if ($found) {
+            $del = $this->con->prepare("DELETE FROM invoice_number_pool WHERE id = ?");
+            $del->bind_param("i", $pool_id);
+            $del->execute();
+            $del->close();
+
+            // Counter is NOT touched: the number is older than the current sequence
+            return [
+                'invoice_no'   => $stockist['order_prefix'] . $pool_seq,
+                'sequence'     => (int)$pool_seq,
+                'fy'           => $active_fy,
+                'invoice_date' => $pool_date,
+                'reused'       => true
+            ];
+        }
+        // ---- END NEW ----
+
+        // Normal flow (unchanged)
         if ((int)$stockist['order_sequence'] === 0) {
             $next_sequence = (int)$stockist['tally_start_no'];
-        } 
-        elseif ($stockist['financial_year'] !== $active_fy) {
+        } elseif ($stockist['financial_year'] !== $active_fy) {
             $next_sequence = 1;
-        } 
-        else {
+        } else {
             $next_sequence = (int)$stockist['order_sequence'] + 1;
         }
 
-        // Add this safeguard: If the resulting sequence is 0 (or less), force it to 1
         if ($next_sequence <= 0) {
             $next_sequence = 1;
         }
 
-        // Update the sequence and financial year back to the database
         $updateStmt = $this->con->prepare("
-            UPDATE super_stockist 
-            SET order_sequence = ?, financial_year = ? 
-            WHERE super_stockist_id = ?
+            UPDATE super_stockist SET order_sequence = ?, financial_year = ? WHERE super_stockist_id = ?
         ");
         $updateStmt->bind_param("isi", $next_sequence, $active_fy, $super_stockist_id);
         $updateStmt->execute();
         $updateStmt->close();
 
-        // Format the invoice number with FY to ensure uniqueness 
-        $invoice_no = $stockist['order_prefix'] . $next_sequence;
-
         return [
-            'invoice_no' => $invoice_no,
+            'invoice_no' => $stockist['order_prefix'] . $next_sequence,
             'sequence'   => $next_sequence,
-            'fy'         => $active_fy
+            'fy'         => $active_fy,
+            'reused'     => false
         ];
     }
-
    public function processOrderApproval($data)
     {
         try {
@@ -372,10 +376,14 @@ class OrderModel
 
             $current_date     = date('Y-m-d');
             $current_datetime = date('Y-m-d H:i:s');
+
+        
             
             $order_id          = (int)$data['order_id'];
             $stockist_id       = (int)$data['stockist_id'];
             $super_stockist_id = (int)$data['super_stockist_id'];
+
+              
             
             $exact_grand_total  = (float)$data['grand_total']; 
             $rounded_net_amount = round($exact_grand_total);
@@ -451,9 +459,10 @@ class OrderModel
             }
             $st_query->close();
 
-            // 1. Generate official Invoice Number
+              // 1. Generate official Invoice Number
             $invoiceData = $this->generateInvoiceNo($stockist_id);
             $inward_no   = $invoiceData['invoice_no'];
+            $inward_date = $invoiceData['invoice_date'] ?? $current_date;   // pooled date, or today
             
             // 2. Update orders table with approval status
             $stmt1 = $this->con->prepare("UPDATE orders SET status = 'Approved', total_amt = ?, round_off = ?, order_no = ? WHERE order_id = ?");
@@ -484,13 +493,13 @@ class OrderModel
             ");
             
             $stmt2->bind_param(
-                "siissiissssiiisddddddddddsdd", 
-                $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id, 
-                $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
-                $admin_id, $fy_id, $current_date,
-                $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $rounded_net_amount, $round_off,
-                $cgst, $sgst, $igst, $remarks, $cd_percent, $total_business_value
-            );
+            "siissiissssiiisddddddddddsdd",
+            $inward_no, $super_stockist_id, $stockist_id, $stockist_name, $gst_no, $mr_id, $order_id,
+            $lr_no, $eway_bill_no, $vehicle_no, $transport_name, $credit_days,
+            $admin_id, $fy_id, $inward_date,          // <-- changed
+            $total_qty, $sub_total, $header_discount, $gst_amt, $other_charges, $rounded_net_amount, $round_off,
+            $cgst, $sgst, $igst, $remarks, $cd_percent, $total_business_value
+        );
 
             $stmt2->execute();
             $inward_id = (int)$this->con->insert_id;
@@ -1413,5 +1422,270 @@ public function getMrCreditLimitDetails($mr_id, $exclude_order_id = 0, $current_
         'is_exceeded'          => $is_exceeded,              // True if breached
         'exceeded_amount'      => $exceeded_amount           // Exact breach amount (e.g. ₹10,102)
     ];
+}
+
+public function deleteApprovedOrder($order_id)
+{
+    $order_id = (int)$order_id;
+    try {
+        $this->con->begin_transaction();
+ 
+        $res = $this->reverseApproval($order_id);
+        if (!$res['success']) {
+            $this->con->rollback();
+            return $res;
+        }
+ 
+        $st = $this->con->prepare("DELETE FROM order_details WHERE order_id = ?");
+        $st->bind_param("i", $order_id);
+        $st->execute();
+        $st->close();
+ 
+        $st = $this->con->prepare("DELETE FROM orders WHERE order_id = ?");
+        $st->bind_param("i", $order_id);
+        $st->execute();
+        $st->close();
+ 
+        $this->con->commit();
+        return [
+            'success'   => true,
+            'msg'       => 'Approved order deleted. Stock and ledger reversed.',
+            'inward_no' => $inward_data['inward_no']
+        ];
+    } catch (Exception $e) {
+        $this->con->rollback();
+        return ['success' => false, 'msg' => 'Database error: ' . $e->getMessage()];
+    }
+}
+ 
+
+public function unapproveOrder($order_id)
+{
+    $order_id = (int)$order_id;
+    try {
+        $this->con->begin_transaction();
+
+        $res = $this->reverseApproval($order_id);   // locks the order, finds the inward row by order_id
+        if (!$res['success']) {
+            $this->con->rollback();
+            return $res;
+        }
+
+        // Back to Pending
+        $st = $this->con->prepare("UPDATE order_details SET approved_qty = 0 WHERE order_id = ?");
+        $st->bind_param("i", $order_id);
+        $st->execute();
+        $st->close();
+
+        $st = $this->con->prepare("UPDATE orders SET status = 'Pending', order_no = NULL, round_off = 0 WHERE order_id = ?");
+        $st->bind_param("i", $order_id);
+        $st->execute();
+        $st->close();
+
+                // Release the INWARD number and the INWARD date
+        $this->releaseInvoiceNo($res['inward_no'], (int)$res['stockist_id'], $res['inward_date']);
+
+         $act_type     = 'ORDER_UNAPPROVED';
+                $act_title    = 'Order Unapproved';
+                $act_message  = "Invoice #" . $inward_no . " for " . ($res['stockist_name'] ?: 'Stockist') . " Unapproved.";
+                $target_user  = ($res['mr_id'] > 0) ? (int)$res['mr_id'] : null;
+                $act_priority = 'high'; // Orders approved vanish tomorrow if not clicked
+
+                $stmt_act = $this->con->prepare("
+                    INSERT INTO activity_logs (user_id, activity_type, title, message, reference_id, amount, priority, is_read, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())
+                ");
+
+                // Bind params: user_id (i), activity_type (s), title (s), message (s), reference_id (i), amount (d), priority (s)
+                $stmt_act->bind_param("isssids", $target_user, $act_type, $act_title, $act_message, $order_id, $rounded_net_amount, $act_priority);
+                $stmt_act->execute();
+                $stmt_act->close();
+
+        $this->con->commit();
+        return [
+            'success'   => true,
+            'msg'       => 'Order un-approved. Stock and ledger reversed, order is Pending again.',
+            'inward_no' => $res['inward_no']
+        ];
+    } catch (Exception $e) {
+        $this->con->rollback();
+        return ['success' => false, 'msg' => 'Database error: ' . $e->getMessage()];
+    }
+}
+
+private function releaseInvoiceNo($inward_no, $stockist_id, $inward_date)
+{
+    if (empty($inward_no) || empty($stockist_id)) {
+        error_log("POOL skip: empty inward_no/stockist_id [$inward_no][$stockist_id]");
+        return;
+    }
+
+    $st = $this->con->prepare("
+        SELECT ss.super_stockist_id, ss.order_prefix, ss.financial_year,
+               ss.order_sequence, ss.fy_start_month
+        FROM stockists st
+        INNER JOIN headquarter hq ON st.hq_id = hq.headquarter_id
+        INNER JOIN super_stockist ss ON hq.super_stockist_id = ss.super_stockist_id
+        WHERE st.stockist_id = ?
+        FOR UPDATE
+    ");
+    $st->bind_param("i", $stockist_id);
+    $st->execute();
+    $ss = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$ss) { error_log("POOL skip: no super stockist row"); return; }
+
+    $prefix = (string)$ss['order_prefix'];
+    if ($prefix !== '' && strpos($inward_no, $prefix) !== 0) {
+        error_log("POOL skip: prefix mismatch [$prefix] vs [$inward_no]"); return;
+    }
+    $seqPart = substr($inward_no, strlen($prefix));
+    if (!ctype_digit($seqPart)) {
+        error_log("POOL skip: non-numeric seq [$seqPart]"); return;
+    }
+    $seq = (int)$seqPart;
+
+    $ts = strtotime($inward_date ?: 'now');
+    $m  = (int)date('m', $ts);
+    $y  = (int)date('Y', $ts);
+    $order_fy = ($m >= (int)$ss['fy_start_month'])
+        ? $y . '-' . substr($y + 1, 2)
+        : ($y - 1) . '-' . substr($y, 2);
+
+    if ($order_fy !== $ss['financial_year']) {
+        error_log("POOL skip: FY mismatch order[$order_fy] counter[{$ss['financial_year']}]"); return;
+    }
+    if ($seq <= 0 || $seq > (int)$ss['order_sequence']) {
+        error_log("POOL skip: seq $seq > counter {$ss['order_sequence']}"); return;
+    }
+
+    $invoice_date = date('Y-m-d', $ts);
+    $ins = $this->con->prepare("
+        INSERT INTO invoice_number_pool
+            (super_stockist_id, fy, sequence_no, invoice_date, released_at)
+        VALUES (?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE invoice_date = VALUES(invoice_date)
+    ");
+    $ins->bind_param("isis", $ss['super_stockist_id'], $order_fy, $seq, $invoice_date);
+    $ins->execute();
+    error_log("POOL inserted: seq $seq fy $order_fy rows=" . $ins->affected_rows);
+    $ins->close();
+}
+/**
+ * Shared reversal. Must be called inside an open transaction (caller commits / rolls back).
+ */
+private function reverseApproval($order_id)
+{
+    // 1. Lock order, must be Approved
+    $st = $this->con->prepare("SELECT status FROM orders WHERE order_id = ? FOR UPDATE");
+    $st->bind_param("i", $order_id);
+    $st->execute();
+    $order = $st->get_result()->fetch_assoc();
+    $st->close();
+ 
+    if (!$order) {
+        return ['success' => false, 'msg' => 'Order not found.'];
+    }
+    if ($order['status'] !== 'Approved') {
+        return ['success' => false, 'msg' => 'Only approved orders can be un-approved or deleted.'];
+    }
+ 
+    // 2. Find invoice created at approval
+   $st = $this->con->prepare("SELECT inward_id, inward_no, inward_date,mr_id,stockist_name , stockist_id, paid_amt FROM stock_inward WHERE order_id = ? FOR UPDATE");
+    $st->bind_param("i", $order_id);
+    $st->execute();
+    $inward = $st->get_result()->fetch_assoc();
+    $st->close();
+ 
+    if (!$inward) {
+        return ['success' => false, 'msg' => 'Invoice for this order not found.'];
+    }
+ 
+    $inward_id   = (int)$inward['inward_id'];
+    $stockist_id = (int)$inward['stockist_id'];
+    $paid_amt    = (float)$inward['paid_amt'];
+ 
+    // 3. Block if a real payment / CD entry exists on this bill
+    $st = $this->con->prepare("SELECT COUNT(*) AS c FROM payment_ledgers WHERE reference_id = ? AND stockist_id = ? AND transaction_type <> 'bill_added'");
+    $st->bind_param("ii", $inward_id, $stockist_id);
+    $st->execute();
+    $other = (int)$st->get_result()->fetch_assoc()['c'];
+    $st->close();
+ 
+    $st = $this->con->prepare("SELECT COALESCE(SUM(amount_allocated),0) AS alloc FROM payment_allocations WHERE inward_id = ?");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $allocated = (float)$st->get_result()->fetch_assoc()['alloc'];
+    $st->close();
+ 
+    // paid amount not explained by auto-settled advance = direct payment
+    if ($other > 0 || ($paid_amt - $allocated) > 0.01) {
+        return ['success' => false, 'msg' => 'Payment/CD already recorded on invoice ' . $inward['inward_no'] . '. Reverse that payment first.'];
+    }
+ 
+    // 4. Stockist must still hold the stock
+    $st = $this->con->prepare("SELECT p_id, batch_id, SUM(qty_in) AS qty FROM stock_ledger WHERE reference_table = 'stock_inward' AND reference_id = ? AND trans_type = 'INWARD' GROUP BY p_id, batch_id");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $items = $st->get_result()->fetch_all(MYSQLI_ASSOC);
+    $st->close();
+ 
+    $bal = $this->con->prepare("SELECT COALESCE(SUM(COALESCE(qty_in,0) - COALESCE(qty_out,0)),0) AS bal FROM stock_ledger WHERE stockist_type = 'STOCKIST' AND stockist_id = ? AND p_id = ? AND batch_id = ?");
+    foreach ($items as $it) {
+        $p = (int)$it['p_id'];
+        $b = (int)$it['batch_id'];
+        $bal->bind_param("iii", $stockist_id, $p, $b);
+        $bal->execute();
+        $balance = (float)$bal->get_result()->fetch_assoc()['bal'];
+        if ($balance + 0.0001 < (float)$it['qty']) {
+            $bal->close();
+            return ['success' => false, 'msg' => "Stock of product #$p (batch #$b) is already used by the stockist. Cannot reverse."];
+        }
+    }
+    $bal->close();
+ 
+    // 5. Stock back: remove both ledger rows (SALE out of super-stockist, INWARD into stockist)
+    $st = $this->con->prepare("DELETE FROM stock_ledger WHERE reference_table = 'stock_inward' AND reference_id = ?");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $st->close();
+ 
+    // 6. Release auto-settled advance
+    $st = $this->con->prepare("DELETE FROM payment_allocations WHERE inward_id = ?");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $st->close();
+ 
+    // 7. Remove bill from payment ledger
+    $st = $this->con->prepare("DELETE FROM payment_ledgers WHERE transaction_type = 'bill_added' AND ledger_type = 'debt' AND reference_id = ?");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $st->close();
+ 
+    // 8. Remove invoice
+    $st = $this->con->prepare("DELETE FROM stock_inward_details WHERE inward_id = ?");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $st->close();
+ 
+    $st = $this->con->prepare("DELETE FROM stock_inward WHERE inward_id = ?");
+    $st->bind_param("i", $inward_id);
+    $st->execute();
+    $st->close();
+ 
+    // 9. Remove approval notification
+    $st = $this->con->prepare("DELETE FROM activity_logs WHERE activity_type = 'ORDER_APPROVED' AND reference_id = ?");
+    $st->bind_param("i", $order_id);
+    $st->execute();
+    $st->close();
+ 
+    return [
+    'success'     => true,
+    'inward_no'   => $inward['inward_no'],
+    'inward_date' => $inward['inward_date'],
+    'stockist_id' => $stockist_id,
+    'mr_id' =>  $inward['mr_id'],
+    'stockist_name' =>  $inward['stockist_name']
+];
 }
 }

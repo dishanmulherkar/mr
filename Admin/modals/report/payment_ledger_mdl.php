@@ -346,41 +346,36 @@ public function getOpeningBalance($stockist_id, $from_date)
     // ==========================================
     // Opening balance calculation for DRC Wallet
     // ==========================================
-    public function getOpeningBalancedrc($hq_id, $from_date)
-    {
-        // Fetch MR ID to ensure we don't drop direct wallet earnings in the opening balance
-        $mr_id = 0;
-        $mr_query = mysqli_query($this->con, "SELECT m_id FROM mr_users WHERE hq_id = '$hq_id' LIMIT 1");
-        if ($mr_query && $mr_row = mysqli_fetch_assoc($mr_query)) {
-            $mr_id = (int)$mr_row['m_id'];
-        }
+   public function getOpeningBalancedrc($mr_id, $from_date)
+{
+    $mr_id     = (int)$mr_id;
+    $from_date = mysqli_real_escape_string($this->con, $from_date);
 
-        $sql = "SELECT 
-                    SUM(CASE WHEN LOWER(p.balance_action) = 'increase' THEN p.amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN LOWER(p.balance_action) = 'decrease' THEN p.amount ELSE 0 END) as total_dec
-                FROM payment_ledgers p
-                
-                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-                
-                LEFT JOIN payment_details pd ON p.reference_id = pd.id AND p.stockist_id = 0
-                LEFT JOIN mr_users m ON pd.mr_id = m.m_id
-                
-                -- FIX: Catch earnings by checking user_id as well as stockist/MR HQ
-                WHERE (s.hq_id = '$hq_id' OR p.user_id IN ('$hq_id', '$mr_id'))
-                AND p.ledger_type = 'drc_wallet'
-                AND DATE(p.created_at) < '$from_date'";
+    $sql = "SELECT 
+                SUM(CASE WHEN LOWER(p.balance_action) = 'increase' THEN p.amount ELSE 0 END) AS total_inc,
+                SUM(CASE WHEN LOWER(p.balance_action) = 'decrease' THEN p.amount ELSE 0 END) AS total_dec
+            FROM payment_ledgers p
+            WHERE p.user_id = ?
+              AND p.ledger_type = 'drc_wallet'
+              AND (
+                  p.transaction_type = 'opening_balance'
+                  OR DATE(p.created_at) < ?
+              )";
 
-        $res = mysqli_query($this->con, $sql);
-        
-        if ($res && $row = mysqli_fetch_assoc($res)) {
-            $inc = (float)$row['total_inc'];
-            $dec = (float)$row['total_dec'];
-            
-            return $inc - $dec; 
-        }
-        
-        return 0;
+    $stmt = $this->con->prepare($sql);
+    $stmt->bind_param("is", $mr_id, $from_date);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    if ($res && $row = $res->fetch_assoc()) {
+        $inc = (float)$row['total_inc'];
+        $dec = (float)$row['total_dec'];
+
+        return round($inc - $dec, 2);
     }
+
+    return 0.00;
+}
    // ==========================================
     // ASM Commission (ASM) Report
     // ==========================================
@@ -462,5 +457,70 @@ public function getOpeningBalance($stockist_id, $from_date)
         
         return 0;
     }
+
+    public function getHQByASM($asm_id) {
+        $asm_id = (int)$asm_id;
+        $stmt = $this->con->prepare("SELECT headquarter_id, hq_name FROM `headquarter` WHERE asm_id = ? ");
+        $stmt->bind_param("i", $asm_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $data = [];
+        while($row = $res->fetch_assoc()) { $data[] = $row; }
+        $stmt->close();
+        return $data;
+    }
+
+     public function getReportdrcAsm($mr_id, $from_date, $to_date)
+{
+    $mr_id = (int)$mr_id;
+
+    $sql = "SELECT 
+                MIN(p.id) AS id,
+                MIN(p.created_at) AS created_at,
+                p.reference_id,
+                p.transaction_type,
+                p.balance_action,
+                MAX(p.notes) AS notes,
+                
+                -- Fetch settled bill numbers for this transaction
+                (
+                    SELECT GROUP_CONCAT(DISTINCT si.inward_no SEPARATOR ', ')
+                    FROM payment_ledgers pd
+                    INNER JOIN payment_allocations pa ON pd.id = pa.ledger_id
+                    INNER JOIN stock_inward si ON pa.inward_id = si.inward_id
+                    WHERE pd.reference_id = p.reference_id AND pd.ledger_type = 'debt'
+                ) AS settled_bill_no,
+                
+                SUM(p.amount) AS amount,
+                IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name
+                
+            FROM payment_ledgers p
+            LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+            
+            -- Strict MR Isolation: user_id matching wallet owner
+            WHERE p.user_id = ?
+              AND p.ledger_type = 'drc_wallet'
+              AND (
+                  (DATE(p.created_at) >= ? AND DATE(p.created_at) <= ?)
+              )
+              -- Exclude static initial opening balance from row listing 
+              -- if it is already displayed at the top as the opening balance card/row
+              AND p.transaction_type != 'opening_balance'
+            
+            GROUP BY 
+                DATE(p.created_at), 
+                p.reference_id, 
+                p.transaction_type, 
+                p.balance_action
+                
+            ORDER BY MIN(p.created_at) ASC, MIN(p.id) ASC";
+            
+    $stmt = $this->con->prepare($sql);
+    $stmt->bind_param("iss", $mr_id, $from_date, $to_date);
+    $stmt->execute();
+    
+    return $stmt->get_result();
+}
 }
 ?>

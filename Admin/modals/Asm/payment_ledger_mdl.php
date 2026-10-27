@@ -44,43 +44,127 @@ class payment_ledger_mdl
    
 
 // Filtered to show bill_added, payment_made, and commission settlements FOR DEBT ONLY
-    public function getReport($stockist_id, $from_date, $to_date)
-    {
-        $sql = "SELECT pl.*, si.inward_no, pd.id as pay_id ,s.stockist_name,pd.payment_method ,b.bank_name
-                FROM payment_ledgers pl 
-                LEFT JOIN stock_inward si ON si.inward_id = pl.reference_id 
-                LEFT JOIN payment_details pd ON pd.id = pl.reference_id 
-                LEFT JOIN stockists s ON pl.stockist_id = s.stockist_id
-                LEFT JOIN banks b ON b.bank_id = pd.bank_id
-                WHERE pl.stockist_id = '$stockist_id' 
-                AND pl.ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND pl.transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill','asm_settlement')
-                AND DATE(pl.created_at) >= '$from_date' 
-                AND DATE(pl.created_at) <= '$to_date'
-                ORDER BY pl.created_at ASC, pl.id ASC";
-                
-        return mysqli_query($this->con, $sql);
-    }
+  public function getReport($stockist_id, $from_date, $to_date)
+{
+    $stockist_id = (int)$stockist_id;
 
-    // Opening balance calculation filtered for the same transaction types
+    $sql = "SELECT 
+                pl.*, 
+                si.inward_no, 
+                si.pay_status,
+                pd.id AS pay_id, 
+                s.stockist_name, 
+                COALESCE(
+                    pd.payment_method, 
+                    CASE 
+                        WHEN pl.notes LIKE '%CD on Invoice%' THEN 'Cash Discount' 
+                        WHEN pl.notes LIKE '%CD Reversed%' THEN 'CD Penalty'
+                        ELSE NULL 
+                    END
+                ) AS payment_method, 
+                b.bank_name,
+                -- 1. Date Priority: Payment Date -> Invoice Date -> Created At Timestamp
+                COALESCE(pd.payment_date, DATE(si.inward_date), DATE(pl.created_at)) AS payment_date
+            FROM payment_ledgers pl 
+
+            -- 1. Join stock_inward for bills and CD/penalty adjustments
+            LEFT JOIN stock_inward si 
+                ON si.inward_id = pl.reference_id 
+                AND (
+                    pl.transaction_type = 'bill_added' 
+                    OR pl.notes LIKE '%CD on Invoice%'
+                    OR pl.notes LIKE '%CD Reversed%'
+                )
+
+            -- 2. Join payment_details for actual payments & settlements
+            LEFT JOIN payment_details pd 
+                ON pd.id = pl.reference_id 
+                AND pl.transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'asm_settlement')
+                AND pl.notes NOT LIKE '%CD on Invoice%'
+                AND pl.notes NOT LIKE '%CD Reversed%'
+
+            LEFT JOIN stockists s 
+                ON pl.stockist_id = s.stockist_id
+
+            LEFT JOIN banks b 
+                ON b.bank_id = pd.bank_id
+
+            WHERE pl.stockist_id = ? 
+              AND pl.ledger_type IN ('debt', 'credit')
+              AND pl.transaction_type IN (
+                  'opening_balance', 
+                  'bill_added', 
+                  'payment_made', 
+                  'mrc_settlement', 
+                  'drc_settlement', 
+                  'settled_to_bill', 
+                  'asm_settlement'
+              )
+              -- 3. Match against effective voucher date rather than created_at
+              AND (
+                  pl.transaction_type = 'opening_balance' 
+                  OR (
+                      COALESCE(pd.payment_date, DATE(si.inward_date), DATE(pl.created_at)) >= ? 
+                      AND COALESCE(pd.payment_date, DATE(si.inward_date), DATE(pl.created_at)) <= ?
+                  )
+              )
+            ORDER BY 
+                CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE 1 END ASC,
+                COALESCE(pd.payment_date, DATE(si.inward_date), DATE(pl.created_at)) ASC, 
+                pl.id ASC";
+            
+    $stmt = $this->con->prepare($sql);
+    $stmt->bind_param("iss", $stockist_id, $from_date, $to_date);
+    $stmt->execute();
+    
+    return $stmt->get_result();
+}
+
     public function getOpeningBalance($stockist_id, $from_date)
     {
+        $stockist_id = (int)$stockist_id;
+
         $sql = "SELECT 
-                    SUM(CASE WHEN transaction_type = 'bill_added' THEN amount ELSE 0 END) as total_inc,
-                    SUM(CASE WHEN transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill') THEN amount ELSE 0 END) as total_dec
+                    -- Pending/Bills increase receivable
+                    SUM(CASE 
+                        WHEN balance_action = 'increase' THEN amount 
+                        WHEN balance_action IS NULL AND transaction_type = 'bill_added' THEN amount 
+                        ELSE 0 
+                    END) AS total_inc,
+
+                    -- Advances/Payments/Settlements decrease receivable
+                    SUM(CASE 
+                        WHEN balance_action = 'decrease' THEN amount 
+                        WHEN balance_action IS NULL AND transaction_type IN ('payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement') THEN amount 
+                        ELSE 0 
+                    END) AS total_dec
+
                 FROM payment_ledgers 
-                WHERE stockist_id = '$stockist_id' 
-                AND ledger_type = 'debt'  /* <-- THE FIX IS HERE */
-                AND transaction_type IN ('bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill')
-                AND DATE(created_at) < '$from_date'";
+                WHERE stockist_id = ? 
+                -- Allow both debt and credit
+                AND ledger_type IN ('debt', 'credit') 
+                AND transaction_type IN ('opening_balance', 'bill_added', 'payment_made', 'mrc_settlement', 'drc_settlement', 'settled_to_bill', 'asm_settlement')
+                AND DATE(created_at) < ?";
         
-        $res = mysqli_query($this->con, $sql);
-        if ($res && $row = mysqli_fetch_assoc($res)) {
+        $stmt = $this->con->prepare($sql);
+        $stmt->bind_param("is", $stockist_id, $from_date);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        if ($res && $row = $res->fetch_assoc()) {
             $inc = (float)$row['total_inc'];
             $dec = (float)$row['total_dec'];
-            return $inc - $dec; // Positive = Debit Balance, Negative = Credit Balance
+            
+            $stmt->close();
+            // Positive = Debit (Due from stockist), Negative = Credit (Advance paid by stockist)
+            return round($inc - $dec, 2);
         }
-        return 0;
+        
+        if (isset($stmt)) {
+            $stmt->close();
+        }
+        
+        return 0.00;
     }
      // ==========================================
     // MR Commission (MRC) Report (Grouped by Ref ID)

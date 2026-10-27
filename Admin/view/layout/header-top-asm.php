@@ -13,7 +13,7 @@
        <div href="account.php" class="user-pill">
          
           <div class="user-info">
-            <div class="uname"><?php echo $_SESSION['admin_name']; ?></div>
+            <!-- <div class="uname"><?php echo $_SESSION['admin_name']; ?></div> -->
             <div class="urole">Rudradeo</div>
           </div>
     </div>

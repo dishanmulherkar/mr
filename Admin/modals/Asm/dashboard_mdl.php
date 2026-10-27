@@ -80,5 +80,71 @@ private $db;
         return mysqli_fetch_assoc($result)['total_hq'];
     }
 
+/**
+ * Fetch unread activities:
+ * - High priority (rejections) stay until clicked.
+ * - Standard activities show only today (disappear tomorrow even if unclicked).
+ */
+    public function getRecentActivities($asm_id, $limit = 10)
+    {
+        $asm_id = (int)$asm_id;
+        $limit  = (int)$limit;
+
+        $sql = "
+            SELECT 
+                al.id,
+                al.activity_type,
+                al.title,
+                al.message,
+                al.reference_id,
+                al.created_at,
+                al.priority
+            FROM activity_logs al
+            INNER JOIN mr_users mr ON al.user_id = mr.m_id
+            INNER JOIN headquarter hq ON mr.hq_id = hq.headquarter_id
+            WHERE hq.asm_id = ?
+            AND COALESCE(al.is_read_asm, 0) = 0
+            AND (
+                al.priority = 'high' 
+                OR al.activity_type LIKE '%REJECTED%'
+                OR al.title LIKE '%rejected%'
+                OR al.created_at >= CURRENT_DATE()
+            )
+            ORDER BY al.created_at DESC 
+            LIMIT ?
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->bind_param("ii", $asm_id, $limit);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $activities = [];
+        while ($row = $result->fetch_assoc()) {
+            $activities[] = $row;
+        }
+        $stmt->close();
+
+        return $activities;
+    }
+/**
+ * Marks specified activity IDs as read
+ */
+    public function markActivitiesAsRead($asm_id, array $activity_ids)
+    {
+        $activity_ids = array_filter(array_map('intval', $activity_ids));
+        if (empty($activity_ids)) {
+            return false;
+        }
+
+        $in_clause = implode(',', $activity_ids);
+
+        // If using the activity_logs table is_read column:
+        $sql = "UPDATE activity_logs 
+                SET is_read_asm = 1, read_at = NOW() 
+                WHERE id IN ({$in_clause})";
+
+        return (bool)$this->db->query($sql);
+    }
 }
 ?>

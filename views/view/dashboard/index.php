@@ -307,126 +307,143 @@ include 'view/layout/header.php';
             </h3>
         </div>
 
-        <div class="feed-list">
-    <?php 
-    $items = [];
+            <div class="feed-list">
+                <?php 
+                    $items = [];
 
-    if (isset($activity_query) && $activity_query instanceof mysqli_result) {
-        while ($row = mysqli_fetch_assoc($activity_query)) {
-            $items[] = $row;
-        }
-    } elseif (!empty($recent_activities) && is_array($recent_activities)) {
-        $items = $recent_activities;
-    }
+                    if (isset($activity_query) && $activity_query instanceof mysqli_result) {
+                        while ($row = mysqli_fetch_assoc($activity_query)) {
+                            $items[] = $row;
+                        }
+                    } elseif (!empty($recent_activities) && is_array($recent_activities)) {
+                        $items = $recent_activities;
+                    }
 
-    if (!empty($items)) {
-        foreach ($items as $item) {
-            $logId = (int)($item['id'] ?? $item['log_id'] ?? 0);
-            $type  = strtoupper($item['activity_type'] ?? $item['type'] ?? '');
-            $title = strtolower($item['title'] ?? '');
-            $msg   = strtolower($item['message'] ?? '');
-            $refId = (int)($item['reference_id'] ?? $item['order_id'] ?? 0);
+                    if (!empty($items)) {
+                        foreach ($items as $item) {
+                            $logId = (int)($item['id'] ?? $item['log_id'] ?? 0);
+                            $type  = strtoupper((string)($item['activity_type'] ?? $item['type'] ?? ''));
+                            $title = strtolower((string)($item['title'] ?? ''));
+                            $msg   = strtolower((string)($item['message'] ?? ''));
+                            $refId = (int)($item['reference_id'] ?? $item['order_id'] ?? 0);
+                            $url   = (string)($item['url'] ?? '');
 
-            // Defaults
-            $themeClass  = 'theme-default';
-            $badgeText   = 'Activity';
-            $iconSvg     = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
-            $isOrderFlow = false;
+                            // Defaults
+                            $themeClass  = 'theme-default';
+                            $badgeText   = 'Activity';
+                            $iconSvg     = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
+                            $isOrderFlow = false;
 
-            // 1. ORDER APPROVED
-            if ($type === 'ORDER_APPROVED' || (strpos($title, 'order') !== false && strpos($title, 'approved') !== false)) {
-                $themeClass  = 'theme-approved';
-                $badgeText   = 'Order Approved';
-                $iconSvg     = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
-                $isOrderFlow = true;
+                            // 1. ORDER UNAPPROVED (Must be checked BEFORE approved)
+                            if ($type === 'ORDER_UNAPPROVED' || str_contains($title, 'unapproved') || str_contains($type, 'UNAPPROVED')) {
+                                $themeClass  = 'theme-rejected';
+                                $badgeText   = 'Order Unapproved';
+                                $iconSvg     = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
+                                $isOrderFlow = true;
 
-            // 2. ORDER UPDATED
-            } elseif ($type === 'ORDER_UPDATED' || strpos($title, 'updated') !== false) {
-                $themeClass  = 'theme-drc';
-                $badgeText   = 'Order Updated';
-                $iconSvg     = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>';
-                $isOrderFlow = true;
+                            // 2. ORDER APPROVED
+                            } elseif ($type === 'ORDER_APPROVED' || (str_contains($title, 'order') && str_contains($title, 'approved') && !str_contains($title, 'unapproved'))) {
+                                $themeClass  = 'theme-approved';
+                                $badgeText   = 'Order Approved';
+                                $iconSvg     = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+                                $isOrderFlow = true;
 
-            // 3. ANY REJECTION (High Priority)
-            } elseif (strpos($type, 'REJECTED') !== false || strpos($title, 'rejected') !== false || strpos($msg, 'rejected') !== false) {
-                $themeClass = 'theme-rejected';
-                $badgeText  = 'Rejected';
-                if (strpos($type, 'ORDER') !== false || strpos($title, 'order') !== false) {
-                    $badgeText = 'Order Rejected';
-                } elseif (strpos($type, 'PAYMENT') !== false || strpos($title, 'payment') !== false) {
-                    $badgeText = 'Payment Rejected';
-                } elseif (strpos($type, 'COMMISSION') !== false || strpos($title, 'commission') !== false) {
-                    $badgeText = 'Comm. Rejected';
-                }
-                $iconSvg = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
+                            // 3. ORDER UPDATED
+                            } elseif ($type === 'ORDER_UPDATED' || str_contains($title, 'updated')) {
+                                $themeClass  = 'theme-drc';
+                                $badgeText   = 'Order Updated';
+                                $iconSvg     = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>';
+                                $isOrderFlow = true;
 
-            // 4. PAYMENT APPROVED
-            } elseif ($type === 'PAYMENT_APPROVED' || (strpos($title, 'payment') !== false && strpos($title, 'approved') !== false)) {
-                $themeClass = 'theme-approved';
-                $badgeText  = 'Payment Approved';
-                $iconSvg    = '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>';
+                            // 4. GENERAL REJECTIONS
+                            } elseif (str_contains($type, 'REJECT') || str_contains($title, 'reject') || str_contains($msg, 'reject')) {
+                                $themeClass = 'theme-rejected';
+                                $iconSvg    = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
 
-            // 5. MR COMMISSION APPROVED
-            } elseif ($type === 'MR_COMMISSION_APPROVED' || (strpos($title, 'commission') !== false && strpos($title, 'mr') !== false)) {
-                $themeClass = 'theme-commission';
-                $badgeText  = 'MR Commission';
-                $iconSvg    = '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>';
+                                if (str_contains($type, 'ORDER') || str_contains($title, 'order')) {
+                                    $badgeText   = 'Order Rejected';
+                                    $isOrderFlow = true;
+                                } elseif (str_contains($type, 'PAYMENT') || str_contains($title, 'payment')) {
+                                    $badgeText = 'Payment Rejected';
+                                } elseif (str_contains($type, 'COMMISSION') || str_contains($title, 'commission')) {
+                                    $badgeText = 'Comm. Rejected';
+                                } else {
+                                    $badgeText = 'Rejected';
+                                }
 
-            // 6. DOCTOR COMMISSION / DRC
-            } elseif ($type === 'DR_COMMISSION_APPROVED' || $type === 'DRC' || strpos($title, 'drc') !== false || strpos($title, 'doctor') !== false) {
-                $themeClass = 'theme-drc';
-                $badgeText  = 'Dr Commission';
-                $iconSvg    = '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>';
-            }
-    ?>
-            <div class="feed-item" id="notif-item-<?= $logId; ?>">
-                <div class="feed-icon <?= $themeClass; ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <?= $iconSvg; ?>
-                    </svg>
-                </div>
-                <div class="feed-content">
-                    <div class="feed-top">
-                        <span class="feed-title"><?= htmlspecialchars($item['title'] ?? 'Notification'); ?></span>
-                        <div class="feed-actions">
-                            <span class="feed-tag <?= $themeClass; ?>"><?= $badgeText; ?></span>
+                            // 5. PAYMENT APPROVED
+                            } elseif ($type === 'PAYMENT_APPROVED' || (str_contains($title, 'payment') && str_contains($title, 'approved') && !str_contains($title, 'unapproved'))) {
+                                $themeClass = 'theme-approved';
+                                $badgeText  = 'Payment Approved';
+                                $iconSvg    = '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>';
 
-                            <?php if ($isOrderFlow && $refId > 0): ?>
-                                <!-- Vanish by PDF Download -->
-                                <a href="<?= BASE_URL ?>invoice/pdf/<?= $refId; ?>" 
-                                   target="_blank" 
-                                   class="btn-pdf-download" 
-                                   title="Download Invoice"
-                                   onclick="dismissNotification(event, <?= $logId; ?>, true)">
+                            // 6. MR COMMISSION APPROVED
+                            } elseif ($type === 'MR_COMMISSION_APPROVED' || (str_contains($title, 'commission') && str_contains($title, 'mr'))) {
+                                $themeClass = 'theme-commission';
+                                $badgeText  = 'MR Commission';
+                                $iconSvg    = '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>';
+
+                            // 7. DOCTOR COMMISSION / DRC
+                            } elseif ($type === 'DR_COMMISSION_APPROVED' || $type === 'DRC' || str_contains($title, 'drc') || str_contains($title, 'doctor')) {
+                                $themeClass = 'theme-drc';
+                                $badgeText  = 'Dr Commission';
+                                $iconSvg    = '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>';
+                            }
+
+                            $timestamp = !empty($item['created_at']) ? strtotime($item['created_at']) : false;
+                            $formattedDate = $timestamp ? date('d M Y, h:i A', $timestamp) : '';
+                    ?>
+                            <div class="feed-item" id="notif-item-<?= $logId; ?>">
+                                <div class="feed-icon <?= htmlspecialchars($themeClass); ?>">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="7 10 12 15 17 10"></polyline>
-                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        <?= $iconSvg; ?>
                                     </svg>
-                                </a>
-                            <?php else: ?>
-                                <!-- Vanish by View Details -->
-                                <button type="button" 
-                                        class="btn-view-details" 
-                                        title="View Details"
-                                        onclick="dismissNotification(event, <?= $logId; ?>, false, '<?= !empty($item['url']) ? $item['url'] : '' ?>')">
-                                    View
-                                </button>
-                            <?php endif; ?>
+                                </div>
+                                <div class="feed-content">
+                                    <div class="feed-top">
+                                        <span class="feed-title"><?= htmlspecialchars($item['title'] ?? 'Notification'); ?></span>
+                                        <div class="feed-actions">
+                                            <span class="feed-tag <?= htmlspecialchars($themeClass); ?>"><?= htmlspecialchars($badgeText); ?></span>
+
+                                            <?php if ($isOrderFlow && $refId > 0 && $themeClass !== 'theme-rejected'): ?>
+                                                <!-- PDF Download (Only for valid/approved order events) -->
+                                                <a href="<?= htmlspecialchars(BASE_URL . 'invoice/pdf/' . $refId); ?>" 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                class="btn-pdf-download" 
+                                                title="Download Invoice"
+                                                onclick="dismissNotification(event, <?= $logId; ?>, true)">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                                    </svg>
+                                                </a>
+                                            <?php else: ?>
+                                                <!-- View Details -->
+                                                <button type="button" 
+                                                        class="btn-view-details" 
+                                                        title="View Details"
+                                                        onclick="dismissNotification(event, <?= $logId; ?>, false, <?= htmlspecialchars(json_encode($url), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                    View
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <p class="feed-desc"><?= nl2br(htmlspecialchars($item['message'] ?? '')); ?></p>
+                                    <?php if ($formattedDate): ?>
+                                        <span class="feed-time"><?= $formattedDate; ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                    <?php 
+                        } 
+                    } else { ?>
+                        <div class="feed-empty">
+                            No new activities or alerts found.
                         </div>
-                    </div>
-                    <p class="feed-desc"><?= nl2br(htmlspecialchars($item['message'] ?? '')); ?></p>
-                    <span class="feed-time"><?= !empty($item['created_at']) ? date('d M Y, h:i A', strtotime($item['created_at'])) : ''; ?></span>
-                </div>
-            </div>
-    <?php 
-        } 
-    } else { ?>
-        <div class="feed-empty">
-            No new activities or alerts found.
-        </div>
-    <?php } ?>
-</div>
+                    <?php } ?>
+    </div>
     </div>
     <!-- ================= END NOTIFICATION SECTION ================= -->
 
