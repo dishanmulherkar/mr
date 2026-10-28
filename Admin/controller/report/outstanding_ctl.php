@@ -44,29 +44,26 @@ class outstanding_ctl
     include 'view/report/outstanding.php';
 }
 
+public function asm_due_state(){
 
-//       public function stockandsales()
-// {
-//     // FIX: Look for 'sup_stockist' which matches the <select> name in your HTML
-//     $stockist_id = isset($_GET['sup_stockist']) ? (int)$_GET['sup_stockist'] : 0;
+            $asm_id = $_SESSION['admin_id'];
+            $hq = $this->model->getHQbyAsm($asm_id);
+            $hq_id       = isset($_GET['hq_id']) ? (int)$_GET['hq_id'] : 0;
+            $to_date = !empty($_GET['to_date'])  ? trim($_GET['to_date']) : (!empty($_GET['as_on_date']) ? trim($_GET['as_on_date']) : date('Y-m-d'));
+            $stockist_id  = isset($_GET['stockist_id']) ? (int)$_GET['stockist_id'] : 0;
 
+              // REQUIRED: Fetch the stockists for the selected HQ so the dropdown populates
+        if ($hq_id > 0) {
+            // NOTE: Replace 'getStockistsByHq' with your actual model method for fetching stockists by HQ ID
+            $stockists = $this->model->getStockistsByHq($hq_id); 
+        }
 
-//     $stockist = $this->model->getSuperStockist();
-
-//     $query = null;
-
-//     if($stockist_id > 0)
-//     {
-//         $query = $this->model->getReportSuperStockist(
-//             $stockist_id,
-//             $from_date,
-//             $to_date
-//         );
-       
-//     }
-    
-//     include 'view/report/StockAndSalesSuperStockist.php';
-// }
-
+        $query = $this->model->getoutstanding_billwise(
+                $hq_id,
+                $stockist_id,
+                $to_date
+            ); 
+            include 'view/Asm/report/due_statement.php';
+}
 }
 ?>

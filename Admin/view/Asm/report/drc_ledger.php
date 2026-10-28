@@ -209,13 +209,13 @@ include 'view/layout/header-asm.php';
                     <td style="white-space: nowrap;"><?= $date ?></td>
                     <td>
                         <?php if ($vch_type === 'Commission'): ?>
-                            <a href="<?= BASE_URL ?>commission/view/<?= $vch_id ?>" 
+                            <!-- <a href="<?= BASE_URL ?>commission/view/<?= $vch_id ?>" 
                                style="color: #0d6efd; text-decoration: none; font-weight: 600;"
                                onmouseover="this.style.textDecoration='underline'" 
-                               onmouseout="this.style.textDecoration='none'">
+                               onmouseout="this.style.textDecoration='none'"> -->
                                 <?= $vch_type ?> 
                                 <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#' . $vch_no_display . ')</small>' : '' ?>
-                            </a>
+                            <!-- </a> -->
                         <?php elseif ($vch_type === 'Bill Adjusted'): ?>
                             <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
                             <?= $vch_no_display !== '-' ? '<small class="text-muted" style="color: #6c757d;">(#' . $vch_no_display . ')</small>' : '' ?>

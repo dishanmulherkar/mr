@@ -236,6 +236,11 @@ switch($page)
     $controller = new outstanding_ctl($con);
     break;
 
+     case 'account':
+    include 'controller/Asm/account_ctl.php';
+    $controller = new AccountController($con);
+    break;
+
 
     case 'dashboard':
     default:

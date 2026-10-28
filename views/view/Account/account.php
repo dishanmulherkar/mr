@@ -1,5 +1,5 @@
 <?php 
-$pageTitle = "Customer";
+$pageTitle = "Account";
 include 'view/layout/header.php'; 
 ?>
 

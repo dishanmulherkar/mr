@@ -270,6 +270,28 @@ include 'view/layout/header-asm.php';
              echo number_format($primary_sale, 2);  
              ?></div>
           </div>
+          <?php if($taget['total_target'] > 0){ ?>
+           <div class="stat-card">
+            <div class="stat" style="display: flex; align-items: center; gap: 8px;">
+                <div class="stat-icon violet">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a10 10 0 1 0 10 10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="12" r="2"/>
+                            <line x1="12" y1="2" x2="12" y2="4"/>
+                            <line x1="12" y1="20" x2="12" y2="22"/>
+                            <line x1="2" y1="12" x2="4" y2="12"/>
+                            <line x1="20" y1="12" x2="22" y2="12"/>
+                        </svg>
+                </div>
+                <div class="stat-label">Remaining Target </div>
+            </div>
+            <div class="stat-val"><?php 
+              $re_target =  $taget['total_target'] - $primary_sale; 
+              echo number_format($re_target, 2);
+             ?></div>
+             <?php } ?>
+          </div>
           <div class="stat-card">
             <div class="stat" style="display: flex; align-items: center; gap: 8px;">
                 <div class="stat-icon orange">
@@ -329,74 +351,94 @@ function resolveActivityMeta(array $item): array {
     $title = strtolower((string)($item['title'] ?? ''));
     $msg   = strtolower((string)($item['message'] ?? ''));
 
-    // 1. ORDER UNAPPROVED / REJECTED (Must be checked BEFORE 'approved')
-if (
-    $type === 'ORDER_UNAPPROVED' 
-    || str_contains($title, 'unapproved') 
-    || str_contains($type, 'UNAPPROVED')
-) {
-    $themeClass  = 'theme-rejected';
-    $badgeText   = 'Order Unapproved';
-    $iconSvg     = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
-    $isOrderFlow = true;
+    // Defaults (used if nothing below matches)
+    $themeClass  = 'theme-default';
+    $badgeText   = 'Activity';
+    $iconSvg     = SVG_ICONS['default'];
+    $isOrderFlow = false;
 
-// 2. ORDER APPROVED (Check that it does NOT contain 'unapproved')
-} elseif (
-    $type === 'ORDER_APPROVED' 
-    || (str_contains($title, 'order') && str_contains($title, 'approved') && !str_contains($title, 'unapproved'))
-) {
-    $themeClass  = 'theme-approved';
-    $badgeText   = 'Order Approved';
-    $iconSvg     = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
-    $isOrderFlow = true;
-
-// 3. ORDER UPDATED
-} elseif ($type === 'ORDER_UPDATED' || str_contains($title, 'updated')) {
-    $themeClass  = 'theme-drc';
-    $badgeText   = 'Order Updated';
-    $iconSvg     = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>';
-    $isOrderFlow = true;
-
-// 4. GENERAL REJECTIONS
-} elseif (str_contains($type, 'REJECT') || str_contains($title, 'reject') || str_contains($msg, 'reject')) {
-    $themeClass = 'theme-rejected';
-    $iconSvg    = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
-
-    if (str_contains($type, 'ORDER') || str_contains($title, 'order')) {
+    // 1. ORDER UNAPPROVED (must be checked before 'approved')
+    if (
+        $type === 'ORDER_UNAPPROVED'
+        || str_contains($type, 'UNAPPROVED')
+        || str_contains($title, 'unapproved')
+    ) {
+        $themeClass  = 'theme-rejected';
         $badgeText   = 'Order Unapproved';
+        $iconSvg     = SVG_ICONS['rejected'];
+        $isOrderFlow = false;
+
+    // 2. ORDER APPROVED
+    } elseif (
+        $type === 'ORDER_APPROVED'
+        || (str_contains($title, 'order') && str_contains($title, 'approved'))
+    ) {
+        $themeClass  = 'theme-approved';
+        $badgeText   = 'Order Approved';
+        $iconSvg     = SVG_ICONS['approved'];
         $isOrderFlow = true;
-    } elseif (str_contains($type, 'PAYMENT') || str_contains($title, 'payment')) {
-        $badgeText = 'Payment Rejected';
-    } elseif (str_contains($type, 'COMMISSION') || str_contains($title, 'commission')) {
-        $badgeText = 'Comm. Rejected';
-    } else {
-        $badgeText = 'Rejected';
+
+    // 3. ORDER UPDATED
+    } elseif (
+        $type === 'ORDER_UPDATED'
+        || (str_contains($title, 'order') && str_contains($title, 'updated'))
+    ) {
+        $themeClass  = 'theme-drc';
+        $badgeText   = 'Order Updated';
+        $iconSvg     = SVG_ICONS['updated'];
+        $isOrderFlow = true;
+
+    // 4. GENERAL REJECTIONS
+    } elseif (
+        str_contains($type, 'REJECT')
+        || str_contains($title, 'reject')
+        || str_contains($msg, 'reject')
+    ) {
+        $themeClass = 'theme-rejected';
+        $iconSvg    = SVG_ICONS['rejected'];
+
+        if (str_contains($type, 'ORDER') || str_contains($title, 'order')) {
+            $badgeText   = 'Order Unapproved';
+            $isOrderFlow = true;
+        } elseif (str_contains($type, 'PAYMENT') || str_contains($title, 'payment')) {
+            $badgeText = 'Payment Rejected';
+        } elseif (str_contains($type, 'COMMISSION') || str_contains($title, 'commission')) {
+            $badgeText = 'Comm. Rejected';
+        } else {
+            $badgeText = 'Rejected';
+        }
+
+    // 5. PAYMENT APPROVED
+    } elseif (
+        $type === 'PAYMENT_APPROVED'
+        || (str_contains($title, 'payment') && str_contains($title, 'approved'))
+    ) {
+        $themeClass = 'theme-approved';
+        $badgeText  = 'Payment Approved';
+        $iconSvg    = SVG_ICONS['payment'];
+
+    // 6. MR COMMISSION APPROVED
+    } elseif (
+        $type === 'MR_COMMISSION_APPROVED'
+        || (str_contains($title, 'commission') && str_contains($title, 'mr'))
+    ) {
+        $themeClass = 'theme-commission';
+        $badgeText  = 'MR Commission';
+        $iconSvg    = SVG_ICONS['commission'];
+
+    // 7. DR COMMISSION / DRC
+    } elseif (
+        $type === 'DR_COMMISSION_APPROVED'
+        || $type === 'DRC'
+        || str_contains($title, 'drc')
+        || str_contains($title, 'doctor')
+    ) {
+        $themeClass = 'theme-drc';
+        $badgeText  = 'Dr Commission';
+        $iconSvg    = SVG_ICONS['doctor'];
     }
 
-// 5. PAYMENT APPROVED
-} elseif (
-    $type === 'PAYMENT_APPROVED' 
-    || (str_contains($title, 'payment') && str_contains($title, 'approved') && !str_contains($title, 'unapproved'))
-) {
-    $themeClass = 'theme-approved';
-    $badgeText  = 'Payment Approved';
-    $iconSvg    = '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>';
-
-// 6. MR COMMISSION APPROVED
-} elseif ($type === 'MR_COMMISSION_APPROVED' || (str_contains($title, 'commission') && str_contains($title, 'mr'))) {
-    $themeClass = 'theme-commission';
-    $badgeText  = 'MR Commission';
-    $iconSvg    = '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>';
-
-// 7. DR COMMISSION / DRC
-} elseif ($type === 'DR_COMMISSION_APPROVED' || $type === 'DRC' || str_contains($title, 'drc') || str_contains($title, 'doctor')) {
-    $themeClass = 'theme-drc';
-    $badgeText  = 'Dr Commission';
-    $iconSvg    = '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>';
-}
-
-    // Fallback Default
-    return ['theme-default', 'Activity', SVG_ICONS['default'], false];
+    return [$themeClass, $badgeText, $iconSvg, $isOrderFlow];
 }
 ?>
 
@@ -421,7 +463,7 @@ if (
                 <div class="feed-top">
                     <span class="feed-title"><?= htmlspecialchars($item['title'] ?? 'Notification'); ?></span>
                     <div class="feed-actions">
-                        <span class="feed-tag <?= htmlspecialchars($themeClass); ?>"><?= htmlspecialchars($badgeText); ?></span>
+                        <!-- <span class="feed-tag <?= htmlspecialchars($themeClass); ?>"><?= htmlspecialchars($badgeText); ?></span> -->
 
                         <?php if ($isOrderFlow && $refId > 0): ?>
                             <!-- Invoice PDF Link -->

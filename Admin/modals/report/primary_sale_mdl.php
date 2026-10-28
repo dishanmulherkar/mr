@@ -73,7 +73,7 @@ class primary_sale_mdl
 
     $stockist_condition = !empty($stockist_id) ? "AND si.stockist_id = '$stockist_id'" : "";
 
-    $sql = "SELECT si.inward_date, si.inward_no, si.business_value, s.stockist_name , si.grand_total
+    $sql = "SELECT si.inward_date, si.inward_no, si.business_value, s.stockist_name 
             FROM stock_inward si      
             INNER JOIN `stockists` s ON s.stockist_id = si.stockist_id 
             INNER JOIN `mr_users` m  ON m.m_id = si.mr_id

@@ -236,4 +236,78 @@ public function getSuperStockistOutstanding($super_stockist_id, $as_on_date = nu
     ];
 }
 
+ public function getHQByASM($asm_id) {
+        $asm_id = (int)$asm_id;
+        $stmt = $this->con->prepare("SELECT headquarter_id, hq_name FROM `headquarter` WHERE asm_id = ? ");
+        $stmt->bind_param("i", $asm_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $data = [];
+        while($row = $res->fetch_assoc()) { $data[] = $row; }
+        $stmt->close();
+        return $data;
+    }
+    public function getStockistsByHq($hq_id) {
+        $hq_id = (int)$hq_id;
+        $stmt = $this->con->prepare("SELECT stockist_id, stockist_name FROM stockists WHERE hq_id = ?");
+        $stmt->bind_param("i", $hq_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $data = [];
+        while($row = $res->fetch_assoc()) { $data[] = $row; }
+        $stmt->close();
+        return $data;
+    }
+
+    public function getoutstanding_billwise($hq_id, $stockist_id = null, $to_date = null)
+    {
+        $hq_id   = (int)$hq_id;
+        $to_date = !empty($to_date) ? mysqli_real_escape_string($this->con, $to_date) : date('Y-m-d');
+
+        // Optional stockist filter: if not provided or 0, fetches all stockists in this HQ
+        $stockist_condition = '';
+        if (!empty($stockist_id) && (int)$stockist_id > 0) {
+            $stockist_id = (int)$stockist_id;
+            $stockist_condition = "AND si.stockist_id = {$stockist_id}";
+        }
+
+        $sql = "SELECT 
+                    s.stockist_id,
+                    s.stockist_name,
+                    si.inward_id,
+                    si.inward_no,
+                    si.inward_date,
+                    si.grand_total AS invoice_amount,
+                    si.paid_amt,
+                    si.cd_earned_amt,
+                    si.cd_penalty_amt,
+                    si.pay_status,
+                    DATEDIFF('{$to_date}', si.inward_date) AS age_days,
+
+                    (
+                        si.grand_total 
+                        + COALESCE(si.cd_penalty_amt, 0) 
+                        - COALESCE(si.paid_amt, 0) 
+                        - COALESCE(si.cd_earned_amt, 0)
+                    ) AS balance_amount
+
+                FROM stock_inward si
+                INNER JOIN stockists s 
+                    ON si.stockist_id = s.stockist_id
+                INNER JOIN mr_users mr 
+                    ON mr.m_id = si.mr_id
+
+                WHERE mr.hq_id = {$hq_id}
+                AND si.pay_status IN ('unpaid', 'partial')
+                AND si.inward_date <= '{$to_date}'
+                {$stockist_condition}
+
+                HAVING balance_amount > 0
+
+                ORDER BY  si.inward_date ASC";
+
+        return mysqli_query($this->con, $sql);
+    }
 }
