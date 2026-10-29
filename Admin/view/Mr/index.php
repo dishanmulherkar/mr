@@ -197,7 +197,7 @@ include 'view/layout/header.php';
                                             </div>
                                         </div>
                                         
-                                         <div class="form-check form-check-inline">
+                                    <div class="form-check form-check-inline">
                                         <input class="form-check-input"
                                             type="radio"
                                             name="status"
@@ -222,6 +222,50 @@ include 'view/layout/header.php';
                                             Inactive
                                         </label>
                                     </div>
+
+                                        <div class="col-lg-4">
+                                            <div class="form-group">
+                                                <label>DRC Opening Balance </label>
+                                                <input type="text" name="drc_op" class="form-control"
+                                                    placeholder="DRC Opening Balance" required
+                                                    value="<?php echo isset($ROW['drc_op']) ? htmlspecialchars($ROW['drc_op']) : ''; ?>">
+                                            </div>
+                                        </div>
+
+                                         <div class="col-lg-4">
+                                            <div class="form-group">
+                                                <label>Primary Sale Opening</label>
+                                                <input type="text" name="primary_op" class="form-control"
+                                                    placeholder="Primary Sale Opening Balance " required
+                                                    value="<?php echo isset($ROW['primary_op']) ? htmlspecialchars($ROW['primary_op']) : ''; ?>">
+                                            </div>
+                                        </div>
+
+                                        <?php
+                                        $options = [
+                                            'FY 2025-26' => 'FY 2025-26',
+                                            'FY 2026-27' => 'FY 2026-27',
+                                            'FY 2027-28' => 'FY 2027-28',
+                                            'FY 2028-29' => 'FY 2028-29',
+                                            'FY 2029-30' => 'FY 2029-30',
+                                        ];
+
+                                        // 1. Read directly from $ROW if editing; fallback to default if creating new
+                                        $selected = !empty($ROW['fy_primary_sale']) ? trim($ROW['fy_primary_sale']) : 'FY 2026-27';
+                                        ?>
+
+                                        <div class="form-group col-lg-3">
+                                            <label for="fySelect">Financial Year</label>
+                                            <select name="fy_primary_sale" id="fySelect" class="form-control" required>
+                                                <option value="">Select Financial Year</option>
+                                                <?php foreach ($options as $key => $label): ?>
+                                                    <option value="<?= htmlspecialchars($key); ?>" <?= ($selected == trim($key)) ? 'selected' : ''; ?>>
+                                                        <?= htmlspecialchars($label); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+
 
                                     </div><!-- /row -->
                                 </div><!-- /box-body -->

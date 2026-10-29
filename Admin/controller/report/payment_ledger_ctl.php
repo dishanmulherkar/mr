@@ -182,14 +182,8 @@ class payment_ledger_ctl
             // Get opening balance calculated before the start date
             if ($hq_id > 0) {
             $opening_balance = $this->model->getOpeningBalancedrc($hq_id, $from_date);
-            
-            // Get the actual ledger rows for the date range
-            $query = $this->model->getReportdrcAsm(
-                $hq_id,
-                $from_date,
-                $to_date
-            ); 
-            }
+            $query = $this->model->getReportdrc($hq_id, $from_date, $to_date);
+        }
             include 'view/Asm/report/drc_ledger.php';
         }
 

@@ -28,42 +28,60 @@ private $db;
         return mysqli_fetch_assoc($result);
     }
 // Primary Sale
-    public function getPrimarySale($asm_id,$fy_name = null)
+    public function getPrimarySale($asm_id, $fy_name = null)
     {
         $asm_id = (int)$asm_id;
 
         // Optional filter by specific Financial Year name (e.g., 'FY 2026-27')
-        $fy_filter = "";
+        $fy_filter_fy = "";
+        $fy_filter_mr = "";
         if (!empty($fy_name)) {
-            $fy_name_clean = mysqli_real_escape_string($this->db, trim($fy_name));$fy_filter = "AND fy.fy_name = '$fy_name_clean'";
+            $fy_name_clean = mysqli_real_escape_string($this->db, trim($fy_name));
+            $fy_filter_fy  = "AND fy.fy_name = '$fy_name_clean'";
+            $fy_filter_mr  = "AND mr.fy_primary_sale = '$fy_name_clean'";
         }
 
         $query = "
-            SELECT COALESCE(SUM(si.business_value), 0) AS primary_sale
-            FROM `headquarter` h
-            -- 1. Connect active financial year for each HQ under this ASM
-            INNER JOIN `financial_year` fy 
-                ON fy.hq_id = h.headquarter_id 
-                AND fy.status = '1'
-                $fy_filter
-            -- 2. Link stockists belonging to the HQ
-            INNER JOIN `stockists` st 
-                ON st.hq_id = h.headquarter_id
-            -- 3. Link stock_inward matching that HQ's active FY date window
-            INNER JOIN `stock_inward` si 
-                ON si.stockist_id = st.stockist_id
-                AND DATE(si.inward_date) BETWEEN fy.start_date AND fy.end_date
-            WHERE h.asm_id = '$asm_id'
+            SELECT 
+                (
+                    -- 1. Total Inward Sales under ASM's Headquarter within the active FY window
+                    SELECT COALESCE(SUM(si.business_value), 0)
+                    FROM `headquarter` h
+                    INNER JOIN `financial_year` fy 
+                        ON fy.hq_id = h.headquarter_id 
+                        AND fy.status = '1'
+                        $fy_filter_fy
+                    INNER JOIN `stockists` st 
+                        ON st.hq_id = h.headquarter_id
+                    INNER JOIN `stock_inward` si 
+                        ON si.stockist_id = st.stockist_id
+                        AND DATE(si.inward_date) BETWEEN fy.start_date AND fy.end_date
+                    WHERE h.asm_id = '$asm_id'
+                ) AS inward_sale,
+
+                (
+                    -- 2. Total Opening Primary Sales of active MRs assigned to HQ under this ASM
+                    SELECT COALESCE(SUM(mr.primary_op), 0)
+                    FROM `headquarter` h
+                    INNER JOIN `mr_users` mr 
+                        ON mr.hq_id = h.headquarter_id 
+                        AND mr.status = '1'
+                        $fy_filter_mr
+                    WHERE h.asm_id = '$asm_id'
+                ) AS opening_sale
         ";
 
-        $result = mysqli_query($this->db,$query);
+        $result = mysqli_query($this->db, $query);
 
         if (!$result) {
             die(mysqli_error($this->db));
         }
 
         $row = mysqli_fetch_assoc($result);
-        return $row && $row['primary_sale'] !== null ? round((float)$row['primary_sale'], 2) : 0.00;
+        $inward_sale  = (float)($row['inward_sale'] ?? 0);
+        $opening_sale = (float)($row['opening_sale'] ?? 0);
+
+        return round($inward_sale + $opening_sale, 2);
     }
 
     // Customer Count

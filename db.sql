@@ -696,3 +696,15 @@ ALTER TABLE invoice_number_pool
   ALTER TABLE activity_logs 
 ADD COLUMN is_read_asm TINYINT(1) NOT NULL DEFAULT 0,
 ADD COLUMN read_at_asm DATETIME NULL DEFAULT NULL;
+
+-- 28-10 
+ALTER TABLE `mr_users`
+  ADD COLUMN `drc_op` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER `commission_rate`,
+  ADD COLUMN `primary_op` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER `drc_op`,
+  ADD COLUMN `fy_primary_sale` VARCHAR(20) NULL DEFAULT 'FY 2026-27' AFTER `primary_op`;
+
+
+-- 29 10 26    ----
+
+  ALTER TABLE `mr_users` 
+ADD COLUMN `fy_primary_sale` VARCHAR(20) NULL DEFAULT 'FY 2026-27' AFTER `primary_op`;

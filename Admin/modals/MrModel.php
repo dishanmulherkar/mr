@@ -125,64 +125,146 @@ class MrModel
         );
     }
     
-    public function insert($data)
+   public function insert($data)
     {
-        $admin_id = isset($_SESSION['admin_id']) ? intval($_SESSION['admin_id']) : "NULL";
-        $hq_name  = mysqli_real_escape_string($this->con, $data['hq']);
-        $mr_name  = mysqli_real_escape_string($this->con, $data['mr_name']);
-        $mobile   = mysqli_real_escape_string($this->con, $data['mobile']);
-        $email    = mysqli_real_escape_string($this->con, $data['email']);
-        $state    = mysqli_real_escape_string($this->con, $data['state']);
-        $district = mysqli_real_escape_string($this->con, $data['district']);
-        $pincode  = mysqli_real_escape_string($this->con, $data['pincode']);
-        $address  = mysqli_real_escape_string($this->con, $data['address']);
-        $password = mysqli_real_escape_string($this->con, $data['password']);
-        $status = mysqli_real_escape_string($this->con, $data['status']);
-        $credit_limit = mysqli_real_escape_string($this->con, $data['credit_limit']);
-        $commission_rate = mysqli_real_escape_string($this->con, $data['commission_rate']);
+        // Safe check for admin_id to support raw NULL or int
+        $admin_val = (!empty($_SESSION['admin_id'])) ? intval($_SESSION['admin_id']) : "NULL";
 
-        return mysqli_query(
-            $this->con,
-            "INSERT INTO mr_users
-            (admin_id,hq_id,mr_name,mobile,email,state,district,pincode,address,password,status,credit_limit,commission_rate)
+        $hq_name         = mysqli_real_escape_string($this->con, $data['hq'] ?? '');
+        $mr_name         = mysqli_real_escape_string($this->con, $data['mr_name'] ?? '');
+        $mobile          = mysqli_real_escape_string($this->con, $data['mobile'] ?? '');
+        $email           = mysqli_real_escape_string($this->con, $data['email'] ?? '');
+        $state           = mysqli_real_escape_string($this->con, $data['state'] ?? '');
+        $district        = mysqli_real_escape_string($this->con, $data['district'] ?? '');
+        $pincode         = mysqli_real_escape_string($this->con, $data['pincode'] ?? '');
+        $address         = mysqli_real_escape_string($this->con, $data['address'] ?? '');
+        $password        = mysqli_real_escape_string($this->con, $data['password'] ?? '');
+        $status          = mysqli_real_escape_string($this->con, $data['status'] ?? '1');
+        $credit_limit    = (float)($data['credit_limit'] ?? 0);
+        $commission_rate = (float)($data['commission_rate'] ?? 0);
+        $drc_op          = (float)($data['drc_op'] ?? 0);
+        $primary_op      = (float)($data['primary_op'] ?? 0);
+        $fy_primary_sale = mysqli_real_escape_string($this->con, $data['fy_primary_sale'] ?? '');
+
+        $sql = "INSERT INTO mr_users
+            (admin_id, hq_id, mr_name, mobile, email, state, district, pincode, address, password, status, credit_limit, commission_rate, drc_op, primary_op, fy_primary_sale)
             VALUES
-            ('$admin_id','$hq_name','$mr_name','$mobile','$email','$state','$district','$pincode','$address','$password','$status','$credit_limit','$commission_rate')"
-        );
+            ($admin_val, '$hq_name', '$mr_name', '$mobile', '$email', '$state', '$district', '$pincode', '$address', '$password', '$status', '$credit_limit', '$commission_rate', '$drc_op', '$primary_op', '$fy_primary_sale')";
+
+        $result = mysqli_query($this->con, $sql);
+
+        if ($result) {
+            $new_mr_id = mysqli_insert_id($this->con);
+
+            // Automatically credit opening balance into payment_ledgers if provided
+            if ($drc_op > 0) {
+                $this->creditDrcOpeningBalanceOnce($new_mr_id, $drc_op);
+            }
+
+            return $new_mr_id;
+        }
+
+        return false;
     }
 
     public function update($id, $data)
     {
-        $admin_id = isset($_SESSION['admin_id']) ? intval($_SESSION['admin_id']) : "NULL";
-        $hq_name  = mysqli_real_escape_string($this->con, $data['hq']);
-        $mr_name  = mysqli_real_escape_string($this->con, $data['mr_name']);
-        $mobile   = mysqli_real_escape_string($this->con, $data['mobile']);
-        $email    = mysqli_real_escape_string($this->con, $data['email']);
-        $state    = mysqli_real_escape_string($this->con, $data['state']);
-        $district = mysqli_real_escape_string($this->con, $data['district']);
-        $pincode  = mysqli_real_escape_string($this->con, $data['pincode']);
-        $address  = mysqli_real_escape_string($this->con, $data['address']);
-        $password = mysqli_real_escape_string($this->con, $data['password']);
-        $status = mysqli_real_escape_string($this->con, $data['status']);
-         $credit_limit = mysqli_real_escape_string($this->con, $data['credit_limit']);
-          $commission_rate = mysqli_real_escape_string($this->con, $data['commission_rate']);
+        $id = (int)$id;
+        $admin_val = (!empty($_SESSION['admin_id'])) ? intval($_SESSION['admin_id']) : "NULL";
 
-        return mysqli_query(
-            $this->con,
-            "UPDATE mr_users SET
-                hq_id='$hq_name',
-                mr_name='$mr_name',
-                mobile='$mobile',
-                email='$email',
-                state='$state',
-                district='$district',
-                pincode='$pincode',
-                address='$address',
-                password='$password',
-                status='$status',
-                admin_id = '$admin_id',
+        $hq_name         = mysqli_real_escape_string($this->con, $data['hq'] ?? '');
+        $mr_name         = mysqli_real_escape_string($this->con, $data['mr_name'] ?? '');
+        $mobile          = mysqli_real_escape_string($this->con, $data['mobile'] ?? '');
+        $email           = mysqli_real_escape_string($this->con, $data['email'] ?? '');
+        $state           = mysqli_real_escape_string($this->con, $data['state'] ?? '');
+        $district        = mysqli_real_escape_string($this->con, $data['district'] ?? '');
+        $pincode         = mysqli_real_escape_string($this->con, $data['pincode'] ?? '');
+        $address         = mysqli_real_escape_string($this->con, $data['address'] ?? '');
+        $password        = mysqli_real_escape_string($this->con, $data['password'] ?? '');
+        $status          = mysqli_real_escape_string($this->con, $data['status'] ?? '1');
+        $credit_limit    = (float)($data['credit_limit'] ?? 0);
+        $commission_rate = (float)($data['commission_rate'] ?? 0);
+        $drc_op          = (float)($data['drc_op'] ?? 0);
+        $primary_op      = (float)($data['primary_op'] ?? 0);
+        $fy_primary_sale = mysqli_real_escape_string($this->con, $data['fy_primary_sale'] ?? '');
+
+        $sql = "UPDATE mr_users SET
+                admin_id = $admin_val,
+                hq_id = '$hq_name',
+                mr_name = '$mr_name',
+                mobile = '$mobile',
+                email = '$email',
+                state = '$state',
+                district = '$district',
+                pincode = '$pincode',
+                address = '$address',
+                password = '$password',
+                status = '$status',
                 credit_limit = '$credit_limit',
-                commission_rate = '$commission_rate'
-            WHERE m_id='$id'"
-        );
+                commission_rate = '$commission_rate',
+                drc_op = '$drc_op',
+                primary_op = '$primary_op',
+                fy_primary_sale = '$fy_primary_sale'
+            WHERE m_id = '$id'";
+
+        $result = mysqli_query($this->con, $sql);
+
+        if ($result && $drc_op > 0) {
+            // creditDrcOpeningBalanceOnce checks for existing entries,
+            // so this safely runs only if it was never credited before.
+            $this->creditDrcOpeningBalanceOnce($id, $drc_op);
+        }
+
+        return $result;
+    }
+
+    public function creditDrcOpeningBalanceOnce($id, $amount) 
+    {
+        try {
+            $id = (int)$id;
+            $amount = (float)$amount;
+
+            if ($amount <= 0) {
+                return ['success' => true, 'msg' => 'No opening balance to credit.'];
+            }
+
+            // 1. Prevent duplicate entries directly from the ledger
+            $stmt_check = $this->con->prepare("
+                SELECT id FROM payment_ledgers 
+                WHERE user_id = ? AND ledger_type = 'drc_wallet' AND transaction_type = 'opening_balance' 
+                LIMIT 1
+            ");
+            $stmt_check->bind_param("i", $id);
+            $stmt_check->execute();
+            $exists = $stmt_check->get_result()->fetch_assoc();
+            $stmt_check->close();
+
+            if ($exists) {
+                return ['success' => false, 'msg' => 'Opening balance has already been credited.'];
+            }
+
+            // 2. Insert into payment_ledgers
+            $stockist_id  = 0;
+            $reference_id = 0;
+            $action       = 'increase';
+            $notes        = 'Initial DRC Opening Balance Credited';
+
+            $stmt = $this->con->prepare("
+                INSERT INTO payment_ledgers 
+                (user_id, stockist_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
+                VALUES (?, ?, 'drc_wallet', 'opening_balance', ?, ?, ?, ?)
+            ");
+            $stmt->bind_param("iiidss", $id, $stockist_id, $reference_id, $amount, $action, $notes);
+
+            if (!$stmt->execute()) {
+                throw new Exception("Ledger insert error: " . $stmt->error);
+            }
+            $stmt->close();
+
+            return ['success' => true, 'msg' => 'DRC Opening balance added to wallet.'];
+
+        } catch (Exception $e) {
+            return ['success' => false, 'msg' => $e->getMessage()];
+        }
     }
 }

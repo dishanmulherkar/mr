@@ -161,6 +161,14 @@ body {
 }
 table { border-collapse: collapse; width: 100%; }
 .section-space { height: 3px; }
+
+@page { size: A4; margin: 10mm; }
+
+/* every row same height, so row counts match the page size */
+.items-table tbody td { height: 15px; vertical-align: middle; }
+.items-table thead { display: table-header-group; }   /* header repeats on page 2 */
+.items-table tr { page-break-inside: avoid; }         /* a row never splits across pages */
+.footer-table { page-break-inside: avoid; }           /* footer stays in one piece */
 </style>
 </head>
 <body>
@@ -191,7 +199,7 @@ table { border-collapse: collapse; width: 100%; }
     </div>
 
     <!-- Main Info Table -->
-    <table style="border: 1px solid #000; margin-bottom: 2px;">
+    <table  class="items-table" style="border: 1px solid #000; margin-bottom: 2px;">
         <tr>
             <!-- Left: To Section -->
             <td style="width: 55%; border-right: 1px solid #000; padding: 3px 0; vertical-align: top;">
@@ -229,7 +237,7 @@ table { border-collapse: collapse; width: 100%; }
             
             <!-- Right: Invoice Details -->
             <td style="width: 45%; padding: 3px 0; vertical-align: top;">
-                <table style="width: 100%; border-collapse: collapse; ">
+                <table class="items-table" style="width: 100%; border-collapse: collapse; ">
                         <tr>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-size: 8pt;">Invoice No</td>
                             <td style="border: none; border-bottom: 1px solid #000; padding: 1px 3px; width: 25%; font-weight: bold; font-size: 8pt;">: <?= htmlspecialchars($invoiceNo) ?></td>
@@ -268,7 +276,7 @@ table { border-collapse: collapse; width: 100%; }
     </table>
 
     <!-- Items Table -->
-    <table style="border: 1px solid #000; margin-bottom: 2px;">
+    <table  class="items-table" style="border: 1px solid #000; margin-bottom: 2px;">
         <thead>
             <tr>
                 <th style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 7pt; font-weight: bold; width: 2.5%;">Sr.</th>
@@ -303,6 +311,7 @@ table { border-collapse: collapse; width: 100%; }
             $sr = 1;
             $totalRenderedQty = 0;
             $calculatedGrandTotal = 0;
+            $final_taxa_amt = 0;
            foreach ($items as $item): 
                 $qty = (float)($item['qty'] ?? 0);
                 $totalRenderedQty += $qty;
@@ -327,6 +336,8 @@ table { border-collapse: collapse; width: 100%; }
                 
                 // 4. Final Taxable Amount ($amt) after both discounts
                 $amt = $afterFirstDisc - $cdDiscountAmount;
+
+                $final_taxa_amt += $amt; 
                 
                 // Net total including tax
                 $net_total = (float)($item['net_total'] ?? ($amt * (1 + ((float)($item['gst_percent'] ?? 0) / 100))));
@@ -379,27 +390,54 @@ table { border-collapse: collapse; width: 100%; }
             </tr>
             <?php endforeach; ?>
 
-            <!-- EXTRA BLANK ROWS -->
-            <?php
-            $itemCount = count($items);
-            $minimumRows = 15;
-            $columnCount = ($gstType === 'IGST' || $gstType === 'VAT') ? 13 : 15;
+                    <!-- EXTRA BLANK ROWS -->
+                <!-- EXTRA BLANK ROWS -->
+        <?php
+        // ---- Page capacity settings (rows) - tune these after one test print ----
+        $ONE_PAGE_ROWS = 20;  // items + blanks when everything incl. footer fits on page 1
+        $FIRST_PAGE    = 28;  // rows on page 1 when footer must move to the next page
+        $MID_PAGE      = 36;  // rows on a full continuation page (no footer)
+        $LAST_PAGE     = 26;  // rows on a continuation page that also carries the footer
 
-            for ($i = $itemCount; $i < $minimumRows; $i++):
-            ?>
-            <tr style="height: 22px;">
-                <?php for ($col = 0; $col < $columnCount; $col++): ?>
-                    <td style="border-right: 1px solid #000; padding: 2px 0; height: 22px; font-size: 8pt;">&nbsp;</td>
-                <?php endfor; ?>
-            </tr>
+        $itemCount   = count($items);
+        $columnCount = ($gstType === 'IGST' || $gstType === 'VAT') ? 13 : 15;
+        $footerBreak = false;
+
+        if ($itemCount <= $ONE_PAGE_ROWS) {
+            // everything on one page: pad to a fixed row count
+            $blankRows = $ONE_PAGE_ROWS - $itemCount;
+        } elseif ($itemCount <= $FIRST_PAGE) {
+            // page 1 full of rows, footer moves to page 2
+            $blankRows   = $FIRST_PAGE - $itemCount;
+            $footerBreak = true;
+        } else {
+            // multi-page: walk the pages until the remainder fits on the last page
+            $rem = $itemCount - $FIRST_PAGE;
+            while ($rem > $MID_PAGE) {
+                $rem -= $MID_PAGE;
+            }
+            if ($rem <= $LAST_PAGE) {
+                $blankRows = $LAST_PAGE - $rem;          // footer shares this page
+            } else {
+                $blankRows   = $MID_PAGE - $rem;         // rows fill the page, footer goes next
+                $footerBreak = true;
+            }
+        }
+
+        for ($i = 0; $i < $blankRows; $i++): ?>
+        <tr>
+            <?php for ($col = 0; $col < $columnCount; $col++): ?>
+                <td style="border-right: 1px solid #000; border-left: 1px solid #000; padding: 2px 0; font-size: 8pt;">&nbsp;</td>
             <?php endfor; ?>
+        </tr>
+        <?php endfor; ?>
 
             <!-- TOTALS ROW -->
             <tr style="font-weight: bold;">
                 <td colspan="7" style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;">Total</td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"><?= $dbTotalQty > 0 ? $dbTotalQty : $totalRenderedQty ?></td>
                 <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>
-                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($dbSubTotal, 2) ?></td>
+                <td style="border: 1px solid #000; padding: 2px; text-align: right; font-size: 8pt; border-top: 1px solid #000;"><?= number_format($final_taxa_amt, 2) ?></td>
 
                 <?php if ($gstType === 'IGST'): ?>
                     <td style="border: 1px solid #000; padding: 2px; text-align: center; font-size: 8pt; border-top: 1px solid #000;"></td>

@@ -35,35 +35,39 @@ private $db;
         return mysqli_fetch_assoc($result);
     }
 // Primary Sale
-   public function getPrimarySale($mr_id, $start_date = '', $end_date = '', $hq_id = 0)
-{
-    $mr_id = (int)$mr_id;
+    public function getPrimarySale($mr_id, $start_date = '', $end_date = '', $hq_id = 0)
+    {
+        $mr_id = (int)$mr_id;
 
-    // Direct aggregation on stock_inward without extra joins
-    $query = "
-        SELECT COALESCE(SUM(si.business_value), 0) AS primary_sale
-        FROM stock_inward si
-        WHERE si.mr_id = '$mr_id'
-    ";
+        $date_condition = "";
+        if (!empty($start_date) && !empty($end_date)) {
+            $start = mysqli_real_escape_string($this->db, date('Y-m-d', strtotime($start_date)));
+            $end   = mysqli_real_escape_string($this->db, date('Y-m-d', strtotime($end_date)));
+            $date_condition = " AND DATE(si.inward_date) BETWEEN '$start' AND '$end'";
+        }
 
-    // Append the date filter if dates are provided
-    if (!empty($start_date) && !empty($end_date)) {
-        $start = mysqli_real_escape_string($this->db, $start_date);
-        $end   = mysqli_real_escape_string($this->db, $end_date);
-        
-        $query .= " AND DATE(si.inward_date) BETWEEN '$start' AND '$end'";
+        // Query from mr_users first so primary_op is always fetched even if 0 bills exist
+        $query = "
+            SELECT 
+                COALESCE(mr.primary_op, 0) AS opening_sale,
+                COALESCE(SUM(si.business_value), 0) AS inward_sale,
+                (COALESCE(mr.primary_op, 0) + COALESCE(SUM(si.business_value), 0)) AS total_primary_sale
+            FROM mr_users mr
+            LEFT JOIN stock_inward si ON mr.m_id = si.mr_id $date_condition
+            WHERE mr.m_id = '$mr_id'
+            GROUP BY mr.m_id, mr.primary_op
+        ";
+
+        $result = mysqli_query($this->db, $query);
+
+        if (!$result) {
+            die(mysqli_error($this->db));
+        }
+
+        $row = mysqli_fetch_assoc($result);
+
+        return $row ? round((float)$row['total_primary_sale'], 2) : 0.00;
     }
-
-    $result = mysqli_query($this->db, $query);
-
-    if (!$result) {
-        die(mysqli_error($this->db));
-    }
-
-    $row = mysqli_fetch_assoc($result);
-    return $row && $row['primary_sale'] !== null ? round((float)$row['primary_sale'], 2) : 0.00;
-}
-
     // Customer Count
     public function getTotalCustomers($hq_id)
     {

@@ -471,56 +471,54 @@ public function getOpeningBalance($stockist_id, $from_date)
         return $data;
     }
 
-     public function getReportdrcAsm($mr_id, $from_date, $to_date)
-{
-    $mr_id = (int)$mr_id;
+    public function getReportdrcAsm($mr_id, $from_date, $to_date, $include_opening = false)
+    {
+        $mr_id = (int)$mr_id;
 
-    $sql = "SELECT 
-                MIN(p.id) AS id,
-                MIN(p.created_at) AS created_at,
-                p.reference_id,
-                p.transaction_type,
-                p.balance_action,
-                MAX(p.notes) AS notes,
-                
-                -- Fetch settled bill numbers for this transaction
-                (
-                    SELECT GROUP_CONCAT(DISTINCT si.inward_no SEPARATOR ', ')
-                    FROM payment_ledgers pd
-                    INNER JOIN payment_allocations pa ON pd.id = pa.ledger_id
-                    INNER JOIN stock_inward si ON pa.inward_id = si.inward_id
-                    WHERE pd.reference_id = p.reference_id AND pd.ledger_type = 'debt'
-                ) AS settled_bill_no,
-                
-                SUM(p.amount) AS amount,
-                IFNULL(MAX(s.stockist_name), 'Bank / General') AS stockist_name
-                
-            FROM payment_ledgers p
-            LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
-            
-            -- Strict MR Isolation: user_id matching wallet owner
-            WHERE p.user_id = ?
-              AND p.ledger_type = 'drc_wallet'
-              AND (
-                  (DATE(p.created_at) >= ? AND DATE(p.created_at) <= ?)
-              )
-              -- Exclude static initial opening balance from row listing 
-              -- if it is already displayed at the top as the opening balance card/row
-              AND p.transaction_type != 'opening_balance'
-            
-            GROUP BY 
-                DATE(p.created_at), 
-                p.reference_id, 
-                p.transaction_type, 
-                p.balance_action
-                
-            ORDER BY MIN(p.created_at) ASC, MIN(p.id) ASC";
-            
-    $stmt = $this->con->prepare($sql);
-    $stmt->bind_param("iss", $mr_id, $from_date, $to_date);
-    $stmt->execute();
-    
-    return $stmt->get_result();
-}
+        // 1. Normalize dates to standard Y-m-d format
+        $from = !empty($from_date) ? date('Y-m-d', strtotime($from_date)) : '1970-01-01';
+        $to   = !empty($to_date)   ? date('Y-m-d', strtotime($to_date))   : '2099-12-31';
+
+        // 2. Optional condition for opening_balance
+        $opening_condition = $include_opening ? "" : "AND p.transaction_type != 'opening_balance'";
+
+        $sql = "SELECT 
+                    p.id,
+                    p.created_at,
+                    p.reference_id,
+                    p.transaction_type,
+                    p.balance_action,
+                    p.notes,
+                    p.amount,
+                    COALESCE(s.stockist_name, 'Bank / General') AS stockist_name,
+                    (
+                        SELECT GROUP_CONCAT(DISTINCT si.inward_no SEPARATOR ', ')
+                        FROM payment_ledgers pd
+                        INNER JOIN payment_allocations pa ON pd.id = pa.ledger_id
+                        INNER JOIN stock_inward si ON pa.inward_id = si.inward_id
+                        WHERE pd.reference_id = p.reference_id 
+                        AND pd.ledger_type = 'debt'
+                    ) AS settled_bill_no
+                FROM payment_ledgers p
+                LEFT JOIN stockists s ON p.stockist_id = s.stockist_id
+                WHERE p.user_id = ?
+                AND p.ledger_type = 'drc_wallet'
+                AND DATE(p.created_at) BETWEEN ? AND ?
+                $opening_condition
+                ORDER BY p.created_at ASC, p.id ASC";
+
+        $stmt = $this->con->prepare($sql);
+        if (!$stmt) {
+            error_log("Prepare failed: " . $this->con->error);
+            return false;
+        }
+
+        $stmt->bind_param("iss", $mr_id, $from, $to);
+        $stmt->execute();
+
+        return $stmt->get_result();
+    }
+
+
 }
 ?>

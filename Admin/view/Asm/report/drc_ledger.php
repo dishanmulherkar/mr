@@ -134,157 +134,155 @@ include 'view/layout/header-asm.php';
     </thead>
     
     <tbody id="rpt-tbody">
-        <?php
-        $total_earned = 0.0;
-        $total_settled = 0.0;
-        $ob_amount = isset($opening_balance) ? (float)$opening_balance : 0.0;
-        $has_query_rows = (isset($query) && $query && mysqli_num_rows($query) > 0);
-        $display_date = !empty($from_date) ? date('d-M', strtotime($from_date)) : date('d-M');
+                <?php if (isset($query) && $query && mysqli_num_rows($query) > 0): ?>
+                    <?php
+                    $total_earned = 0;
+                    $total_settled = 0;
+                    
+                    // Handle Opening Balance
+                    if (isset($opening_balance) && $opening_balance > 0) {
+                        $total_earned += $opening_balance;
+                        echo "<tr>
+                                <td style='white-space: nowrap;'>".date('d-M', strtotime($from_date))."</td>
+                                <td><strong>To Opening Balance</strong></td>
+                                <td class='text-right' style='white-space: nowrap;'><strong>".number_format($opening_balance, 2)."</strong></td>
+                                <td class='text-right'></td>
+                              </tr>";
+                    } elseif (isset($opening_balance) && $opening_balance < 0) {
+                        $total_settled += abs($opening_balance);
+                        echo "<tr>
+                                <td style='white-space: nowrap;'>".date('d-M', strtotime($from_date))."</td>
+                                <td><strong>By Opening Balance</strong></td>
+                                <td class='text-right'></td>
+                                <td class='text-right' style='white-space: nowrap;'><strong>".number_format(abs($opening_balance), 2)."</strong></td>
+                              </tr>";
+                    }
 
-        // 1. Handle Opening Balance brought forward
-        if ($ob_amount > 0) {
-            $total_earned += $ob_amount;
-            ?>
-            <tr style="background-color: #f8fafc;">
-                <td style="white-space: nowrap;"><?= $display_date ?></td>
-                <td><strong>To Opening Balance</strong></td>
-                <td class="text-right" style="color: #5cb85c; font-weight: 700; white-space: nowrap;">
-                    <?= number_format($ob_amount, 2) ?>
-                </td>
-                <td class="text-right"></td>
-            </tr>
-            <?php
-        } elseif ($ob_amount < 0) {
-            $total_settled += abs($ob_amount);
-            ?>
-            <tr style="background-color: #f8fafc;">
-                <td style="white-space: nowrap;"><?= $display_date ?></td>
-                <td><strong>By Opening Balance (Advance)</strong></td>
-                <td class="text-right"></td>
-                <td class="text-right" style="color: #d9534f; font-weight: 700; white-space: nowrap;">
-                    <?= number_format(abs($ob_amount), 2) ?>
-                </td>
-            </tr>
-            <?php
-        }
+                  // Process Rows
+                    while($row = mysqli_fetch_assoc($query)) {
+                        $date = date('d-M', strtotime($row['created_at']));
+                        
+                        // Define short names for long transaction types
+                        $short_types = [
+                            'commission_earned' => 'Commission',
+                            'mrc_settlement'    => 'Bank Transfer',
+                            'settled_to_bill'   => 'Bill Adjusted',
+                            'drc_settlement'    => 'Bank Transfer' // Added just in case it appears here!
+                        ];
 
-        // 2. Process Ledger Rows (if any exist in date range)
-        if ($has_query_rows) {
-            while ($row = mysqli_fetch_assoc($query)) {
-                $date = !empty($row['created_at']) ? date('d-M', strtotime($row['created_at'])) : '-';
-                
-                $short_types = [
-                    'commission_earned' => 'Commission',
-                    'mrc_settlement'    => 'Bank Transfer',
-                    'drc_settlement'    => 'Bank Transfer',
-                    'asm_settlement'    => 'Bank Transfer',
-                    'settled_to_bill'   => 'Bill Adjusted'
-                ];
+                        // If it's in the array, use the short name. Otherwise, format the original text.
+                        $raw_type = strtolower($row['transaction_type']);
+                        $vch_type = $short_types[$raw_type] ?? ucwords(str_replace('_', ' ', $raw_type));
+                        
+                        // ==========================================
+                        // FIX: Explicitly handle IDs based on type
+                        // ==========================================
+                        if ($vch_type === 'Commission' || $vch_type === 'Bank Transfer') {
+                            // Commissions and Bank Transfers should always use the ledger's reference_id
+                            $vch_no = $row['reference_id'];
+                            $vch_id = $row['reference_id'];
+                        } else {
+                            // Bill Adjustments should use the fetched bill number, falling back to reference_id
+                            $vch_no = !empty($row['settled_bill_no']) ? $row['settled_bill_no'] : (!empty($row['reference_id']) ? $row['reference_id'] : '-');
+                            $vch_id = preg_replace('/[^0-9]/', '', $vch_no);
+                        }
+                        
+                        // Escape the visual number for HTML safety
+                        $vch_no_display = htmlspecialchars($vch_no);
 
-                $raw_type = strtolower($row['transaction_type'] ?? '');
-                $vch_type = $short_types[$raw_type] ?? ucwords(str_replace('_', ' ', $raw_type));
-                
-                if ($vch_type === 'Commission' || $vch_type === 'Bank Transfer') {
-                    $vch_no = $row['reference_id'] ?? '-';
-                    $vch_id = $row['reference_id'] ?? '';
-                } else {
-                    $vch_no = !empty($row['settled_bill_no']) ? $row['settled_bill_no'] : (!empty($row['reference_id']) ? $row['reference_id'] : '-');
-                    $vch_id = preg_replace('/[^0-9]/', '', $vch_no);
-                }
-                
-                $vch_no_display = htmlspecialchars((string)$vch_no);
-                $earned = 0.0;
-                $settled = 0.0;
-                $action = strtolower($row['balance_action'] ?? '');
+                        $earned = 0;
+                        $settled = 0;
 
-                if ($action === 'increase') {
-                    $earned = (float)$row['amount'];
-                    $total_earned += $earned;
-                } elseif ($action === 'decrease') {
-                    $settled = (float)$row['amount'];
-                    $total_settled += $settled;
-                }
+                        // Check Model's balance_action
+                        if (strtolower($row['balance_action']) === 'increase') {
+                            $earned = (float)$row['amount'];
+                            $total_earned += $earned;
+                        } elseif (strtolower($row['balance_action']) === 'decrease') {
+                            $settled = (float)$row['amount'];
+                            $total_settled += $settled;
+                        }
                 ?>
-                <tr>
-                    <td style="white-space: nowrap;"><?= $date ?></td>
-                    <td>
-                        <?php if ($vch_type === 'Commission'): ?>
-                            <!-- <a href="<?= BASE_URL ?>commission/view/<?= $vch_id ?>" 
-                               style="color: #0d6efd; text-decoration: none; font-weight: 600;"
-                               onmouseover="this.style.textDecoration='underline'" 
-                               onmouseout="this.style.textDecoration='none'"> -->
-                                <?= $vch_type ?> 
-                                <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#' . $vch_no_display . ')</small>' : '' ?>
-                            <!-- </a> -->
-                        <?php elseif ($vch_type === 'Bill Adjusted'): ?>
-                            <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
-                            <?= $vch_no_display !== '-' ? '<small class="text-muted" style="color: #6c757d;">(#' . $vch_no_display . ')</small>' : '' ?>
-                            <br>
-                            <button type="button" class="btn btn-sm btn-light" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; border: 1px solid #dee2e6;">
-                                <i class="fa fa-user text-primary"></i> <?= htmlspecialchars($row['stockist_name'] ?? 'General'); ?>
-                            </button>
-                        <?php else: ?>
-                            <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
-                            <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#' . $vch_no_display . ')</small>' : '' ?>
-                        <?php endif; ?>
+                        <tr>
+                            <td style="white-space: nowrap;"><?= $date ?></td>
+                            <td>
+                                <?php if ($vch_type === 'Commission'): ?>
+                                    <!-- Commission Link -->
+                                    <a href="<?= BASE_URL ?>commission/view/<?= $vch_id ?>" 
+                                       style="color: #0d6efd; text-decoration: none; font-weight: 600;"
+                                       onmouseover="this.style.textDecoration='underline'" 
+                                       onmouseout="this.style.textDecoration='none'">
+                                        <?= $vch_type ?> 
+                                        <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no_display.')</small>' : '' ?>
+                                    </a>
+                                
+                                <?php elseif ($vch_type === 'Bill Adjusted'): ?>
+                                    <!-- Bill Adjusted with Stockist Name -->
+                                    <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
+                                    <?= $vch_no_display !== '-' ? '<small class="text-muted" style="color: #6c757d;">(#'.$vch_no_display.')</small>' : '' ?>
+                                    <br>
+                                    <button type="button" class="btn btn-sm btn-light" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; border: 1px solid #dee2e6;">
+                                        <i class="fa fa-user text-primary"></i> <?= htmlspecialchars($row['stockist_name']); ?>
+                                    </button>
+                                
+                                <?php else: ?>
+                                    <!-- Other Settlement Types -->
+                                    <span style="font-weight: 600; color: #333;"><?= $vch_type ?></span>
+                                    <?= $vch_no_display !== '-' ? '<br><small class="text-muted" style="color: #6c757d;">(#'.$vch_no_display.')</small>' : '' ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-right" style="color: #5cb85c; font-weight: 500; white-space: nowrap;"><?= $earned > 0 ? number_format($earned, 2) : '' ?></td>
+                            <td class="text-right" style="color: #d9534f; font-weight: 500; white-space: nowrap;"><?= $settled > 0 ? number_format($settled, 2) : '' ?></td>
+                        </tr>
+                <?php
+                    }
+                ?>
+                
+                <?php else: ?>
+                    <tr>
+                        <td colspan="4">
+                            <div class="state-screen" style="padding: 40px; text-align: center; color: #6c757d;">
+                                <div style="font-size: 30px; margin-bottom: 10px;">📋</div>
+                                <div>No commission data found for the selected dates.</div>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+
+            <!-- Balancing Footer -->
+            <?php if (isset($query) && $query && mysqli_num_rows($query) > 0): ?>
+            <?php
+                // Explicitly Round to avoid floating point math errors
+                $total_earned = round($total_earned, 2);
+                $total_settled = round($total_settled, 2);
+                
+                $closing_balance = round($total_earned - $total_settled, 2);
+                $grand_total = max($total_earned, $total_settled);
+            ?>
+            <tfoot id="rpt-tfoot">
+                <tr style="background: #f8f9fa;">
+                    <td colspan="2"></td>
+                    <td class="text-right" style="border-top: 1px solid #ccc; white-space: nowrap;"><strong><?= number_format($total_earned, 2) ?></strong></td>
+                    <td class="text-right" style="border-top: 1px solid #ccc; white-space: nowrap;"><strong><?= number_format($total_settled, 2) ?></strong></td>
+                </tr>
+                <tr style="background: #f8f9fa;">
+                    <td colspan="2" class="text-right" style="border:none !important; padding-right: 15px;">
+                        <strong><?= $closing_balance > 0 ? 'By' : 'To' ?> Closing Balance</strong>
                     </td>
-                    <td class="text-right" style="color: #5cb85c; font-weight: 500; white-space: nowrap;">
-                        <?= $earned > 0 ? number_format($earned, 2) : '' ?>
+                    <td class="text-right text-danger" style="border:none !important; white-space: nowrap;">
+                        <strong><?= $closing_balance < 0 ? number_format(abs($closing_balance), 2) : '' ?></strong>
                     </td>
-                    <td class="text-right" style="color: #d9534f; font-weight: 500; white-space: nowrap;">
-                        <?= $settled > 0 ? number_format($settled, 2) : '' ?>
+                    <td class="text-right text-danger" style="border:none !important; white-space: nowrap;">
+                        <strong><?= $closing_balance > 0 ? number_format($closing_balance, 2) : '' ?></strong>
                     </td>
                 </tr>
-                <?php
-            }
-        } elseif ($ob_amount == 0) {
-            // No transactions and opening balance is 0
-            ?>
-            <tr>
-                <td colspan="4">
-                    <div class="state-screen" style="padding: 40px; text-align: center; color: #6c757d;">
-                        <div style="font-size: 30px; margin-bottom: 10px;">📋</div>
-                        <div>No wallet transaction records found for the selected dates.</div>
-                    </div>
-                </td>
-            </tr>
-            <?php
-        }
-        ?>
-    </tbody>
-
-    <!-- Balancing Footer -->
-    <?php if ($has_query_rows || $ob_amount != 0): ?>
-    <?php
-        $total_earned = round($total_earned, 2);
-        $total_settled = round($total_settled, 2);
-        $closing_balance = round($total_earned - $total_settled, 2);
-        $grand_total = max($total_earned, $total_settled);
-    ?>
-    <tfoot id="rpt-tfoot">
-        <tr style="background: #f8f9fa;">
-            <td colspan="2" class="text-right" style="padding-right: 15px;"><strong>Total</strong></td>
-            <td class="text-right" style="border-top: 1px solid #ccc; white-space: nowrap;"><strong><?= number_format($total_earned, 2) ?></strong></td>
-            <td class="text-right" style="border-top: 1px solid #ccc; white-space: nowrap;"><strong><?= number_format($total_settled, 2) ?></strong></td>
-        </tr>
-        <tr style="background: #f8f9fa;">
-            <td colspan="2" class="text-right" style="border:none !important; padding-right: 15px;">
-                <strong><?= $closing_balance > 0 ? 'By' : 'To' ?> Closing Balance</strong>
-            </td>
-            <td class="text-right text-danger" style="border:none !important; white-space: nowrap;">
-                <strong><?= $closing_balance < 0 ? number_format(abs($closing_balance), 2) : '' ?></strong>
-            </td>
-            <td class="text-right text-danger" style="border:none !important; white-space: nowrap;">
-                <strong><?= $closing_balance > 0 ? number_format($closing_balance, 2) : '' ?></strong>
-            </td>
-        </tr>
-        <tr style="background: #e9ecef;">
-            <td colspan="2" class="text-right" style="padding-right: 15px;"><strong>Grand Total</strong></td>
-            <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333; white-space: nowrap;"><strong><?= number_format($grand_total, 2) ?></strong></td>
-            <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333; white-space: nowrap;"><strong><?= number_format($grand_total, 2) ?></strong></td>
-        </tr>
-    </tfoot>
-    <?php endif; ?>
+                <tr style="background: #e9ecef;">
+                    <td colspan="2" class="text-right" style="padding-right: 15px;"><strong>Grand Total</strong></td>
+                    <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333; white-space: nowrap;"><strong><?= number_format($grand_total, 2) ?></strong></td>
+                    <td class="text-right" style="border-top: 2px solid #333; border-bottom: 2px double #333; white-space: nowrap;"><strong><?= number_format($grand_total, 2) ?></strong></td>
+                </tr>
+            </tfoot>
+            <?php endif; ?>
 </table>
     </div>
 
