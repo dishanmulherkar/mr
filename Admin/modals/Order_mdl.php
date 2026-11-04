@@ -61,11 +61,12 @@ class OrderModel
     public function getOrders($filters = [])
     {
         // Base SQL
-        $sql = "SELECT o.*, s.stockist_name AS ss_name, m.mr_name, s.gst_type
+        $sql = "SELECT o.*, s.stockist_name AS ss_name, m.mr_name, s.gst_type,a.admin_name
                 FROM orders o
                 LEFT JOIN stockists s ON s.stockist_id = o.stockist_id
                 LEFT JOIN mr_users m ON m.m_id = o.mr_id
-                LEFT JOIN headquarter h ON h.headquarter_id = m.hq_id";
+                LEFT JOIN headquarter h ON h.headquarter_id = m.hq_id
+                LEFT JOIN admins a ON a.admin_id = h.asm_id";
 
         // If not a Super Admin, strictly join with admin_state to restrict by assigned states
         if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] !== 'Super Admin') {
@@ -1431,10 +1432,10 @@ public function deleteApprovedOrder($order_id)
         $this->con->begin_transaction();
  
         $res = $this->reverseApproval($order_id);
-        if (!$res['success']) {
-            $this->con->rollback();
-            return $res;
-        }
+        // if (!$res['success']) {
+        //     $this->con->rollback();
+        //     return $res;
+        // }
  
         $st = $this->con->prepare("DELETE FROM order_details WHERE order_id = ?");
         $st->bind_param("i", $order_id);

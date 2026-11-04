@@ -84,8 +84,10 @@ include 'view/layout/header.php';
                     <thead class="table-dark text-center">
                         <tr>
                             <th style="width: 5%;">#</th>
-                            <th style="width: 15%;">Order ID</th>
+                            <th style="width: 10%;">Order ID</th>
                             <th style="width: 15%;">Date</th>
+                            <th style="width: 15%;">Asm</th>
+                            <th style="width: 15%;">MR</th>
                             <th style="width: 22%;">Stockist</th>
                             <th style="width: 13%;">Status</th>
                             <th style="width: 15%;">Grand Total</th>
@@ -108,6 +110,8 @@ include 'view/layout/header.php';
                                     <td class="text-center"><?= $count++; ?></td>
                                     <td class="fw-bold text-primary"><?= $row['order_no']; ?></td>
                                     <td class="text-center"><?= date('d-m-Y', strtotime($row['order_date'])); ?></td>
+                                     <td><?= $row['admin_name'] ?? '<span class="text-muted">Unknown</span>'; ?></td>
+                                      <td><?= $row['mr_name'] ?? '<span class="text-muted">Unknown</span>'; ?></td>
                                     <td><?= $row['ss_name'] ?? '<span class="text-muted">Unknown</span>'; ?></td>
                                     <td class="text-center">
                                         <span class="badge <?= $statusClass; ?>"><?= $row['status']; ?></span>
@@ -131,6 +135,12 @@ include 'view/layout/header.php';
                                                             <i class="fa fa-check-circle text-primary me-2"></i> View
                                                         </a>
                                                     </li>
+                                                     <li>
+                                                        <a class="dropdown-item text-danger" href="<?= BASE_URL ?>Order/DeleteApproved/<?= $row['order_id']; ?>" 
+                                                        onclick="return confirm('Are you sure you want to delete this order?');" title="Delete Order">
+                                                            <i class="fa fa-trash me-2"></i> Delete
+                                                        </a>
+                                                    </li>
                                                 <?php } elseif($row['status'] == 'Approved') { ?>
                                                     <li>
                                                         <a class="dropdown-item" href="<?= BASE_URL ?>Order/approve/<?= $row['order_id']; ?>" title="Review & Update Order">
@@ -141,6 +151,12 @@ include 'view/layout/header.php';
                                                     <li>
                                                         <a class="dropdown-item" href="<?= BASE_URL ?>invoice/pdf/<?= $row['order_id']; ?>" target="_blank">
                                                             <i class="fa fa-download text-info me-2"></i> DOWNLOAD
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item text-danger" href="<?= BASE_URL ?>Order/Unapprove/<?= $row['order_id']; ?>" 
+                                                        onclick="return confirm('Are you sure you want to unapprove this order?');" title="Unapprove Order">
+                                                            <i class="fa fa-trash me-2"></i> UNAPPROVE
                                                         </a>
                                                     </li>
                                                 <?php } elseif($row['status'] == 'Processed') { ?>
@@ -155,6 +171,7 @@ include 'view/layout/header.php';
                                                             <i class="fa fa-download text-info me-2"></i> DOWNLOAD
                                                         </a>
                                                     </li>
+                                                    
                                                 <?php } ?>
 
                                                 
@@ -162,19 +179,6 @@ include 'view/layout/header.php';
                                                 <!-- Divider -->
                                                 <li><hr class="dropdown-divider"></li>
 
-                                                <!-- 3. Delete -->
-                                                <li>
-                                                    <a class="dropdown-item text-danger" href="<?= BASE_URL ?>Order/DeleteApproved/<?= $row['order_id']; ?>" 
-                                                    onclick="return confirm('Are you sure you want to delete this order?');" title="Delete Order">
-                                                        <i class="fa fa-trash me-2"></i> Delete
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    <a class="dropdown-item text-danger" href="<?= BASE_URL ?>Order/Unapprove/<?= $row['order_id']; ?>" 
-                                                    onclick="return confirm('Are you sure you want to unapprove this order?');" title="Unapprove Order">
-                                                        <i class="fa fa-trash me-2"></i> UNAPPROVE
-                                                    </a>
-                                                </li>
                                             </ul>
                                         </div>
                                     </td>
