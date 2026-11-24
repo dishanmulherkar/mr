@@ -227,7 +227,10 @@ include 'view/layout/header.php';
                     </table>
                 </div>
             </div>
-            <div class="modal-footer bg-light">
+            <div class="modal-footer bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-danger" id="btnReversePayment" data-id="">
+                    <i class="fa fa-undo"></i> Reverse Payment
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -367,52 +370,89 @@ document.addEventListener('DOMContentLoaded', function() {
                 approvalTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Failed to load data.</td></tr>';
             });
     }
+// ==========================================
+// VIEW APPROVED PAYMENT ALLOCATIONS
+// ==========================================
+$(document).on('click', '.btn-view-allocation', function(e) {
+    e.preventDefault();
+    let btn = $(this);
+    let paymentId = btn.data('id');
 
-    // ==========================================
-    // VIEW APPROVED PAYMENT ALLOCATIONS
-    // ==========================================
-    $(document).on('click', '.btn-view-allocation', function(e) {
-        e.preventDefault();
-        let btn = $(this);
-        let paymentId = btn.data('id');
+    // give the reverse button the payment id and reset its state
+    $('#btnReversePayment').data('id', paymentId).prop('disabled', false)
+        .html('<i class="fa fa-undo"></i> Reverse Payment');
 
-        $('#viewStockistName').text(btn.data('stockist') || 'Unknown');
-        $('#viewTotalAmount').text('₹' + parseFloat(btn.data('amount')).toFixed(2));
+    $('#viewStockistName').text(btn.data('stockist') || 'Unknown');
+    $('#viewTotalAmount').text('₹' + parseFloat(btn.data('amount')).toFixed(2));
 
-        $('#viewAllocationModal').modal('show');
-        $('#viewBillsTable').html('<tr><td colspan="4" class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x text-info"></i><br>Fetching history...</td></tr>');
+    $('#viewAllocationModal').modal('show');
+    $('#viewBillsTable').html('<tr><td colspan="4" class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x text-info"></i><br>Fetching history...</td></tr>');
 
-        $.get(BASE_URL + 'payment/get_payment_allocations', { payment_id: paymentId }, function(res) {
-            if (res.success && res.data.length > 0) {
-                let html = '';
-                res.data.forEach(b => {
-                    let allocated = parseFloat(b.amount_allocated) || 0;
-                    let cdEarned = parseFloat(b.cd_earned) || 0;
-                    let cdRevoked = parseFloat(b.cd_revoked) || 0;
+    $.get(BASE_URL + 'payment/get_payment_allocations', { payment_id: paymentId }, function(res) {
+        if (res.success && res.data.length > 0) {
+            let html = '';
+            res.data.forEach(b => {
+                let allocated = parseFloat(b.amount_allocated) || 0;
+                let cdEarned = parseFloat(b.cd_earned) || 0;
+                let cdRevoked = parseFloat(b.cd_revoked) || 0;
 
-                    let cdHtml = '';
-                    if(cdEarned > 0) cdHtml += `<span class="badge bg-success text-white mb-1"><i class="fa fa-arrow-down"></i> ₹${cdEarned.toFixed(2)} CD</span><br>`;
-                    if(cdRevoked > 0) cdHtml += `<span class="badge bg-danger text-white"><i class="fa fa-arrow-up"></i> ₹${cdRevoked.toFixed(2)} Penalty</span>`;
-                    if(cdHtml === '') cdHtml = '<span class="text-muted small">None</span>';
+                let cdHtml = '';
+                if(cdEarned > 0) cdHtml += `<span class="badge bg-success text-white mb-1"><i class="fa fa-arrow-down"></i> ₹${cdEarned.toFixed(2)} CD</span><br>`;
+                if(cdRevoked > 0) cdHtml += `<span class="badge bg-danger text-white"><i class="fa fa-arrow-up"></i> ₹${cdRevoked.toFixed(2)} Penalty</span>`;
+                if(cdHtml === '') cdHtml = '<span class="text-muted small">None</span>';
 
-                    html += `
-                        <tr>
-                            <td class="fw-bold text-center">${b.inward_no}</td>
-                            <td class="text-center">${b.inward_date}</td>
-                            <td class="text-end fw-bold text-success">₹${allocated.toFixed(2)}</td>
-                            <td class="text-center">${cdHtml}</td>
-                        </tr>
-                    `;
-                });
-                $('#viewBillsTable').html(html);
-            } else {
-                $('#viewBillsTable').html('<tr><td colspan="4" class="text-center text-muted py-3">No specific bill allocations found. (Likely an advance payment)</td></tr>');
-            }
-        }, 'json').fail(function() {
-            $('#viewBillsTable').html('<tr><td colspan="4" class="text-center text-danger">Failed to load allocation details.</td></tr>');
-        });
+                html += `
+                    <tr>
+                        <td class="fw-bold text-center">${b.inward_no}</td>
+                        <td class="text-center">${b.inward_date}</td>
+                        <td class="text-end fw-bold text-success">₹${allocated.toFixed(2)}</td>
+                        <td class="text-center">${cdHtml}</td>
+                    </tr>
+                `;
+            });
+            $('#viewBillsTable').html(html);
+        } else {
+            $('#viewBillsTable').html('<tr><td colspan="4" class="text-center text-muted py-3">No specific bill allocations found. (Likely an advance payment)</td></tr>');
+        }
+    }, 'json').fail(function() {
+        $('#viewBillsTable').html('<tr><td colspan="4" class="text-center text-danger">Failed to load allocation details.</td></tr>');
     });
+});
 
+// ==========================================
+// REVERSE PAYMENT
+// ==========================================
+$(document).on('click', '#btnReversePayment', function (e) {
+    e.preventDefault();
+    let btn = $(this);
+    let paymentId = btn.data('id');
+    if (!paymentId) return;
+
+    if (!confirm('Reverse this approved payment?\nIt will return to PENDING and all allocations / CD / penalties will be undone.')) {
+        return;
+    }
+
+    btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Reversing...');
+
+    $.post(BASE_URL + 'payment/reverse', { payment_id: paymentId }, function (res) {
+        if (res.success) {
+            alert(res.msg);
+            $('#viewAllocationModal').modal('hide');
+            location.reload();             // or refresh your DataTable
+        } else {
+            alert(res.msg || 'Reverse failed.');
+            btn.prop('disabled', false).html('<i class="fa fa-undo"></i> Reverse Payment');
+        }
+    }, 'json').fail(function () {
+        alert('Server error while reversing payment.');
+        btn.prop('disabled', false).html('<i class="fa fa-undo"></i> Reverse Payment');
+    });
+});
+
+// optional: removes the aria-hidden console warning
+$('#viewAllocationModal').on('hide.bs.modal', function () {
+    if (document.activeElement) document.activeElement.blur();
+});
     // ==========================================
     // 1. OPEN REVIEW MODAL & FETCH BILLS
     // ==========================================

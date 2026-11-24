@@ -41,8 +41,11 @@ public function getFilteredOrders($super_stockist_id, $status, $date)
             ) al2 ON al1.id = al2.max_id
         ) latest_al ON o.order_id = latest_al.reference_id
         WHERE o.status = '$status'
-        AND si.super_stockist_id = $super_stockist_id
+        AND si.super_stockist_id = $super_stockist_id 
     ";
+
+    
+
 
     // Add date filter before ORDER BY
     if (!empty($date)) {
@@ -51,7 +54,7 @@ public function getFilteredOrders($super_stockist_id, $status, $date)
     }
 
     // Single ORDER BY clause at the end
-    $sql .= " ORDER BY o.order_date DESC, o.order_id DESC";
+    $sql .= " ORDER BY si.inward_no DESC";
 
     $result = mysqli_query($this->con, $sql);
 

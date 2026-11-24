@@ -476,5 +476,27 @@ public function delete()
         echo json_encode($result);
         exit;
     }
+
+// AJAX Endpoint: Reverse an approved payment (sets it back to pending)
+public function reverse() {
+    header('Content-Type: application/json');
+
+    if (!isset($_SESSION['admin_id'])) {
+        echo json_encode(['success' => false, 'msg' => 'Unauthorized']);
+        exit;
+    }
+
+    $admin_id   = $_SESSION['admin_id'];
+    $payment_id = isset($_POST['payment_id']) ? (int)$_POST['payment_id'] : 0;
+
+    if ($payment_id <= 0) {
+        echo json_encode(['success' => false, 'msg' => 'Invalid request data.']);
+        exit;
+    }
+
+    $result = $this->model->reversePayment($payment_id, $admin_id);
+    echo json_encode($result);
+    exit;
+}
 }
 ?>

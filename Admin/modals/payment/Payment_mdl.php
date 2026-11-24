@@ -238,7 +238,7 @@ class PaymentApproval_mdl {
                         FROM stock_inward si
                         LEFT JOIN `orders` o ON si.order_id = o.order_id
                         WHERE si.stockist_id = ? AND LOWER(si.pay_status) != 'paid' 
-                        ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
+                        ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC , si.inward_id ASC
                         FOR UPDATE
                     ");
                     $stmt_bills->bind_param("si", $payment_date,$stockist_id);
@@ -254,17 +254,13 @@ class PaymentApproval_mdl {
                         $alloc_amount    = 0.00;
                         $stmt_alloc->bind_param("iid", $alloc_ledger_id, $alloc_inward_id,$alloc_amount);
 
-                        $stmt_update =$this->con->prepare("
+                        $stmt_update = $this->con->prepare("
                             UPDATE stock_inward 
-                            SET paid_amt = ?, 
-                                pay_status = ?, 
-                                cd_percent = ?, 
-                                cd_penalty_amt = cd_penalty_amt + ?, 
-                                cd_earned_amt = cd_earned_amt + ? 
+                            SET paid_amt = ?, pay_status = ?, cd_penalty_amt = cd_penalty_amt + ?, cd_earned_amt = cd_earned_amt + ? 
                             WHERE inward_id = ?
                         ");
-                        $upd_paid_amt = 0; $upd_status = ""; $upd_cd_percent = 0; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
-                        $stmt_update->bind_param("dsiddi", $upd_paid_amt,$upd_status, $upd_cd_percent,$upd_penalty, $upd_earned,$upd_inward_id);
+                        $upd_paid_amt = 0; $upd_status = ""; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
+                        $stmt_update->bind_param("dsddi", $upd_paid_amt, $upd_status, $upd_penalty, $upd_earned, $upd_inward_id);
 
                         $stmt_cd =$this->con->prepare("
                             INSERT INTO payment_ledgers (stockist_id, user_id, ledger_type, transaction_type, reference_id, amount, balance_action, notes) 
@@ -388,6 +384,228 @@ class PaymentApproval_mdl {
         }
     }
 
+
+    public function reversePayment($payment_id, $admin_id, $reason = null)
+    {
+        try {
+            $this->con->begin_transaction();
+
+            // ---------- 1. Lock payment ----------
+            $stmt = $this->con->prepare("
+                SELECT stockist_id, mr_id, amount_paid, approval_status
+                FROM payment_details
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $stmt->bind_param("i", $payment_id);
+            $stmt->execute();
+            $payment = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!$payment) {
+                throw new Exception("Payment not found.");
+            }
+
+            $status      = strtolower($payment['approval_status']);
+            $stockist_id = (int)$payment['stockist_id'];
+            $mr_id       = (int)$payment['mr_id'];
+            $amount_paid = (float)$payment['amount_paid'];
+
+            if ($status === 'pending') {
+                throw new Exception("Payment is already pending.");
+            }
+
+            if ($status === 'approved') {
+
+                // ---------- 2. Find main ledger entry ----------
+                $stmt = $this->con->prepare("
+                    SELECT id FROM payment_ledgers
+                    WHERE stockist_id = ?
+                    AND transaction_type = 'payment_made'
+                    AND reference_id = ?
+                    AND notes LIKE 'Payment Approved:%'
+                    ORDER BY id DESC
+                    LIMIT 1
+                    FOR UPDATE
+                ");
+                $stmt->bind_param("ii", $stockist_id, $payment_id);
+                $stmt->execute();
+                $main = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+
+                if (!$main) {
+                    throw new Exception("Main ledger entry for this payment not found.");
+                }
+                $ledger_id = (int)$main['id'];
+                $pid_tag   = '%[PID:' . (int)$payment_id . ']%';
+
+                // Per-invoice deltas: [inward_id => ['paid'=>, 'earned'=>, 'penalty'=>]]
+                $inwards = [];
+                $touch = function ($id) use (&$inwards) {
+                    if (!isset($inwards[$id])) {
+                        $inwards[$id] = ['paid' => 0.0, 'earned' => 0.0, 'penalty' => 0.0];
+                    }
+                };
+
+                // ---------- 3. Cash allocated to invoices ----------
+                $stmt = $this->con->prepare("
+                    SELECT inward_id, SUM(amount_allocated) AS amt
+                    FROM payment_allocations
+                    WHERE ledger_id = ? AND inward_id IS NOT NULL AND inward_id > 0
+                    GROUP BY inward_id
+                ");
+                $stmt->bind_param("i", $ledger_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                while ($r = $res->fetch_assoc()) {
+                    $id = (int)$r['inward_id'];
+                    $touch($id);
+                    $inwards[$id]['paid'] = (float)$r['amt'];
+                }
+                $stmt->close();
+
+                // ---------- 4. Earned CD ledgers (payment_made, tagged [PID:x]) ----------
+                $stmt = $this->con->prepare("
+                    SELECT reference_id AS inward_id, SUM(amount) AS amt
+                    FROM payment_ledgers
+                    WHERE stockist_id = ? AND transaction_type = 'payment_made'
+                    AND id <> ? AND notes LIKE ?
+                    GROUP BY reference_id
+                ");
+                $stmt->bind_param("iis", $stockist_id, $ledger_id, $pid_tag);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                while ($r = $res->fetch_assoc()) {
+                    $id = (int)$r['inward_id'];
+                    $touch($id);
+                    $inwards[$id]['earned'] = (float)$r['amt'];
+                }
+                $stmt->close();
+
+                // ---------- 5. Penalty ledgers (bill_added, tagged [PID:x]) ----------
+                $stmt = $this->con->prepare("
+                    SELECT reference_id AS inward_id, SUM(amount) AS amt
+                    FROM payment_ledgers
+                    WHERE stockist_id = ? AND transaction_type = 'bill_added'
+                    AND notes LIKE ?
+                    GROUP BY reference_id
+                ");
+                $stmt->bind_param("is", $stockist_id, $pid_tag);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                while ($r = $res->fetch_assoc()) {
+                    $id = (int)$r['inward_id'];
+                    $touch($id);
+                    $inwards[$id]['penalty'] = (float)$r['amt'];
+                }
+                $stmt->close();
+
+                // ---------- 6. Roll back each invoice ----------
+                $stmt_get = $this->con->prepare("
+                    SELECT grand_total, paid_amt, cd_penalty_amt, cd_earned_amt
+                    FROM stock_inward WHERE inward_id = ? FOR UPDATE
+                ");
+                $stmt_upd = $this->con->prepare("
+                    UPDATE stock_inward
+                    SET paid_amt = ?, pay_status = ?, cd_penalty_amt = ?, cd_earned_amt = ?
+                    WHERE inward_id = ?
+                ");
+                $u_paid = 0; $u_status = ''; $u_pen = 0; $u_earn = 0; $u_id = 0;
+                $stmt_upd->bind_param("dsddi", $u_paid, $u_status, $u_pen, $u_earn, $u_id);
+
+                foreach ($inwards as $inward_id => $d) {
+                    $stmt_get->bind_param("i", $inward_id);
+                    $stmt_get->execute();
+                    $inv = $stmt_get->get_result()->fetch_assoc();
+                    if (!$inv) {
+                        continue;
+                    }
+
+                    $grand_total = (float)$inv['grand_total'];
+                    $new_paid    = max(0, round((float)$inv['paid_amt']       - $d['paid'],    2));
+                    $new_pen     = max(0, round((float)$inv['cd_penalty_amt'] - $d['penalty'], 2));
+                    $new_earn    = max(0, round((float)$inv['cd_earned_amt']  - $d['earned'],  2));
+
+                    $liability = round($grand_total + $new_pen, 2);
+                    $cleared   = round($new_paid + $new_earn, 2);
+
+                    if ($new_paid <= 0 && $new_earn <= 0) {
+                        $new_status = 'unpaid';
+                    } elseif (($liability - $cleared) <= 1.00) {
+                        $new_status = 'paid';
+                    } else {
+                        $new_status = 'partial';
+                    }
+
+                    $u_paid   = $new_paid;
+                    $u_status = $new_status;
+                    $u_pen    = $new_pen;
+                    $u_earn   = $new_earn;
+                    $u_id     = $inward_id;
+                    $stmt_upd->execute();
+                }
+                $stmt_get->close();
+                $stmt_upd->close();
+
+                // ---------- 7. Delete allocations + ledger entries ----------
+                $stmt = $this->con->prepare("DELETE FROM payment_allocations WHERE ledger_id = ?");
+                $stmt->bind_param("i", $ledger_id);
+                $stmt->execute();
+                $stmt->close();
+
+                // CD earned + penalty ledgers of this payment
+                $stmt = $this->con->prepare("
+                    DELETE FROM payment_ledgers
+                    WHERE stockist_id = ? AND id <> ?
+                    AND transaction_type IN ('payment_made', 'bill_added')
+                    AND notes LIKE ?
+                ");
+                $stmt->bind_param("iis", $stockist_id, $ledger_id, $pid_tag);
+                $stmt->execute();
+                $stmt->close();
+
+                // Main ledger
+                $stmt = $this->con->prepare("DELETE FROM payment_ledgers WHERE id = ?");
+                $stmt->bind_param("i", $ledger_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            // ---------- 8. Put payment back to pending ----------
+            $stmt = $this->con->prepare("
+                UPDATE payment_details
+                SET approval_status = 'pending', approved_by = NULL, approved_at = NULL
+                WHERE id = ?
+            ");
+            $stmt->bind_param("i", $payment_id);
+            $stmt->execute();
+            $stmt->close();
+
+            // ---------- 9. Activity log ----------
+            $target_user = ($mr_id > 0) ? $mr_id : null;
+            $type     = 'PAYMENT_REVERSED';
+            $title    = 'Payment Reversed';
+            $priority = 'high';
+            $message  = "Payment of ₹" . number_format($amount_paid, 2) . " was reversed and set back to pending.";
+            if (!empty($reason)) {
+                $message .= " Reason: " . $reason;
+            }
+            $stmt = $this->con->prepare("
+                INSERT INTO activity_logs (user_id, activity_type, title, message, reference_id, amount, priority, is_read, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())
+            ");
+            $stmt->bind_param("isssids", $target_user, $type, $title, $message, $payment_id, $amount_paid, $priority);
+            $stmt->execute();
+            $stmt->close();
+
+            $this->con->commit();
+            return ['success' => true, 'msg' => 'Payment reversed successfully and set to pending.'];
+
+        } catch (Exception $e) {
+            $this->con->rollback();
+            return ['success' => false, 'msg' => 'Error: ' . $e->getMessage()];
+        }
+    }
     // ==========================================
     // NEW METHODS FOR PAYMENT ENTRY LOGIC
     // ==========================================
@@ -619,7 +837,7 @@ class PaymentApproval_mdl {
                         FROM stock_inward si
                         LEFT JOIN `orders` o ON si.order_id = o.order_id
                         WHERE si.stockist_id = ? AND LOWER(si.pay_status) != 'paid' 
-                        ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
+                        ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC , si.inward_id ASC
                         FOR UPDATE
                     ");
                     $stmt_bills->bind_param("si", $settlement_date, $stockist_id);
@@ -630,15 +848,12 @@ class PaymentApproval_mdl {
                     if ($unpaid_bills->num_rows > 0) {
                         $stmt_update = $this->con->prepare("
                             UPDATE stock_inward 
-                            SET paid_amt = ?, 
-                                pay_status = ?, 
-                                cd_percent = ?, 
-                                cd_penalty_amt = cd_penalty_amt + ?, 
-                                cd_earned_amt = cd_earned_amt + ? 
+                            SET paid_amt = ?, pay_status = ?, cd_penalty_amt = cd_penalty_amt + ?, cd_earned_amt = cd_earned_amt + ? 
                             WHERE inward_id = ?
                         ");
-                        $upd_paid_amt = 0; $upd_status = ""; $upd_cd_percent = 0; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
-                        $stmt_update->bind_param("dsiddi", $upd_paid_amt, $upd_status, $upd_cd_percent, $upd_penalty, $upd_earned, $upd_inward_id);
+                        $upd_paid_amt = 0; $upd_status = ""; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
+                        $stmt_update->bind_param("dsddi", $upd_paid_amt, $upd_status, $upd_penalty, $upd_earned, $upd_inward_id);
+
 
                         $stmt_cd = $this->con->prepare("
                             INSERT INTO payment_ledgers 
@@ -754,12 +969,11 @@ class PaymentApproval_mdl {
                                 $new_status = ($total_cleared_value >= $total_bill_liability) ? 'paid' : 'partial';
                             }
 
-                            $upd_paid_amt   = $new_paid_amt;
-                            $upd_status     = $new_status;
-                            $upd_cd_percent = $current_cd_percent;
-                            $upd_penalty    = $applied_penalty; 
-                            $upd_earned     = $applied_earned_cd; 
-                            $upd_inward_id  = $inward_id;
+                            $upd_paid_amt  = $new_paid_amt;
+                            $upd_status    = $new_status;
+                            $upd_penalty   = $applied_penalty;
+                            $upd_earned    = $applied_earned_cd;
+                            $upd_inward_id = $inward_id;
                             $stmt_update->execute();
                         }
                         
@@ -1813,24 +2027,20 @@ public function getPaymentAllocations($payment_id) {
                     FROM stock_inward si
                     LEFT JOIN `orders` o ON si.order_id = o.order_id
                     WHERE si.stockist_id = ? AND LOWER(si.pay_status) != 'paid' 
-                    ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC
+                    ORDER BY COALESCE(o.dispatch_date, si.inward_date) ASC , si.inward_id ASC
                     FOR UPDATE
                 ");
                 $stmt_bills->bind_param("si", $settlement_date,$stockist_id);
                 $stmt_bills->execute();$unpaid_bills = $stmt_bills->get_result();$stmt_bills->close();
 
                 if ($unpaid_bills->num_rows > 0) {
-                    $stmt_update =$this->con->prepare("
+                    $stmt_update = $this->con->prepare("
                         UPDATE stock_inward 
-                        SET paid_amt = ?, 
-                            pay_status = ?, 
-                            cd_percent = ?, 
-                            cd_penalty_amt = cd_penalty_amt + ?, 
-                            cd_earned_amt = cd_earned_amt + ? 
+                        SET paid_amt = ?, pay_status = ?, cd_penalty_amt = cd_penalty_amt + ?, cd_earned_amt = cd_earned_amt + ? 
                         WHERE inward_id = ?
                     ");
-                    $upd_paid_amt = 0; $upd_status = ""; $upd_cd_percent = 0; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
-                    $stmt_update->bind_param("dsiddi", $upd_paid_amt,$upd_status, $upd_cd_percent,$upd_penalty, $upd_earned,$upd_inward_id);
+                    $upd_paid_amt = 0; $upd_status = ""; $upd_penalty = 0; $upd_earned = 0; $upd_inward_id = 0;
+                    $stmt_update->bind_param("dsddi", $upd_paid_amt, $upd_status, $upd_penalty, $upd_earned, $upd_inward_id);
 
                     $stmt_cd =$this->con->prepare("
                         INSERT INTO payment_ledgers 
@@ -1904,7 +2114,7 @@ public function getPaymentAllocations($payment_id) {
                                 $cd_stockist_id =$stockist_id;
                                 $cd_inward_id   =$inward_id;
                                 $cd_amount      =$applied_earned_cd;
-                                $cd_notes       = "{$potential_pct}\% CD on Invoice {$inward_no}: ₹" . number_format($applied_earned_cd, 2);$stmt_cd->execute();
+                                $cd_notes       = "{$potential_pct}% CD on Invoice {$inward_no}: ₹" . number_format($applied_earned_cd, 2);$stmt_cd->execute();
                             }
                         }
 
