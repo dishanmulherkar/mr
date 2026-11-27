@@ -100,8 +100,8 @@ public function getOpeningBalance($stockist_id, $from_date)
     }
     return 0.00;
 }
-public function getSuperStockistOutstanding($super_stockist_id, $as_on_date = null, $from_date = null)
-{
+ public function getSuperStockistOutstanding($super_stockist_id, $as_on_date = null, $from_date = null)
+    {
     $super_stockist_id = (int)$super_stockist_id;
     if ($super_stockist_id <= 0) {
         return ['stockists' => [], 'total_due' => 0.0, 'total_advance' => 0.0, 'net_outstanding' => 0.0];
@@ -120,121 +120,130 @@ public function getSuperStockistOutstanding($super_stockist_id, $as_on_date = nu
         ? "(pl.transaction_type <> 'opening_balance' AND DATE(pl.created_at) < '{$from_date}')"
         : "(1 = 0)";
 
-    $sql = "
-        SELECT
-            s.stockist_id,
-            s.stockist_name,
-            h.headquarter_id,
-            h.hq_name,
+        $sql = "
+            SELECT
+                COALESCE(h.asm_id, 0)                AS asm_id,
+                COALESCE(a.admin_name, 'Unassigned') AS asm_name,
+                s.stockist_id,
+                s.state,
+                s.stockist_name,
+                h.headquarter_id,
+                h.hq_name,
+                (SELECT GROUP_CONCAT(m.mr_name SEPARATOR ', ')
+                FROM mr_users m
+                WHERE m.hq_id = h.headquarter_id AND m.status = '1') AS mr_name,
 
-            ROUND(COALESCE(SUM(
-                CASE
-                    WHEN {$pre} THEN
-                        CASE
-                            WHEN pl.balance_action = 'increase' THEN pl.amount
-                            WHEN pl.balance_action IS NULL AND pl.transaction_type = 'bill_added' THEN pl.amount
-                            ELSE 0
-                        END
-                    WHEN pl.transaction_type = 'opening_balance'
-                         AND (pl.balance_action = 'increase' OR pl.ledger_type IN ('debt', 'debit'))
-                        THEN pl.amount
-                    WHEN pl.transaction_type = 'bill_added'
-                        THEN pl.amount
-                    WHEN COALESCE(pl.notes, '') LIKE '%CD Reversed%'
-                        THEN pl.amount
-                    ELSE 0
-                END
-            ), 0), 2) AS total_debit,
+                ROUND(COALESCE(SUM(
+                    CASE
+                        WHEN {$pre} THEN
+                            CASE
+                                WHEN pl.balance_action = 'increase' THEN pl.amount
+                                WHEN pl.balance_action IS NULL AND pl.transaction_type = 'bill_added' THEN pl.amount
+                                ELSE 0
+                            END
+                        WHEN pl.transaction_type = 'opening_balance'
+                            AND (pl.balance_action = 'increase' OR pl.ledger_type IN ('debt', 'debit'))
+                            THEN pl.amount
+                        WHEN pl.transaction_type = 'bill_added'
+                            THEN pl.amount
+                        WHEN COALESCE(pl.notes, '') LIKE '%CD Reversed%'
+                            THEN pl.amount
+                        ELSE 0
+                    END
+                ), 0), 2) AS total_debit,
 
-            ROUND(COALESCE(SUM(
-                CASE
-                    WHEN {$pre} THEN
-                        CASE
-                            WHEN pl.balance_action = 'decrease' THEN pl.amount
-                            WHEN pl.balance_action IS NULL
-                                 AND pl.transaction_type IN ('payment_made','mrc_settlement','drc_settlement','asm_settlement','settled_to_bill')
-                                THEN pl.amount
-                            ELSE 0
-                        END
-                    WHEN pl.transaction_type = 'opening_balance'
-                         AND (pl.balance_action = 'decrease' OR pl.ledger_type = 'credit')
-                        THEN pl.amount
-                    WHEN (LOWER(COALESCE(pl.notes, '')) LIKE '%cd%' OR LOWER(COALESCE(pl.notes, '')) LIKE '%cash discount%')
-                         AND COALESCE(pl.notes, '') NOT LIKE '%CD Reversed%'
-                         AND pl.transaction_type != 'bill_added'
-                        THEN ROUND(pl.amount)
-                    WHEN pl.transaction_type IN ('payment_made','mrc_settlement','drc_settlement','asm_settlement','settled_to_bill')
-                         AND COALESCE(pl.notes, '') NOT LIKE '%CD Reversed%'
-                        THEN pl.amount
-                    WHEN pl.ledger_type = 'credit' AND pl.transaction_type != 'bill_added'
-                        THEN pl.amount
-                    ELSE 0
-                END
-            ), 0), 2) AS total_credit
+                ROUND(COALESCE(SUM(
+                    CASE
+                        WHEN {$pre} THEN
+                            CASE
+                                WHEN pl.balance_action = 'decrease' THEN pl.amount
+                                WHEN pl.balance_action IS NULL
+                                    AND pl.transaction_type IN ('payment_made','mrc_settlement','drc_settlement','asm_settlement','settled_to_bill')
+                                    THEN pl.amount
+                                ELSE 0
+                            END
+                        WHEN pl.transaction_type = 'opening_balance'
+                            AND (pl.balance_action = 'decrease' OR pl.ledger_type = 'credit')
+                            THEN pl.amount
+                        WHEN (LOWER(COALESCE(pl.notes, '')) LIKE '%cd%' OR LOWER(COALESCE(pl.notes, '')) LIKE '%cash discount%')
+                            AND COALESCE(pl.notes, '') NOT LIKE '%CD Reversed%'
+                            AND pl.transaction_type != 'bill_added'
+                            THEN ROUND(pl.amount)
+                        WHEN pl.transaction_type IN ('payment_made','mrc_settlement','drc_settlement','asm_settlement','settled_to_bill')
+                            AND COALESCE(pl.notes, '') NOT LIKE '%CD Reversed%'
+                            THEN pl.amount
+                        WHEN pl.ledger_type = 'credit' AND pl.transaction_type != 'bill_added'
+                            THEN pl.amount
+                        ELSE 0
+                    END
+                ), 0), 2) AS total_credit
 
-        FROM stockists s
-        INNER JOIN headquarter h
-                ON h.headquarter_id = s.hq_id
-        LEFT JOIN payment_ledgers pl
-               ON pl.stockist_id = s.stockist_id
-              AND pl.ledger_type IN ('debt', 'credit')
-              AND pl.transaction_type IN (
-                    'opening_balance', 'bill_added', 'payment_made',
-                    'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill'
-              )
-              AND (
-                    pl.transaction_type = 'opening_balance'
-                    OR DATE(pl.created_at) <= ?
-              )
-        WHERE h.super_stockist_id = ?
-        GROUP BY s.stockist_id, s.stockist_name, h.headquarter_id, h.hq_name
-    ";
+            FROM stockists s
+            INNER JOIN headquarter h
+                    ON h.headquarter_id = s.hq_id
+            LEFT JOIN admins a
+                ON a.admin_id = h.asm_id
+            LEFT JOIN payment_ledgers pl
+                ON pl.stockist_id = s.stockist_id
+                AND pl.ledger_type IN ('debt', 'credit')
+                AND pl.transaction_type IN (
+                        'opening_balance', 'bill_added', 'payment_made',
+                        'mrc_settlement', 'drc_settlement', 'asm_settlement', 'settled_to_bill'
+                )
+                AND (
+                        pl.transaction_type = 'opening_balance'
+                        OR DATE(pl.created_at) <= ?
+                )
+            WHERE h.super_stockist_id = ?
+            GROUP BY h.asm_id, a.admin_name, s.state, s.stockist_id, s.stockist_name, h.headquarter_id, h.hq_name
+            ORDER BY (h.asm_id IS NULL), a.admin_name, h.hq_name, s.stockist_name
+        ";
 
-    $stmt = $this->con->prepare($sql);
-    if (!$stmt) {
-        return ['error' => 'Prepare failed: ' . $this->con->error];
-    }
+        $stmt = $this->con->prepare($sql);
+        if (!$stmt) {
+            return ['error' => 'Prepare failed: ' . $this->con->error];
+        }
 
-    $stmt->bind_param('si', $as_on_date, $super_stockist_id);
+        $stmt->bind_param('si', $as_on_date, $super_stockist_id);
 
-    if (!$stmt->execute()) {
-        $err = $stmt->error;
+        if (!$stmt->execute()) {
+            $err = $stmt->error;
+            $stmt->close();
+            return ['error' => 'Execute failed: ' . $err];
+        }
+
+        $result        = $stmt->get_result();
+        $rows          = [];
+        $total_due     = 0.0;
+        $total_advance = 0.0;
+
+        while ($row = $result->fetch_assoc()) {
+            $balance = round((float)$row['total_debit'] - (float)$row['total_credit'], 2);
+
+            $row['closing_balance'] = $balance;
+            $row['due_amount']      = $balance > 0 ? $balance : 0.0;
+            $row['advance_amount']  = $balance < 0 ? abs($balance) : 0.0;
+            $row['type']            = $balance > 0 ? 'Due' : ($balance < 0 ? 'Advance' : 'Clear');
+
+            $total_due     += $row['due_amount'];
+            $total_advance += $row['advance_amount'];
+
+            $rows[] = $row;
+        }
+
         $stmt->close();
-        return ['error' => 'Execute failed: ' . $err];
+
+        usort($rows, function ($a, $b) {
+            return $b['closing_balance'] <=> $a['closing_balance'];
+        });
+
+        return [
+            'stockists'       => $rows,
+            'total_due'       => round($total_due, 2),
+            'total_advance'   => round($total_advance, 2),
+            'net_outstanding' => round($total_due - $total_advance, 2),
+        ];
     }
-
-    $result        = $stmt->get_result();
-    $rows          = [];
-    $total_due     = 0.0;
-    $total_advance = 0.0;
-
-    while ($row = $result->fetch_assoc()) {
-        $balance = round((float)$row['total_debit'] - (float)$row['total_credit'], 2);
-
-        $row['closing_balance'] = $balance;
-        $row['due_amount']      = $balance > 0 ? $balance : 0.0;
-        $row['advance_amount']  = $balance < 0 ? abs($balance) : 0.0;
-        $row['type']            = $balance > 0 ? 'Due' : ($balance < 0 ? 'Advance' : 'Clear');
-
-        $total_due     += $row['due_amount'];
-        $total_advance += $row['advance_amount'];
-
-        $rows[] = $row;
-    }
-
-    $stmt->close();
-
-    usort($rows, function ($a, $b) {
-        return $b['closing_balance'] <=> $a['closing_balance'];
-    });
-
-    return [
-        'stockists'       => $rows,
-        'total_due'       => round($total_due, 2),
-        'total_advance'   => round($total_advance, 2),
-        'net_outstanding' => round($total_due - $total_advance, 2),
-    ];
-}
 
  public function getHQByASM($asm_id) {
         $asm_id = (int)$asm_id;

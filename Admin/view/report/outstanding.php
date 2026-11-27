@@ -3,6 +3,7 @@ $pageTitle = "Out standing Report";
 include 'view/layout/header.php'; ?>
 
 <style>
+    .asm-start td { border-top: 2px solid #333 !important; }
     .detail { display: flex; justify-content: flex-end; padding: 6px; }
     .dt-search { float: right; }
     .btn-primary { margin-top: 1.5rem !important; }
@@ -49,7 +50,16 @@ include 'view/layout/header.php'; ?>
 
  <!-- ===================== OUTSTANDING BY STOCKIST ===================== -->
 <?php
-$out_rows      = $outstanding['stockists'] ?? [];
+$out_rows = $outstanding['stockists'] ?? [];
+usort($out_rows, function ($a, $b) {
+    $ua = ((int)($a['asm_id'] ?? 0) === 0);
+    $ub = ((int)($b['asm_id'] ?? 0) === 0);
+    if ($ua !== $ub) return $ua <=> $ub;   // "Unassigned" goes last
+    return strcasecmp($a['asm_name'] ?? '', $b['asm_name'] ?? '')
+        ?: strcasecmp($a['mr_name'] ?? '', $b['mr_name'] ?? '')
+        ?: strcasecmp($a['hq_name'] ?? '', $b['hq_name'] ?? '')
+        ?: strcasecmp($a['stockist_name'] ?? '', $b['stockist_name'] ?? '');
+});
 $total_due     = $outstanding['total_due'] ?? 0;
 $total_advance = $outstanding['total_advance'] ?? 0;
 $net_total     = $outstanding['net_outstanding'] ?? 0;
@@ -83,28 +93,46 @@ $target_date   = $to_date ?? $as_on_date ?? date('Y-m-d');
             <table class="table table-hover table-bordered align-middle mb-0" id="outstandingTable">
                 <thead class="table-secondary">
                     <tr>
-                        <th>Stockist Name</th>
+                        <th style="width: 250px;">Asm Name</th>
                         <th>Headquarter</th>
+                        <th>Stockist Name</th>
                         <th class="text-center" style="width:110px;">Status</th>
                         <th class="text-end" style="width:150px;">Outstanding (Dr)</th>
                         <th class="text-end" style="width:150px;">Advance (Cr)</th>
                     </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($out_rows as $r):
+                <?php $prev_asm = null;
+                foreach ($out_rows as $r):
                     $due     = (float)($r['due_amount'] ?? 0);
                     $advance = (float)($r['advance_amount'] ?? 0);
                     $status  = $r['type'] ?? ($due > 0 ? 'Due' : ($advance > 0 ? 'Advance' : 'Clear'));
+
+                    $asm_key  = (int)($r['asm_id'] ?? 0);
+                    $new_asm  = ($asm_key !== $prev_asm);
+                    $prev_asm = $asm_key;
+                    $mr       = trim($r['mr_name'] ?? '');
                 ?>
-                    <tr>
-                        <td>
-                            <!-- TODO: replace with your real ledger route -->
-                            <a href="<?= BASE_URL ?>YOUR_CONTROLLER/payment_ledger?stockist_id=<?= (int)$r['stockist_id'] ?>&to_date=<?= urlencode($target_date) ?>"
-                               class="text-decoration-none fw-semibold text-primary">
-                                <?= htmlspecialchars($r['stockist_name']) ?>
-                            </a>
-                        </td>
-                        <td><?= htmlspecialchars($r['hq_name']) ?></td>
+                    <tr class="<?= $new_asm ? 'asm-start' : '' ?>">
+                         <td class="<?= $new_asm ? 'fw-bold' : 'text-muted' ?>"><?= htmlspecialchars($r['asm_name'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($r['hq_name']). ' (' . htmlspecialchars($r['mr_name']) . ')' ?></td>
+                       <?php
+                $ledger_params = [
+                'state'       => (int)($r['state'] ?? 0),
+                'hq_id'       => (int)$r['headquarter_id'],
+                'stockist_id' => (int)$r['stockist_id'],
+                'start_date'  => !empty($from_date) ? $from_date : date('Y-10-01'), // fallback if from_date wasn't filtered
+                'end_date'    => $target_date,
+                ];
+                ?>
+                <td>
+                <a href="<?= BASE_URL ?>payment_ledger?<?= http_build_query($ledger_params) ?>"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-decoration-none fw-semibold text-primary">
+                            <?= htmlspecialchars($r['stockist_name']) ?>
+                        </a>
+                </td>
                         <td class="text-center">
                             <?php if ($status === 'Due'): ?>
                                 <span class="badge bg-danger-subtle text-danger border border-danger">Due</span>
@@ -131,12 +159,12 @@ $target_date   = $to_date ?? $as_on_date ?? date('Y-m-d');
                 </tbody>
                 <tfoot class="table-light fw-bold">
                     <tr class="table-secondary">
-                        <td colspan="3" class="text-end">Total</td>
+                        <td colspan="4" class="text-end">Total</td>
                         <td class="text-end text-danger"><?= number_format($total_due, 2) ?></td>
                         <td class="text-end text-success"><?= number_format($total_advance, 2) ?></td>
                     </tr>
                     <tr>
-                        <td colspan="3" class="text-end">
+                        <td colspan="4" class="text-end">
                             Net Balance (<?= $net_total >= 0 ? 'Net Receivable' : 'Net Advance' ?>)
                         </td>
                         <td colspan="2" class="text-end fs-6 <?= $net_total >= 0 ? 'text-danger' : 'text-success' ?>">

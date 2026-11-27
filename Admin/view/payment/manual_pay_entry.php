@@ -453,38 +453,137 @@ $(document).ready(function() {
         $('#allocatedBillsContainer').fadeIn();
         $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center py-3"><i class="fa fa-spinner fa-spin"></i> Fetching allocation history...</td></tr>');
         
-        $.get(BASE_URL + 'payment/get_payment_allocations', { payment_id: editData.id }, function(res) {
-            if (res.success && res.data && res.data.length > 0) {
-                let rows = '';
-                res.data.forEach(b => {
-                    let allocated = parseFloat(b.amount_allocated || 0);
-                    let cdEarned  = parseFloat(b.cd_earned || 0);
-                    let cdRevoked = parseFloat(b.cd_revoked || 0);
-                    let grandTotal = parseFloat(b.grand_total || 0);
+       // 3. Central function to fetch Outstanding Bills & CD calculation
+function fetchOutstanding() {
+    let stockistId     = $('#stockist_id').val();
+    let settlementDate = ($('#settlement_date').val() || '').trim();
+    
+    if (typeof editData !== 'undefined' && editData !== null) return; 
 
-                    let cdHtml = '';
-                    if (cdEarned > 0) cdHtml += `<span class="badge bg-success text-white mb-1"><i class="fa fa-arrow-down"></i> ₹${cdEarned.toFixed(2)} CD</span><br>`;
-                    if (cdRevoked > 0) cdHtml += `<span class="badge bg-danger text-white"><i class="fa fa-arrow-up"></i> ₹${cdRevoked.toFixed(2)} Penalty</span>`;
-                    if (cdHtml === '') cdHtml = '<span class="text-muted small">None</span>';
+    // Normalize DD/MM/YYYY or DD-MM-YYYY to YYYY-MM-DD so PHP strtotime() never fails
+    let dmyMatch = settlementDate.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+    if (dmyMatch) {
+        settlementDate = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+    }
 
-                    rows += `
-                        <tr>
-                            <td class="fw-bold text-center">${b.inward_no}</td>
-                            <td class="text-center">${b.inward_date || '-'}</td>
-                            <td class="text-end fw-bold">₹${grandTotal.toFixed(2)}</td>
-                            <td class="text-end fw-bold text-success">₹${allocated.toFixed(2)}</td>
-                            <td class="text-center">${cdHtml}</td>
-                        </tr>
-                    `;
-                });
-                $('#allocatedBillsBody').html(rows);
+    if (stockistId && settlementDate) {
+        $('#outstandingSummary').html('<div class="text-center py-2"><i class="fa fa-spinner fa-spin"></i> Fetching bills & calculating CD...</div>');
+        $('#billsTableContainer').hide();
+        
+        $.get(BASE_URL + 'payment/get_outstanding', { stockist_id: stockistId, date: settlementDate }, function(res) {
+            if (res.success) {
+                let totalPending   = parseFloat(res.total_outstanding ?? res.outstanding ?? 0);
+                let netPayable     = parseFloat(res.net_payable ?? 0);
+                let eligibleCd     = parseFloat(res.eligible_cd ?? 0);
+                let totalPenalty   = parseFloat(res.total_penalty ?? 0);
+                let isHandDelivery = parseInt(res.is_hand_delivery ?? 0) === 1;
+                
+                // Supports both response key variations
+                let bills = res.bill_details || res.bills || [];
+
+                currentNetPayable = netPayable > 0 ? netPayable : 0;
+
+                let netPayableColor   = netPayable > 0 ? 'text-danger' : 'text-success';
+                let netPayableLabel   = netPayable < 0 ? 'Advance Credit' : 'Net Payable';
+                let netPayableDisplay = Math.abs(netPayable).toFixed(2);
+
+                let hdBanner = isHandDelivery
+                    ? `<div class="alert alert-primary py-1 px-2 mb-2 small text-start">
+                           <span class="badge bg-primary me-1">Hand Delivery</span>
+                           ${res.cd_rule_note || 'Eligible for 4% CD up to 30 days.'}
+                       </div>`
+                    : '';
+
+                $('#outstandingSummary').html(`
+                    ${hdBanner}
+                    <div class="row text-center g-1">
+                        <div class="col-4 border-end">
+                            <small class="text-muted d-block" style="font-size:11px;">Total Pending</small>
+                            <strong class="text-dark fs-6">₹${totalPending.toFixed(2)}</strong>
+                        </div>
+                        <div class="col-4 border-end">
+                            <small class="text-muted d-block" style="font-size:11px;">${netPayableLabel}</small>
+                            <strong class="${netPayableColor} fs-6">₹${netPayableDisplay}</strong>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted d-block" style="font-size:11px;">CD Earned</small>
+                            <strong class="text-success fs-6">₹${eligibleCd.toFixed(2)}</strong>
+                            ${totalPenalty > 0 ? `<br><small class="text-danger" style="font-size:10px;">Penalty: ₹${totalPenalty.toFixed(2)}</small>` : ''}
+                        </div>
+                    </div>
+                `);
+
+                // Populate Bills Table
+                if (bills.length > 0) {
+                    let rows = '';
+                    bills.forEach(b => {
+                        let cd4      = parseFloat(b.eligible_4_cd || 0);
+                        let cd2      = parseFloat(b.eligible_2_cd || 0);
+                        let cdEarned = (cd4 + cd2 > 0) ? (cd4 + cd2) : parseFloat(b.eligible_cd || 0);
+                        let pen      = parseFloat(b.penalty_amount || b.cd_penalty_amt || 0);
+                        let pending  = parseFloat(b.pending_amount || 0);
+                        let gross    = parseFloat(b.business_value || b.grand_total || 0);
+                        let paid     = parseFloat(b.paid_amt || 0);
+                        
+                        let cdBadge = '';
+                        if (cd4 > 0) {
+                            cdBadge = isHandDelivery
+                                ? '<span class="badge bg-success ms-1">4% CD (Hand Delivery)</span>'
+                                : '<span class="badge bg-success ms-1">4% CD</span>';
+                        } else if (cd2 > 0) {
+                            cdBadge = '<span class="badge bg-info text-dark ms-1">2% CD</span>';
+                        } else if (cdEarned > 0) {
+                            cdBadge = '<span class="badge bg-success ms-1">CD</span>';
+                        }
+
+                        let isAdvance      = (b.balance_type === 'credit' || pending < 0 || (b.inward_no && b.inward_no.includes('ADVANCE')));
+                        let billNetPayable = isAdvance ? pending : (pending - cdEarned + pen);
+                        let ageText        = (b.bill_age_days !== undefined && b.bill_age_days !== null && !isAdvance)
+                            ? `${b.bill_age_days} Days Old`
+                            : '';
+
+                        rows += `
+                            <tr class="${isAdvance ? 'table-success' : ''}">
+                                <td>
+                                    <strong>${b.inward_no || 'OB'}</strong>
+                                    ${cdBadge}
+                                </td>
+                                <td>
+                                    ${b.dispatch_date || b.inward_date}<br>
+                                    <small class="text-muted">${ageText}</small>
+                                </td>
+                                <td class="text-end">₹${gross.toFixed(2)}</td>
+                                <td class="text-end text-primary">₹${paid.toFixed(2)}</td>
+                                <td class="text-end fw-bold ${pending < 0 ? 'text-success' : 'text-danger'}">
+                                    ₹${pending.toFixed(2)}
+                                </td>
+                                <td class="text-end text-success">${cdEarned > 0 ? '+ ₹' + cdEarned.toFixed(2) : '-'}</td>
+                                <td class="text-end text-danger">${pen > 0 ? '+ ₹' + pen.toFixed(2) : '-'}</td>
+                                <td class="text-end fw-bold text-dark">₹${billNetPayable.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+
+                    $('#billsTableBody').html(rows);
+                    $('#billsTableContainer').fadeIn();
+                } else {
+                    $('#billsTableContainer').hide();
+                }
+
             } else {
-                $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center text-muted">No specific bill allocations recorded.</td></tr>');
+                $('#outstandingSummary').html('<span class="text-danger"><i class="fa fa-times-circle"></i> ' + (res.msg || 'Error fetching data') + '</span>');
+                $('#billsTableContainer').hide();
             }
         }, 'json').fail(function() {
-            $('#allocatedBillsBody').html('<tr><td colspan="5" class="text-center text-danger">Failed to load allocation details.</td></tr>');
+            $('#outstandingSummary').html('<span class="text-danger"><i class="fa fa-times-circle"></i> Failed to connect to server</span>');
+            $('#billsTableContainer').hide();
         });
+    } else {
+        $('#outstandingSummary').html('<span class="text-muted"><i class="fa fa-info-circle"></i> Select stockist and date to view balance.</span>');
+        $('#billsTableContainer').hide();
     }
+}
+                                    }
 
     // ==========================================
     // REVERSE PAYMENT ACTION

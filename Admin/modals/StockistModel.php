@@ -192,39 +192,44 @@ class StockistModel
             } else {
                 $gst_type = 'IGST';
             }
+           $asm_com_rate = isset($data['Asm_com_rate']) ? (float)$data['Asm_com_rate'] : 7.00;
+                $is_hand_delivery = (isset($data['is_hand_delivery']) && (int)$data['is_hand_delivery'] === 1) ? 1 : 0;
 
-            $stockist_stmt = $this->con->prepare("
-                INSERT INTO stockists (
-                    stockist_name, number, gst_no, gst_type, dispatch_to, 
-                    transport, status, state, district, pincode, 
-                    hq_id, address, stockist_image, admin_id, pan_no, 
-                    dl_no, credit_days, opening_balance, opening_balance_type, opening_balance_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            
-            $stockist_stmt->bind_param(
-                "ssssssssssississidss",
-                $data['stockist_name'],
-                $data['number'],
-                $data['gst_no'],
-                $gst_type,
-                $data['dispatch_to'],
-                $data['transport'],
-                $data['status'],
-                $data['state'],
-                $data['district'],
-                $data['pincode'],
-                $hq_id,
-                $data['address'],
-                $image,
-                $admin_id,
-                $data['pan_no'],
-                $data['dl_no'],
-                $credit_days,
-                $clean_balance,
-                $opening_balance_type,
-                $opening_balance_date
-            );
+                $stockist_stmt = $this->con->prepare("
+                    INSERT INTO stockists (
+                        stockist_name, number, gst_no, gst_type, dispatch_to, 
+                        transport, status, state, district, pincode, 
+                        hq_id, address, stockist_image, admin_id, pan_no, 
+                        dl_no, credit_days, opening_balance, opening_balance_type, opening_balance_date, commission_rate, is_hand_delivery
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+
+                $stockist_stmt->bind_param(
+                    "ssssssssssississidssdi",
+                    $data['stockist_name'],
+                    $data['number'],
+                    $data['gst_no'],
+                    $gst_type,
+                    $data['dispatch_to'],
+                    $data['transport'],
+                    $data['status'],
+                    $data['state'],
+                    $data['district'],
+                    $data['pincode'],
+                    $hq_id,
+                    $data['address'],
+                    $image,
+                    $admin_id,
+                    $data['pan_no'],
+                    $data['dl_no'],
+                    $credit_days,
+                    $clean_balance,
+                    $opening_balance_type,
+                    $opening_balance_date,
+                    $asm_com_rate, // <-- Pass the variable here
+                    $is_hand_delivery
+                );
+
 
             if (!$stockist_stmt->execute()) {
                 throw new Exception("Error inserting stockist: " . $stockist_stmt->error);
@@ -317,7 +322,10 @@ class StockistModel
             } else {
                 $gst_type = 'IGST';
             }
-
+            $is_hand_delivery = (isset($data['is_hand_delivery']) && (int)$data['is_hand_delivery'] === 1) ? 1 : 0;
+            $commission_rate = isset($data['Asm_com_rate']) && $data['Asm_com_rate'] !== '' 
+                ? (float)$data['Asm_com_rate'] 
+                : 7.00;
             // 1. Update stockists table
             $stockist_stmt = $this->con->prepare("
                 UPDATE stockists SET
@@ -340,7 +348,10 @@ class StockistModel
                     credit_days = ?,
                     opening_balance = ?,
                     opening_balance_type = ?,
-                    opening_balance_date = ?
+                    opening_balance_date = ?,
+                    commission_rate = ?,
+                    is_hand_delivery = ?
+
                 WHERE stockist_id = ?
             ");
 
@@ -349,28 +360,30 @@ class StockistModel
             }
 
             $stockist_stmt->bind_param(
-                "ssssssssssiissssidssi",
-                $data['stockist_name'],
-                $data['number'],
-                $data['gst_no'],
-                $gst_type,
-                $data['dispatch_to'],
-                $data['transport'],
-                $data['status'],
-                $data['state'],
-                $data['district'],
-                $data['pincode'],
-                $hq_id,
-                $admin_id,
-                $data['address'],
-                $image,
-                $data['pan_no'],
-                $data['dl_no'],
-                $credit_days,
-                $clean_balance,
-                $opening_balance_type,
-                $opening_balance_date,
-                $id
+                "ssssssssssiissssidssdii",
+                $data['stockist_name'],      // s
+                $data['number'],             // s
+                $data['gst_no'],             // s
+                $gst_type,                   // s
+                $data['dispatch_to'],        // s
+                $data['transport'],          // s
+                $data['status'],             // s
+                $data['state'],              // s
+                $data['district'],           // s
+                $data['pincode'],            // s
+                $hq_id,                      // i
+                $admin_id,                   // i
+                $data['address'],            // s
+                $image,                      // s
+                $data['pan_no'],             // s
+                $data['dl_no'],              // s
+                $credit_days,                // i
+                $clean_balance,              // d
+                $opening_balance_type,       // s
+                $opening_balance_date,       // s
+                $commission_rate,            // d
+                $is_hand_delivery,           // i
+                $id                          // i
             );
 
             if (!$stockist_stmt->execute()) {
@@ -430,6 +443,7 @@ class StockistModel
             return false;
         }
     }
+    
     public function delete($id)
     {
         return mysqli_query($this->con,"

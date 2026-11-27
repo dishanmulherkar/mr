@@ -133,6 +133,7 @@ include 'view/layout/header.php';
                         <h6 class="text-primary fw-bold mb-3">Payment Details</h6>
                         <table class="table table-sm table-borderless">
                             <tr><th style="width: 40%">Stockist:</th><td id="revStockist" class="fw-bold"></td></tr>
+                            <tr><th>Delivery Mode:</th><td id="revDeliveryType"><span class="text-muted small">Checking...</span></td></tr>
                             <tr><th>Payment Date:</th><td id="revDate" class="fw-semibold text-secondary"></td></tr>
                             <tr><th>Amount Paid:</th><td id="revAmount" class="text-success fw-bold fs-5"></td></tr>
                             <tr><th>Method:</th><td id="revMethod"></td></tr>
@@ -453,129 +454,138 @@ $(document).on('click', '#btnReversePayment', function (e) {
 $('#viewAllocationModal').on('hide.bs.modal', function () {
     if (document.activeElement) document.activeElement.blur();
 });
-    // ==========================================
-    // 1. OPEN REVIEW MODAL & FETCH BILLS
-    // ==========================================
-    $(document).on('click', '.btn-review', function(e) {
-        e.preventDefault();
-        let btn = $(this);$('#revPaymentId').val(btn.data('id'));
-        $('#revStockist').text(btn.data('name'));
-        $('#revDate').text(btn.data('date') || 'N/A');
-        $('#revAmount').text('₹' + parseFloat(btn.data('amount')).toFixed(2));
-        $('#revMethod').text(btn.data('method'));
-        $('#revBank').text(btn.data('bank') || 'N/A');
-        $('#revRef').text(btn.data('ref') || 'N/A');
-        
-        if (btn.data('img') && btn.data('img') !== 'null') {
-            $('#revImg').html(`<img src="${BASE_URL}../${btn.data('img')}" class="img-fluid rounded border" style="max-width:100%; max-height:400px;">`);
+// ==========================================
+// 1. OPEN REVIEW MODAL & FETCH BILLS
+// ==========================================
+$(document).on('click', '.btn-review', function(e) {
+    e.preventDefault();
+    let btn = $(this);
+    $('#revPaymentId').val(btn.data('id'));
+    $('#revStockist').text(btn.data('name'));
+    $('#revDeliveryType').html('<span class="text-muted small">Checking...</span>');
+    $('#revDate').text(btn.data('date') || 'N/A');
+    $('#revAmount').text('₹' + parseFloat(btn.data('amount')).toFixed(2));
+    $('#revMethod').text(btn.data('method'));
+    $('#revBank').text(btn.data('bank') || 'N/A');
+    $('#revRef').text(btn.data('ref') || 'N/A');
+    
+    if (btn.data('img') && btn.data('img') !== 'null') {
+        $('#revImg').html(`<img src="${BASE_URL}../${btn.data('img')}" class="img-fluid rounded border" style="max-width:100%; max-height:400px;">`);
+    } else {
+        $('#revImg').html('<div class="alert alert-secondary">No Proof Uploaded</div>');
+    }
+
+    $('#reviewModal').modal('show');
+    $('#revBillsTable').html('<tr><td colspan="5" class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x text-primary"></i><br>Fetching stockist ledger...</td></tr>');
+    
+    // Fetch bills logic synchronized exactly with the MR Make Payment View
+    let PmtDate = btn.data('date') || '';
+    $.get(BASE_URL + 'payment/get_outstanding', { stockist_id: btn.data('stockist'), date: PmtDate }, function(res) {
+        if (parseInt(res.is_hand_delivery) === 1) {
+            $('#revDeliveryType').html('<span class="badge bg-primary">Hand Delivery</span>');
         } else {
-            $('#revImg').html('<div class="alert alert-secondary">No Proof Uploaded</div>');
+            $('#revDeliveryType').html('<span class="badge bg-secondary">Standard Delivery</span>');
         }
 
-        $('#reviewModal').modal('show');
-        $('#revBillsTable').html('<tr><td colspan="5" class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x text-primary"></i><br>Fetching stockist ledger...</td></tr>');
-        
-        // Fetch bills logic synchronized exactly with the MR Make Payment View
-        let PmtDate = btn.data('date') || '';
-        $.get(BASE_URL + 'payment/get_outstanding', { stockist_id: btn.data('stockist'), date: PmtDate }, function(res) {
-            if (res.success && res.bills && res.bills.length > 0) {
-                let html = '';
-                res.bills.forEach(b => {
-                    let pending = parseFloat(b.pending_amount) || 0;
-                    let sub_total = parseFloat(b.sub_total) || 0;
-                    
-                    let existingCdPercent = parseFloat(b.cd_percent) || 0;
-                    
-                    // Calculate newly applied CD
-                    let eligible4 = parseFloat(b.eligible_4_cd) || 0;
-                    let eligible2 = parseFloat(b.eligible_2_cd) || 0;
-                    let newCdAmount = eligible4 + eligible2; 
-                    
-                    // Check for late payment penalties
-                    let penaltyAmount = parseFloat(b.penalty_amount) || 0;
-                    
-                    // Calculate previously given CD
-                    let already4 = parseFloat(b.already_4_cd) || 0;
-                    let already2 = parseFloat(b.already_2_cd) || 0;
-                    let alreadyCdAmount = already4 + already2; 
-                    
-                    // Net Payable = Pending Balance - New Discounts + Late Penalties
-                    let net = pending - newCdAmount + penaltyAmount;
-                    
-                    let cdBadge = '';
-                    let cdAmountDisplay = '';
-
-                    // 1. CD REVOKED (Late Payment Penalty)
-                    if (penaltyAmount > 0) {
-                        cdAmountDisplay = `<span class="text-danger fw-bold">+₹${penaltyAmount.toFixed(2)}</span>`;
-                        
-                        if (existingCdPercent == 4 && penaltyAmount < alreadyCdAmount) {
-                            cdBadge = `<br><small class="badge bg-warning text-dark mt-1" style="font-size: 0.65em;">Downgraded to 2% CD (Late)</small>`;
-                        } else {
-                            cdBadge = `<br><small class="badge bg-danger text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Revoked (Late)</small>`;
-                        }
-
-                    // 2. NEW CD APPLIED
-                    } else if (newCdAmount > 0) {
-                        let cdAppliedPercent = (eligible4 > 0) ? 4 : 2;
-                        cdAmountDisplay = `<span class="text-success fw-bold">-₹${newCdAmount.toFixed(2)}</span>`;
-                        cdBadge = `<br><small class="badge bg-success text-white mt-1" style="font-size: 0.65em;">${cdAppliedPercent}% CD Applied</small>`;
-                    
-                    // 3. CD ALREADY GIVEN (Still valid, paid on time)
-                    } else if (existingCdPercent > 0) {
-                        cdAmountDisplay = `<span class="text-muted" style="font-style: italic;">Included (-₹${alreadyCdAmount.toFixed(2)})</span>`;
-                        cdBadge = `<br><small class="badge bg-secondary text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Already Given</small>`;
-                    
-                    // 4. NO CD 
-                    } else {
-                        cdAmountDisplay = `<span class="text-muted">-₹0.00</span>`;
-                    }
-
-                    let cdStatusHtml = cdAmountDisplay + cdBadge;
-
-                  // Pick dispatch_date if present, otherwise fall back to inward_date
-                    let rawDate = (b.dispatch_date && b.dispatch_date.trim() !== '') ? b.dispatch_date : b.inward_date;
-
-                    let shortDate = rawDate;
-                    if (rawDate) {
-                        let dateParts = rawDate.split(' ')[0].split('-'); // Handles both 'YYYY-MM-DD' and 'YYYY-MM-DD HH:mm:ss'
-                        if (dateParts.length === 3) {
-                            shortDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}`; // DD/MM/YY
-                        }
-                    }
-                    html += `
-                        <tr>
-                            <td class="fw-bold">${b.inward_no}</td>
-                            <td class="text-center">${shortDate}</td>
-                            <td class="text-end">₹${pending.toFixed(2)}</td>
-                            <td class="text-end">${cdStatusHtml}</td>
-                            <td class="text-end fw-bold text-primary">₹${Math.round(net).toFixed(2)}</td>
-                        </tr>
-                    `;
-                });
+        if (res.success && res.bills && res.bills.length > 0) {
+            let html = '';
+            res.bills.forEach(b => {
+                let pending = parseFloat(b.pending_amount) || 0;
+                let sub_total = parseFloat(b.sub_total) || 0;
                 
-                let footTotalCd = parseFloat(res.eligible_cd) || 0;
-                let footTotalPen = parseFloat(res.total_penalty) || 0;
-                let footCdHtml = `<span class="text-success">-₹${footTotalCd.toFixed(2)}</span>`;
-                if (footTotalPen > 0) {
-                    footCdHtml += `<br><span class="text-danger fw-bold">+₹${footTotalPen.toFixed(2)} (Penalties)</span>`;
+                let existingCdPercent = parseFloat(b.cd_percent) || 0;
+                
+                // Calculate newly applied CD
+                let eligible4 = parseFloat(b.eligible_4_cd) || 0;
+                let eligible2 = parseFloat(b.eligible_2_cd) || 0;
+                let newCdAmount = eligible4 + eligible2; 
+                
+                // Check for late payment penalties
+                let penaltyAmount = parseFloat(b.penalty_amount) || 0;
+                
+                // Calculate previously given CD
+                let already4 = parseFloat(b.already_4_cd) || 0;
+                let already2 = parseFloat(b.already_2_cd) || 0;
+                let alreadyCdAmount = already4 + already2; 
+                
+                // Net Payable = Pending Balance - New Discounts + Late Penalties
+                let net = pending - newCdAmount + penaltyAmount;
+                
+                let cdBadge = '';
+                let cdAmountDisplay = '';
+
+                // 1. CD REVOKED (Late Payment Penalty)
+                if (penaltyAmount > 0) {
+                    cdAmountDisplay = `<span class="text-danger fw-bold">+₹${penaltyAmount.toFixed(2)}</span>`;
+                    
+                    if (existingCdPercent == 4 && penaltyAmount < alreadyCdAmount) {
+                        cdBadge = `<br><small class="badge bg-warning text-dark mt-1" style="font-size: 0.65em;">Downgraded to 2% CD (Late)</small>`;
+                    } else {
+                        cdBadge = `<br><small class="badge bg-danger text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Revoked (Late)</small>`;
+                    }
+
+                // 2. NEW CD APPLIED
+                } else if (newCdAmount > 0) {
+                    let cdAppliedPercent = (eligible4 > 0) ? 4 : 2;
+                    cdAmountDisplay = `<span class="text-success fw-bold">-₹${newCdAmount.toFixed(2)}</span>`;
+                    cdBadge = `<br><small class="badge bg-success text-white mt-1" style="font-size: 0.65em;">${cdAppliedPercent}% CD Applied</small>`;
+                
+                // 3. CD ALREADY GIVEN (Still valid, paid on time)
+                } else if (existingCdPercent > 0) {
+                    cdAmountDisplay = `<span class="text-muted" style="font-style: italic;">Included (-₹${alreadyCdAmount.toFixed(2)})</span>`;
+                    cdBadge = `<br><small class="badge bg-secondary text-white mt-1" style="font-size: 0.65em;">${existingCdPercent}% CD Already Given</small>`;
+                
+                // 4. NO CD 
+                } else {
+                    cdAmountDisplay = `<span class="text-muted">-₹0.00</span>`;
                 }
 
+                let cdStatusHtml = cdAmountDisplay + cdBadge;
+
+                // Pick dispatch_date if present, otherwise fall back to inward_date
+                let rawDate = (b.dispatch_date && b.dispatch_date.trim() !== '') ? b.dispatch_date : b.inward_date;
+
+                let shortDate = rawDate;
+                if (rawDate) {
+                    let dateParts = rawDate.split(' ')[0].split('-');
+                    if (dateParts.length === 3) {
+                        shortDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}`;
+                    }
+                }
                 html += `
-                    <tr class="table-dark">
-                        <td colspan="3" class="text-end">FINAL ADJUSTED TOTALS:</td>
-                        <td class="text-end">${footCdHtml}</td>
-                        <td class="text-end fs-6 text-warning">₹${Math.round(res.net_payable).toFixed(2)}</td>
+                    <tr>
+                        <td class="fw-bold">${b.inward_no}</td>
+                        <td class="text-center">${shortDate}</td>
+                        <td class="text-end">₹${pending.toFixed(2)}</td>
+                        <td class="text-end">${cdStatusHtml}</td>
+                        <td class="text-end fw-bold text-primary">₹${Math.round(net).toFixed(2)}</td>
                     </tr>
                 `;
-                $('#revBillsTable').html(html);
-            } else {
-                $('#revBillsTable').html('<tr><td colspan="5" class="text-center text-success py-3"><i class="fa fa-check-circle"></i> No pending bills. Payment will be added as advance.</td></tr>');
+            });
+            
+            let footTotalCd = parseFloat(res.eligible_cd) || 0;
+            let footTotalPen = parseFloat(res.total_penalty) || 0;
+            let footCdHtml = `<span class="text-success">-₹${footTotalCd.toFixed(2)}</span>`;
+            if (footTotalPen > 0) {
+                footCdHtml += `<br><span class="text-danger fw-bold">+₹${footTotalPen.toFixed(2)} (Penalties)</span>`;
             }
-        }, 'json').fail(function() {
-            $('#revBillsTable').html('<tr><td colspan="5" class="text-center text-danger">Failed to load bills.</td></tr>');
-        });
+
+            html += `
+                <tr class="table-dark">
+                    <td colspan="3" class="text-end">FINAL ADJUSTED TOTALS:</td>
+                    <td class="text-end">${footCdHtml}</td>
+                    <td class="text-end fs-6 text-warning">₹${Math.round(res.net_payable).toFixed(2)}</td>
+                </tr>
+            `;
+            $('#revBillsTable').html(html);
+        } else {
+            $('#revBillsTable').html('<tr><td colspan="5" class="text-center text-success py-3"><i class="fa fa-check-circle"></i> No pending bills. Payment will be added as advance.</td></tr>');
+        }
+    }, 'json').fail(function() {
+        $('#revDeliveryType').html('<span class="text-muted">-</span>');
+        $('#revBillsTable').html('<tr><td colspan="5" class="text-center text-danger">Failed to load bills.</td></tr>');
     });
+});
 
     // ==========================================
     // 2. PROCESS ACTION (APPROVE VIA MODAL OR REJECT VIA DROPDOWN)

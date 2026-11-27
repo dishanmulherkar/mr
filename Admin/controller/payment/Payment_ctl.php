@@ -232,6 +232,7 @@ class PaymentApproval_ctl {
         // Encode and send all required keys to the frontend
         echo json_encode([
             'success'       => true, 
+            'is_hand_delivery'  => $data['is_hand_delivery'],
             'outstanding'   => $data['total_outstanding'],
             'eligible_cd'   => $data['eligible_cd'],      // Required by JS
             'total_penalty' => $data['total_penalty'],    // Required by JS (The CD Revocation)
